@@ -20,7 +20,7 @@ from tensordict import TensorDict
 from transformers import AutoModelForCausalLM, Qwen3Config
 
 from verl import DataProto
-from verl.utils.device import get_device_name
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device
 from verl.workers.actor.dp_actor import DataParallelPPOActor
 from verl.workers.config import FSDPActorConfig, OptimizerConfig
 
@@ -58,25 +58,16 @@ class TestDataParallelPPOActor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up distributed environment"""
-        if get_device_name() == "cuda":
-            backend_name = "nccl"
-        elif get_device_name() == "npu":
-            backend_name = "hccl"
-        else:
-            backend_name = "gloo"
-
         if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group(backend=backend_name, init_method="env://")
+            torch.distributed.init_process_group(backend=get_nccl_backend(), init_method="env://")
 
         cls.rank = torch.distributed.get_rank()
         cls.world_size = torch.distributed.get_world_size()
 
-        if get_device_name() == "cuda":
-            torch.cuda.set_device(cls.rank)
-            cls.device = torch.device(f"cuda:{cls.rank}")
-        elif get_device_name() == "npu":
-            torch.npu.set_device(cls.rank)
-            cls.device = torch.device(f"npu:{cls.rank}")
+        device_name = get_device_name()
+        if device_name != "cpu":
+            get_torch_device().set_device(cls.rank)
+            cls.device = torch.device(f"{device_name}:{cls.rank}")
         else:
             cls.device = torch.device("cpu")
 
