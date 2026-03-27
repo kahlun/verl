@@ -1,0 +1,21 @@
+# Requirements for Intel XPU (Data Center GPU Max / Flex / Arc)
+# PyTorch with XPU support must be installed separately:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/xpu
+# oneccl-bind-pt must match the PyTorch version:
+#   pip install oneccl-bind-pt --index-url https://download.pytorch.org/whl/xpu
+accelerate
+codetiming
+datasets
+dill
+hydra-core
+numpy<2.0.0
+pandas
+peft>=0.15.2
+pyarrow>=15.0.0
+pybind11
+pylatexenc
+tensordict>=0.8.0,<=0.10.0,!=0.9.0
+ray[default]
+wandb
+torchdata
+einops
