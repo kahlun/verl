@@ -28,7 +28,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 from transformers import PreTrainedTokenizer
 
-from verl.utils.device import get_device_name, get_torch_device
+from verl.utils.device import get_device_name, get_torch_device, is_xpu_available
 
 try:
     from flash_attn.ops.triton.cross_entropy import cross_entropy_loss
@@ -937,13 +937,22 @@ def distributed_mean_max_min_std(local_tensor, compute_max=True, compute_min=Tru
 
     if compute_max:
         local_max = torch.max(local_tensor)
+        # NOTE: XCCL ReduceOp.MAX is broken (returns SUM). Route through CPU/gloo.
+        if is_xpu_available:
+            local_max = local_max.cpu()
         torch.distributed.all_reduce(local_max, op=torch.distributed.ReduceOp.MAX)
+        if is_xpu_available:
+            local_max = local_max.to(get_device_name())
     else:
         local_max = None
 
     if compute_min:
         local_min = torch.min(local_tensor)
+        if is_xpu_available:
+            local_min = local_min.cpu()
         torch.distributed.all_reduce(local_min, op=torch.distributed.ReduceOp.MIN)
+        if is_xpu_available:
+            local_min = local_min.to(get_device_name())
     else:
         local_min = None
 
