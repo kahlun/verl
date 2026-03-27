@@ -18,7 +18,13 @@ _index_first_axis, _pad_input, _rearrange, _unpad_input = None, None, None, None
 
 
 def _get_attention_functions() -> tuple[Callable, Callable, Callable, Callable]:
-    """Dynamically import attention functions based on available hardware."""
+    """Dynamically import attention functions based on available hardware.
+
+    Import priority:
+      1. NPU: dedicated npu_flash_attn_utils
+      2. CUDA (flash_attn installed): flash_attn.bert_padding (optimized)
+      3. Fallback (no flash_attn): pure-Python equivalents for any other device
+    """
 
     from verl.utils.device import is_torch_npu_available
 
@@ -27,7 +33,11 @@ def _get_attention_functions() -> tuple[Callable, Callable, Callable, Callable]:
     if is_torch_npu_available(check_device=False):
         from verl.utils.npu_flash_attn_utils import index_first_axis, pad_input, rearrange, unpad_input
     else:
-        from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
+        try:
+            from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
+        except ImportError:
+            # Pure-Python fallback for platforms without flash_attn (e.g., Intel XPU)
+            from verl.utils.npu_flash_attn_utils import index_first_axis, pad_input, rearrange, unpad_input
 
     _index_first_axis, _pad_input, _rearrange, _unpad_input = index_first_axis, pad_input, rearrange, unpad_input
 
