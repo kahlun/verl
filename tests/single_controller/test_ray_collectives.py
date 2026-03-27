@@ -27,6 +27,7 @@ import torch
 from verl.single_controller.base import Worker
 from verl.single_controller.base.decorator import Dispatch, register
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
+from verl.utils.device import get_device_name, get_nccl_backend
 
 
 @ray.remote
@@ -35,11 +36,11 @@ class Actor(Worker):
     def init(self):
         remote_rank = self.rank // 2
         self.group_name = f"A{self.rank}_R{remote_rank}"
-        collective.init_collective_group(world_size=2, rank=0, backend="nccl", group_name=self.group_name)
+        collective.init_collective_group(world_size=2, rank=0, backend=get_nccl_backend(), group_name=self.group_name)
 
     @register(Dispatch.ONE_TO_ALL, blocking=False)
     def send_tensors(self):
-        tensor = torch.ones(size=(4,), dtype=torch.float32, device="cuda") * self.rank
+        tensor = torch.ones(size=(4,), dtype=torch.float32, device=get_device_name()) * self.rank
         collective.send(tensor=tensor, dst_rank=1, group_name=self.group_name)
 
 
@@ -52,13 +53,13 @@ class Rollout(Worker):
         self.first_group_name = f"A{self.remote_first_rank}_R{self.rank}"
         self.second_group_name = f"A{self.remote_second_rank}_R{self.rank}"
 
-        collective.init_collective_group(world_size=2, rank=1, backend="nccl", group_name=self.first_group_name)
-        collective.init_collective_group(world_size=2, rank=1, backend="nccl", group_name=self.second_group_name)
+        collective.init_collective_group(world_size=2, rank=1, backend=get_nccl_backend(), group_name=self.first_group_name)
+        collective.init_collective_group(world_size=2, rank=1, backend=get_nccl_backend(), group_name=self.second_group_name)
 
     @register(Dispatch.ONE_TO_ALL, blocking=False)
     def receive_tensors(self):
-        self.tensor1 = torch.randn(size=(4,), dtype=torch.float32, device="cuda")
-        self.tensor2 = torch.randn(size=(4,), dtype=torch.float32, device="cuda")
+        self.tensor1 = torch.randn(size=(4,), dtype=torch.float32, device=get_device_name())
+        self.tensor2 = torch.randn(size=(4,), dtype=torch.float32, device=get_device_name())
 
         collective.recv(self.tensor1, src_rank=0, group_name=self.first_group_name)
         collective.recv(self.tensor2, src_rank=0, group_name=self.second_group_name)

@@ -22,6 +22,8 @@ import gc
 import torch
 from transformers import LlamaConfig, LlamaModel
 
+from verl.utils.device import get_device_name, get_torch_device
+
 
 def test_memory_buffers():
     llama_config = LlamaConfig(
@@ -33,24 +35,27 @@ def test_memory_buffers():
         num_key_value_heads=16,
     )
 
-    model = LlamaModel(config=llama_config).cuda()
-    model_copy = LlamaModel(config=llama_config).cuda()
+    device = get_torch_device()
+    device_name = get_device_name()
+
+    model = LlamaModel(config=llama_config).to(device_name)
+    model_copy = LlamaModel(config=llama_config).to(device_name)
     model_copy.load_state_dict(model.state_dict())
 
     norm_factor = 1024**3
 
-    t_before = torch.cuda.get_device_properties(0).total_memory / norm_factor
-    r_before = torch.cuda.memory_reserved(0) / norm_factor
-    a_before = torch.cuda.memory_allocated(0) / norm_factor
+    t_before = device.get_device_properties(0).total_memory / norm_factor
+    r_before = device.memory_reserved(0) / norm_factor
+    a_before = device.memory_allocated(0) / norm_factor
 
     print(f"Before Total memory: {t_before} GB, reserved: {r_before} GB, allocated: {a_before} GB")
 
-    t = torch.cuda.get_device_properties(0).total_memory / norm_factor
-    r = torch.cuda.memory_reserved(0) / norm_factor
-    a = torch.cuda.memory_allocated(0) / norm_factor
+    t = device.get_device_properties(0).total_memory / norm_factor
+    r = device.memory_reserved(0) / norm_factor
+    a = device.memory_allocated(0) / norm_factor
 
     gc.collect()
-    torch.cuda.empty_cache()
+    device.empty_cache()
 
     print(f"After Total memory: {t} GB, reserved: {r} GB, allocated: {a} GB")
 
