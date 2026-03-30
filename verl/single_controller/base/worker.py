@@ -26,6 +26,7 @@ from verl.utils.device import (
     get_torch_device,
     get_visible_devices_keyword,
     is_npu_available,
+    is_xpu_available,
 )
 
 from .decorator import Dispatch, Execute, register
@@ -275,8 +276,16 @@ class Worker(WorkerHelper):
             # environment variable for each actor, unless
             # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set,
             # so we need to set local rank when the flag is set.
-            device_name = "NPU" if is_npu_available else "GPU"
-            local_rank = ray.get_runtime_context().get_accelerator_ids()[device_name][0]
+            if is_xpu_available:
+                # Ray doesn't recognize XPU as a native accelerator, so
+                # get_accelerator_ids() won't have an "xpu" key. Derive
+                # local_rank from RANK and RAY_LOCAL_WORLD_SIZE instead.
+                rank = int(os.environ.get("RANK", "0"))
+                local_world_size = int(os.environ.get("RAY_LOCAL_WORLD_SIZE", "1"))
+                local_rank = str(rank % local_world_size)
+            else:
+                device_name = "NPU" if is_npu_available else "GPU"
+                local_rank = ray.get_runtime_context().get_accelerator_ids()[device_name][0]
             os.environ["LOCAL_RANK"] = local_rank
             get_torch_device().set_device(int(local_rank))
 
