@@ -420,12 +420,9 @@ class SFTTrainer:
                         # average over data parallel group
                         dp_group = self.engine.get_data_parallel_group()
                         if dp_group is not None:
-                            if is_xpu_available:
-                                # XCCL ReduceOp.AVG is broken; use SUM + manual divide
-                                torch.distributed.all_reduce(val_loss, op=torch.distributed.ReduceOp.SUM, group=dp_group)
-                                val_loss /= torch.distributed.get_world_size(dp_group)
-                            else:
-                                torch.distributed.all_reduce(val_loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+                            from verl.utils.distributed import all_reduce_avg
+
+                            all_reduce_avg(val_loss, group=dp_group)
 
                     if is_logging:
                         metric = {"val/loss": val_loss.detach().item()}

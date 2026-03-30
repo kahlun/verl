@@ -78,6 +78,30 @@ def destroy_global_process_group():
         torch.distributed.destroy_process_group()
 
 
+def all_reduce_avg(tensor, group=None):
+    """All-reduce with AVG operation, with backend-specific workarounds.
+
+    Some backends (e.g., oneCCL/xccl) don't support ReduceOp.AVG.
+    This function automatically uses SUM + manual division as a workaround.
+
+    Args:
+        tensor: Tensor to reduce
+        group: Process group (default: None, uses default group)
+
+    Returns:
+        The same tensor after all-reduce (in-place operation)
+    """
+    from verl.utils.device import is_xpu_available
+
+    if is_xpu_available:
+        # oneCCL (xccl backend) doesn't support ReduceOp.AVG
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.SUM, group=group)
+        tensor /= torch.distributed.get_world_size(group)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.AVG, group=group)
+    return tensor
+
+
 def initialize_global_process_group_ray(timeout_second=None, backend=None):
     # in current ray environment, LOCAL_RANK is always zero.
 

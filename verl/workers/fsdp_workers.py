@@ -52,6 +52,7 @@ from verl.utils.activation_offload import enable_activation_offloading
 from verl.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.device import (
+    get_default_attention_implementation,
     get_device_id,
     get_device_name,
     get_nccl_backend,
@@ -396,8 +397,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
         # override model kwargs
-        default_attn = "eager" if is_xpu_available else "flash_attention_2"
-        attn_implementation = override_model_config.get("attn_implementation", default_attn)
+        attn_implementation = override_model_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
         actor_model_config = AutoConfig.from_pretrained(
             local_path, trust_remote_code=trust_remote_code, attn_implementation=attn_implementation
         )
@@ -649,9 +651,6 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             full_state = actor_module.state_dict()
             apply_fsdp2(actor_module, fsdp_kwargs, fsdp_config)
             fsdp2_load_full_state_dict(actor_module, full_state, fsdp_mesh, cpu_offload)
-            # oneCCL (xccl) does not support ReduceOp.AVG; force SUM + manual divide
-            if is_xpu_available:
-                actor_module.set_force_sum_reduction_for_comms(True)
             actor_module_fsdp = actor_module
         else:
             raise NotImplementedError(f"not implement {fsdp_strategy}")
@@ -1439,8 +1438,9 @@ class CriticWorker(Worker, DistProfilerExtension):
         from transformers import AutoConfig
 
         # override model kwargs
-        default_attn = "eager" if is_xpu_available else "flash_attention_2"
-        attn_implementation = override_config.get("attn_implementation", default_attn)
+        attn_implementation = override_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
         critic_model_config = AutoConfig.from_pretrained(
             local_path,
             attn_implementation=attn_implementation,
@@ -1614,9 +1614,6 @@ class CriticWorker(Worker, DistProfilerExtension):
             full_state = critic_module.state_dict()
             apply_fsdp2(critic_module, fsdp_kwargs, fsdp_config)
             fsdp2_load_full_state_dict(critic_module, full_state, fsdp_mesh, offload_policy)
-            # oneCCL (xccl) does not support ReduceOp.AVG; force SUM + manual divide
-            if is_xpu_available:
-                critic_module.set_force_sum_reduction_for_comms(True)
         else:
             raise NotImplementedError(f"Unknown strategy {config.strategy}")
 
