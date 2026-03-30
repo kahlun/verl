@@ -32,7 +32,7 @@ from verl.single_controller.base.decorator import Dispatch, make_nd_compute_data
 from verl.trainer.distillation import distillation_ppo_loss, is_distillation_enabled
 from verl.utils import tensordict_utils as tu
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_device_name, is_npu_available, set_expandable_segments
+from verl.utils.device import get_device_name, set_expandable_segments
 from verl.utils.distributed import initialize_global_process_group_ray, set_numa_affinity
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.memory_utils import aggressive_empty_cache
@@ -82,11 +82,6 @@ class TrainingWorker(Worker, DistProfilerExtension):
         Worker.__init__(self)
 
         from verl.workers.engine import BaseEngine, EngineRegistry
-
-        # TODO(jhz): Switch to `set_expandable_segments` when the torch_npu library
-        # supports `torch.npu.memory._set_allocator_settings`
-        if is_npu_available:
-            os.environ["PYTORCH_NPU_ALLOC_CONF"] = "expandable_segments:True"
 
         initialize_global_process_group_ray(timeout_second=None)
 
@@ -191,7 +186,9 @@ class TrainingWorker(Worker, DistProfilerExtension):
         loss = torch.sum(torch.tensor(output.pop("loss"), device=self.device_name))
         dp_group = self.engine.get_data_parallel_group()
         if dp_group is not None:
-            torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+            from verl.utils.distributed import all_reduce_avg
+
+            all_reduce_avg(loss, group=dp_group)
         loss = loss.item()
 
         # For grad_norm, we do not perform all reduce because it is already been done when clipping grad

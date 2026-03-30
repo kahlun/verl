@@ -20,12 +20,12 @@ from typing import Any, Callable, Optional
 
 import ray
 from omegaconf import DictConfig
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from ray.actor import ActorHandle
 
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup, ResourcePoolManager
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import is_torch_npu_available
+from verl.utils.device import get_device_name, is_torch_npu_available
 from verl.workers.config import DiffusionRolloutConfig, HFModelConfig, RolloutConfig
 
 logger = logging.getLogger(__file__)
@@ -52,11 +52,9 @@ class TokenOutput(BaseModel):
 
 
 class DiffusionOutput(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    diffusion_output: Any
+    diffusion_output: list[list[list[float]]] | list[list[list[list[float]]]]
     """generated image tensor (CHW format) / video tensor (TCHW format)"""
-    log_probs: Optional[Any] = None
+    log_probs: Optional[list[float]] = None
     """logprobs of generated image/video"""
     stop_reason: Optional[str] = None
     """stop reason: 'completed', 'aborted', or None for unknown"""
@@ -194,7 +192,7 @@ class RolloutReplica(ABC):
             bin_pack=False,
             name_prefix=name_prefix,
             use_gpu=use_gpu,
-            device_name="cuda" if not is_torch_npu_available(check_device=False) else "npu",
+            device_name=get_device_name(),
         )
         self.workers = worker_group.workers
         await self.launch_servers()
@@ -230,7 +228,7 @@ class RolloutReplica(ABC):
             bin_pack=False,
             name_prefix=name_prefix,
             use_gpu=use_gpu,
-            device_name="cuda" if not is_torch_npu_available(check_device=False) else "npu",
+            device_name=get_device_name(),
         )
         self.workers = worker_group.workers
         await self.launch_servers()
@@ -327,10 +325,7 @@ def _load_vllm():
 
 
 def _load_vllm_omni():
-    try:
-        from verl.workers.rollout.vllm_rollout.vllm_omni_async_server import vLLMOmniReplica
-    except ImportError as err:
-        raise ImportError("vllm-omni rollout requires vllm-omni to be installed.") from err
+    from verl.workers.rollout.vllm_rollout.vllm_omni_async_server import vLLMOmniReplica
 
     return vLLMOmniReplica
 

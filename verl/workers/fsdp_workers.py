@@ -52,10 +52,12 @@ from verl.utils.activation_offload import enable_activation_offloading
 from verl.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.device import (
+    get_default_attention_implementation,
     get_device_id,
     get_device_name,
     get_nccl_backend,
     get_torch_device,
+    is_xpu_available,
     set_expandable_segments,
 )
 from verl.utils.flops_counter import FlopsCounter
@@ -395,7 +397,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
         # override model kwargs
-        attn_implementation = override_model_config.get("attn_implementation", "flash_attention_2")
+        attn_implementation = override_model_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
         actor_model_config = AutoConfig.from_pretrained(
             local_path, trust_remote_code=trust_remote_code, attn_implementation=attn_implementation
         )
@@ -404,6 +408,11 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         # Maybe support Ulysses in VisionAttention in the future and remove this patch
         if self.ulysses_sequence_parallel_size > 1 and hasattr(actor_model_config, "vision_config"):
             actor_model_config.vision_config._attn_implementation = "eager"
+
+        # XPU SDPA has a bug where bool attention masks with all-False rows (left-padded queries)
+        # produce NaN outputs due to softmax(all -inf) in bfloat16. Use eager attention to work around.
+        if is_xpu_available:
+            actor_model_config._attn_implementation = "eager"
 
         # patch for qwen2.5-vl: when using flash_attention_3, set vision tower to use flash_attention_2
         # because the vision tower does not support flash_attention_3
@@ -1429,7 +1438,9 @@ class CriticWorker(Worker, DistProfilerExtension):
         from transformers import AutoConfig
 
         # override model kwargs
-        attn_implementation = override_config.get("attn_implementation", "flash_attention_2")
+        attn_implementation = override_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
         critic_model_config = AutoConfig.from_pretrained(
             local_path,
             attn_implementation=attn_implementation,
@@ -1440,6 +1451,11 @@ class CriticWorker(Worker, DistProfilerExtension):
         # Maybe support Ulysses in VisionAttention in the future and remove this patch
         if self.ulysses_sequence_parallel_size > 1 and hasattr(critic_model_config, "vision_config"):
             critic_model_config.vision_config._attn_implementation = "eager"
+
+        # XPU SDPA has a bug where bool attention masks with all-False rows (left-padded queries)
+        # produce NaN outputs due to softmax(all -inf) in bfloat16. Use eager attention to work around.
+        if is_xpu_available:
+            critic_model_config._attn_implementation = "eager"
 
         critic_model_config.num_labels = 1
         # patch for kimi-vl
