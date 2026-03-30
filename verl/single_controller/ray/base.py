@@ -220,7 +220,13 @@ class ResourcePoolManager:
         """Check if the resource pool can be satisfied in this ray cluster."""
         node_available_resources = ray._private.state.available_resources_per_node()
         node_available_gpus = {
-            node: node_info.get("GPU", 0) if "GPU" in node_info else node_info.get("NPU", 0)
+            node: (
+                node_info.get("GPU", 0)
+                if "GPU" in node_info
+                else node_info.get("NPU", 0)
+                if "NPU" in node_info
+                else node_info.get("xpu", 0)
+            )
             for node, node_info in node_available_resources.items()
         }
 
@@ -395,8 +401,10 @@ class RayClassWithInitArgs(ClassWithInitArgs):
 
         if use_gpu and device_name == "cuda":
             options["num_gpus"] = num_gpus
-        if use_gpu and device_name == "npu":
+        elif use_gpu and device_name == "npu":
             options["resources"] = {"NPU": num_gpus}
+        elif use_gpu and device_name == "xpu":
+            options["resources"] = {"xpu": num_gpus}
 
         if len(self._additional_resource) > 1:
             for k, v in self._additional_resource.items():
