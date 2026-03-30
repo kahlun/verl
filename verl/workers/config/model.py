@@ -285,7 +285,6 @@ class DiffusionModelConfig(BaseConfig):
     height: int = 512
     width: int = 512
     num_inference_steps: int = 10
-    guidance_scale: float = 4.5
 
     # extra configs for algorithm specific features.
     extra_configs: dict[str, Any] = field(default_factory=dict)
