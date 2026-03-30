@@ -189,6 +189,14 @@ def auto_set_device(config) -> None:
                 )
 
             config.trainer.device = "npu"
+        elif is_torch_xpu_available():
+            if config.trainer.device not in ["cpu", "xpu"]:
+                logger.warning(
+                    f"Detect setting config.trainer.device to {config.trainer.device} for Intel XPU, maybe"
+                    f"from default value in config file, automatically set to `xpu` instead."
+                )
+
+            config.trainer.device = "xpu"
         # Other cases: set device to "cuda" via config file, no need to change.
 
 

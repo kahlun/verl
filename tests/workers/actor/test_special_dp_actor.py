@@ -34,7 +34,8 @@ class MockTransformerModel(nn.Module):
         self.hidden_size = hidden_size
         self.embedding = nn.Embedding(vocab_size, hidden_size)
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, batch_first=True), num_layers=2
+            nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, batch_first=True), num_layers=2,
+            enable_nested_tensor=False,
         )
         self.lm_head = nn.Linear(hidden_size, vocab_size)
 
@@ -73,6 +74,10 @@ class TestDataParallelPPOActor(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
+        # Disable TransformerEncoder fast path to avoid dtype mismatch under autocast on XPU
+        if get_device_name() == "xpu":
+            torch.backends.mha.set_fastpath_enabled(False)
+
         self.config = FSDPActorConfig(
             strategy="fsdp2",
             ppo_mini_batch_size=4,
