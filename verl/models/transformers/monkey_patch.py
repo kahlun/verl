@@ -309,6 +309,16 @@ def apply_monkey_patch(
         tiled_mlp_shards: Number of shards for TiledMLP (higher = lower memory, slightly slower).
     """
 
+    # XPU forces eager attention (no flash_attn kernel), which means Ulysses SP's all-to-all
+    # communication (embedded in _ulysses_flash_attention_forward) will never fire. Fail early.
+    from verl.utils.device import is_xpu_available
+
+    if is_xpu_available and ulysses_sp_size > 1:
+        raise NotImplementedError(
+            "Ulysses sequence parallelism is not supported on XPU: it requires flash attention, "
+            "but XPU forces eager attention due to SDPA kernel bugs. Use data parallelism (FSDP) instead."
+        )
+
     # Apply TiledMLP monkey patch for memory-efficient MLP computation
     if use_tiled_mlp:
         from verl.models.transformers.tiled_mlp import apply_tiled_mlp_monkey_patch
