@@ -64,8 +64,12 @@ def test_dynamic_batch():
 def _worker(rank, world_size, init_method, max_token_len, use_same_dp, min_mb):
     # 1) init process group & CUDA
     get_torch_device().set_device(rank)
+    backend = get_nccl_backend()
+    # XPU needs composite backend so CPU tensor workarounds (e.g., XCCL MAX bug) route through gloo
+    if get_device_name() == "xpu":
+        backend = f"cpu:gloo,xpu:{backend}"
     dist.init_process_group(
-        backend=get_nccl_backend(),
+        backend=backend,
         init_method=init_method,
         world_size=world_size,
         rank=rank,

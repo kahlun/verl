@@ -24,6 +24,7 @@ from tensordict import TensorDict
 from transformers import AutoConfig
 
 from verl import DataProto
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device
 from verl.workers.config import FSDPCriticConfig, FSDPOptimizerConfig
 from verl.workers.config.critic import FSDPCriticModelCfg
 from verl.workers.config.engine import FSDPEngineConfig
@@ -36,15 +37,16 @@ class TestCriticWorker(unittest.TestCase):
         """Set up distributed environment"""
         if not torch.distributed.is_initialized():
             torch.distributed.init_process_group(
-                backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://"
+                backend=get_nccl_backend(), init_method="env://"
             )
 
         cls.rank = torch.distributed.get_rank()
         cls.world_size = torch.distributed.get_world_size()
 
-        if torch.cuda.is_available():
-            torch.cuda.set_device(cls.rank)
-            cls.device = torch.device(f"cuda:{cls.rank}")
+        device_name = get_device_name()
+        if device_name != "cpu":
+            get_torch_device().set_device(cls.rank)
+            cls.device = torch.device(f"{device_name}:{cls.rank}")
         else:
             cls.device = torch.device("cpu")
 
@@ -57,7 +59,7 @@ class TestCriticWorker(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(get_device_name())
         self.temp_dir = tempfile.mkdtemp()
 
         model_path = os.path.expanduser("~/models/Qwen/Qwen2.5-0.5B-Instruct")

@@ -20,7 +20,7 @@ from tensordict import TensorDict
 from transformers import AutoModelForCausalLM, Qwen3Config
 
 from verl import DataProto
-from verl.utils.device import get_device_name
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device
 from verl.workers.actor.dp_actor import DataParallelPPOActor
 from verl.workers.config import FSDPActorConfig, OptimizerConfig
 
@@ -34,7 +34,8 @@ class MockTransformerModel(nn.Module):
         self.hidden_size = hidden_size
         self.embedding = nn.Embedding(vocab_size, hidden_size)
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, batch_first=True), num_layers=2
+            nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, batch_first=True), num_layers=2,
+            enable_nested_tensor=False,
         )
         self.lm_head = nn.Linear(hidden_size, vocab_size)
 
@@ -58,30 +59,25 @@ class TestDataParallelPPOActor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up distributed environment"""
-        if get_device_name() == "cuda":
-            backend_name = "nccl"
-        elif get_device_name() == "npu":
-            backend_name = "hccl"
-        else:
-            backend_name = "gloo"
-
         if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group(backend=backend_name, init_method="env://")
+            torch.distributed.init_process_group(backend=get_nccl_backend(), init_method="env://")
 
         cls.rank = torch.distributed.get_rank()
         cls.world_size = torch.distributed.get_world_size()
 
-        if get_device_name() == "cuda":
-            torch.cuda.set_device(cls.rank)
-            cls.device = torch.device(f"cuda:{cls.rank}")
-        elif get_device_name() == "npu":
-            torch.npu.set_device(cls.rank)
-            cls.device = torch.device(f"npu:{cls.rank}")
+        device_name = get_device_name()
+        if device_name != "cpu":
+            get_torch_device().set_device(cls.rank)
+            cls.device = torch.device(f"{device_name}:{cls.rank}")
         else:
             cls.device = torch.device("cpu")
 
     def setUp(self):
         """Set up test fixtures"""
+        # Disable TransformerEncoder fast path to avoid dtype mismatch under autocast on XPU
+        if get_device_name() == "xpu":
+            torch.backends.mha.set_fastpath_enabled(False)
+
         self.config = FSDPActorConfig(
             strategy="fsdp2",
             ppo_mini_batch_size=4,
