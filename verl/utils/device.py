@@ -135,8 +135,10 @@ def get_torch_device():
     try:
         return getattr(torch, device_name)
     except AttributeError:
-        logger.warning(f"Device namespace '{device_name}' not found in torch, try to load torch.cuda.")
-        return torch.cuda
+        raise RuntimeError(
+            f"Device namespace 'torch.{device_name}' not found. "
+            f"Ensure the correct PyTorch build is installed for device '{device_name}'."
+        )
 
 
 def get_device_id() -> int:

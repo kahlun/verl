@@ -574,7 +574,8 @@ def efficient_entropy_forward(
     """
     forward host function
     """
-    assert hidden.is_cuda and weight.is_cuda and labels.is_cuda
+    assert hidden.is_cuda or hidden.is_xpu, f"Expected CUDA or XPU tensor, got {hidden.device}"
+    assert hidden.is_cuda == weight.is_cuda and hidden.is_xpu == weight.is_xpu, "Mixed device types"
     assert weight.device == hidden.device and labels.device == hidden.device
     assert hidden.dim() == 2 and weight.dim() == 2 and labels.dim() == 1
     assert hidden.is_contiguous() and weight.is_contiguous() and labels.is_contiguous()
@@ -631,7 +632,7 @@ def efficient_entropy_forward(
         _logprobs = torch.empty((num_tokens,), device=hidden.device, dtype=torch.float32)
 
     assert _accu.is_contiguous() and _entropy_b.is_contiguous() and _max.is_contiguous()
-    assert _accu.is_cuda and _entropy_b.is_cuda and _max.is_cuda
+    assert (_accu.is_cuda or _accu.is_xpu) and (_entropy_b.is_cuda or _entropy_b.is_xpu) and (_max.is_cuda or _max.is_xpu)
 
     if _config._use_triton:
         # 1D kernel launch, then split the tile
@@ -1529,7 +1530,7 @@ def efficient_entropy_backward(
     """
     backward host function
     """
-    assert hidden.is_cuda and weight.is_cuda and labels.is_cuda
+    assert hidden.is_cuda or hidden.is_xpu, f"Expected CUDA or XPU tensor, got {hidden.device}"
     assert weight.device == hidden.device and labels.device == hidden.device
     assert hidden.dim() == 2 and weight.dim() == 2 and labels.dim() == 1
     assert hidden.is_contiguous() and weight.is_contiguous() and labels.is_contiguous()
@@ -1551,7 +1552,7 @@ def efficient_entropy_backward(
         assert dlogprobs.dim() == 0
 
     assert dlogprobs.is_contiguous() and dentropy.is_contiguous()
-    assert dlogprobs.is_cuda and dentropy.is_cuda
+    assert (dlogprobs.is_cuda or dlogprobs.is_xpu) and (dentropy.is_cuda or dentropy.is_xpu)
     assert dlogprobs.device == hidden.device and dlogprobs.device == dentropy.device
     assert dentropy.shape == (num_tokens,)
 
@@ -1567,13 +1568,13 @@ def efficient_entropy_backward(
     assert maximum.is_contiguous() and acc.is_contiguous()
     assert maximum.device == hidden.device and acc.device == hidden.device
     assert maximum.shape == labels.shape == acc.shape
-    assert maximum.is_cuda and acc.is_cuda
+    assert (maximum.is_cuda or maximum.is_xpu) and (acc.is_cuda or acc.is_xpu)
 
     vocab_per_split = 1024
     assert vocab_per_split % 128 == 0
     num_splits = (vocab_size + vocab_per_split - 1) // vocab_per_split
 
-    assert entropy_b.is_contiguous() and entropy_b.is_cuda
+    assert entropy_b.is_contiguous() and (entropy_b.is_cuda or entropy_b.is_xpu)
     assert entropy_b.shape == (num_tokens,)
 
     if _config._backward == BackwardEnum._Total_Fuse_MN:
