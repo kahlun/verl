@@ -25,7 +25,7 @@ from ray.actor import ActorHandle
 
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup, ResourcePoolManager
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import is_torch_npu_available
+from verl.utils.device import get_device_name, is_torch_npu_available
 from verl.workers.config import DiffusionRolloutConfig, HFModelConfig, RolloutConfig
 
 logger = logging.getLogger(__file__)
@@ -194,7 +194,7 @@ class RolloutReplica(ABC):
             bin_pack=False,
             name_prefix=name_prefix,
             use_gpu=use_gpu,
-            device_name="cuda" if not is_torch_npu_available(check_device=False) else "npu",
+            device_name=get_device_name(),
         )
         self.workers = worker_group.workers
         await self.launch_servers()
@@ -230,7 +230,7 @@ class RolloutReplica(ABC):
             bin_pack=False,
             name_prefix=name_prefix,
             use_gpu=use_gpu,
-            device_name="cuda" if not is_torch_npu_available(check_device=False) else "npu",
+            device_name=get_device_name(),
         )
         self.workers = worker_group.workers
         await self.launch_servers()

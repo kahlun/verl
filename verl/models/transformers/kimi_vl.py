@@ -17,7 +17,15 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 from transformers.cache_utils import Cache
-from transformers.modeling_flash_attention_utils import _flash_attention_forward
+from verl.utils.device import is_xpu_available
+
+if is_xpu_available:
+    # On XPU, redirect _flash_attention_forward to our SDPA-based replacement.
+    # _ulysses_flash_attn_forward (below) calls _flash_attention_forward via the
+    # module-global name, so this single import swap covers the entire file.
+    from verl.models.transformers.xpu_attn import xpu_flash_attention_forward as _flash_attention_forward
+else:
+    from transformers.modeling_flash_attention_utils import _flash_attention_forward
 
 from verl.models.transformers.monkey_patch import is_transformers_version_in_range
 
