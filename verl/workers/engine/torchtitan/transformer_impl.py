@@ -109,10 +109,9 @@ class TorchTitanEngine(BaseEngine):
         model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
         model_spec = model_module.model_registry(torchtitan_flavor)
 
-        # Override attn_backend on the model config if needed
+        # Store attn_type for later use in prepare_model_inputs
         attn_type = self.engine_config.attn_type
-        if hasattr(model_spec.model, "layer") and hasattr(model_spec.model.layer, "attention"):
-            model_spec.model.layer.attention.attn_backend = attn_type
+        self._verl_attn_type = attn_type
 
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,
@@ -574,7 +573,7 @@ class EngineTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["torchtitan"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["torchtitan"], device=["cuda", "npu", "xpu"])
 class TorchTitanEngineWithLMHead(TorchTitanEngine):
     """TorchTitan engine implementation for language models with LM head."""
 
@@ -596,7 +595,7 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
                 position_ids = position_ids.values().unsqueeze(0)
 
             labels = torch.roll(input_ids, shifts=-1, dims=1)
-            attn_type = self.trainer.model_config.layer.attention.attn_backend
+            attn_type = self._verl_attn_type
             attention_mask = get_attention_masks(
                 input_batch=input_ids,
                 positions=position_ids,
