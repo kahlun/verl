@@ -407,6 +407,8 @@ def apply_monkey_patch(
             Qwen2_5_VLAttention.forward = qwen2_vl_attn_forward
             Qwen2VLAttention.forward = qwen2_vl_attn_forward
             print(f"Monkey patch {model.__class__.__name__} attention layer")
+            if is_xpu_available:
+                print("  [XPU] Using per-sequence SDPA fallback for packed VLM attention (no flash_attn)")
 
         # Step 3: patch input for multimodal sequence parallelism
         if ulysses_sp_size > 1:
@@ -469,6 +471,8 @@ def apply_monkey_patch(
 
             Glm4vTextAttention.forward = glm4v_attn_forward
             print(f"Monkey patch {model.__class__.__name__} attention layer")
+            if is_xpu_available:
+                print("  [XPU] Using per-sequence SDPA fallback for packed VLM attention (no flash_attn)")
 
         # Step 3: patch input for multimodal sequence parallelism
         if ulysses_sp_size > 1:

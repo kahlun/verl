@@ -20,6 +20,12 @@ from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
 
 from verl.models.transformers.monkey_patch import is_transformers_version_in_range
+from verl.utils.device import is_xpu_available
+
+if is_xpu_available:
+    # HF's _flash_attention_forward ignores position_ids on the non-flash fallback path,
+    # so packed sequences leak across sub-sequences. Replace with our per-sequence SDPA loop.
+    from verl.models.transformers.xpu_attn import xpu_flash_attention_forward as _flash_attention_forward
 
 # Import compatibility wrapper for flash_attn_supports_top_left_mask
 from verl.utils.transformers_compat import flash_attn_supports_top_left_mask
