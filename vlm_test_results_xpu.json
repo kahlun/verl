@@ -1,0 +1,82 @@
+{
+  "device": "xpu",
+  "device_name": "Intel(R) Arc(TM) Pro B60 Graphics",
+  "pytorch": "2.11.0+xpu",
+  "dtype": "torch.bfloat16",
+  "results": [
+    {
+      "model": "Qwen/Qwen2-VL-2B-Instruct",
+      "model_type": "qwen2_vl",
+      "xpu_attn": true,
+      "status": "PASS",
+      "steps": [
+        {
+          "step": 1,
+          "loss": 2.3113,
+          "grad_norm": 52.0,
+          "mem_gb": 22.24,
+          "time_s": 4.19,
+          "nan": false
+        },
+        {
+          "step": 2,
+          "loss": 2.6177,
+          "grad_norm": 127.0,
+          "mem_gb": 22.24,
+          "time_s": 1.23,
+          "nan": false
+        },
+        {
+          "step": 3,
+          "loss": 2.6624,
+          "grad_norm": 144.0,
+          "mem_gb": 22.24,
+          "time_s": 1.25,
+          "nan": false
+        }
+      ],
+      "error": null,
+      "params_m": 2209.0,
+      "mem_after_load_gb": 4.42,
+      "peak_mem_gb": 22.24,
+      "any_nan": false
+    },
+    {
+      "model": "Qwen/Qwen3-VL-2B-Instruct",
+      "model_type": "qwen3_vl",
+      "xpu_attn": false,
+      "status": "PASS",
+      "steps": [
+        {
+          "step": 1,
+          "loss": 2.1486,
+          "grad_norm": 49.5,
+          "mem_gb": 21.44,
+          "time_s": 1.72,
+          "nan": false
+        },
+        {
+          "step": 2,
+          "loss": 2.2676,
+          "grad_norm": 36.0,
+          "mem_gb": 21.44,
+          "time_s": 0.75,
+          "nan": false
+        },
+        {
+          "step": 3,
+          "loss": 2.378,
+          "grad_norm": 34.25,
+          "mem_gb": 21.44,
+          "time_s": 0.73,
+          "nan": false
+        }
+      ],
+      "error": null,
+      "params_m": 2127.5,
+      "mem_after_load_gb": 4.26,
+      "peak_mem_gb": 21.44,
+      "any_nan": false
+    }
+  ]
+}
