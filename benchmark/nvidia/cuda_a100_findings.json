@@ -1,0 +1,79 @@
+{
+  "platform": "NVIDIA A100 80GB PCIe",
+  "driver": "CUDA 12.9",
+  "software": {
+    "torch": "2.10.0+cu129",
+    "vllm": "0.17.0",
+    "verl": "0.8.0.dev",
+    "flash_attn": true
+  },
+  "microbenchmark": {
+    "source": "results_a100.json",
+    "attention_sdpa_eager_ms": 0.06,
+    "attention_flash_attn_ms": 0.09,
+    "transformer_fwd_bwd_ms": 164.5,
+    "fused_entropy_kernel_ms": 0.684,
+    "peak_memory_gb": 4.66,
+    "loss_curve": [3.7993, 1.9651, 0.9617, 0.4763, 0.2255],
+    "nan_count": 0
+  },
+  "xpu_comparison": {
+    "xpu_device": "Intel Arc Pro B60 24GB",
+    "attention_sdpa_speedup": "10.3x (A100 faster)",
+    "transformer_step_speedup": "5.3x (A100 faster)",
+    "fused_entropy_speedup": "7.4x (A100 faster)",
+    "peak_memory_ratio": "~equal (4.66 vs 4.64 GB)",
+    "loss_max_diff": 0.0485,
+    "numerical_match": true
+  },
+  "sft_4gpu": {
+    "gpus": 4,
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "dataset": "GSM8K (converted to SFT format)",
+    "fsdp": true,
+    "loss_start": 7.0,
+    "loss_end": 5.3,
+    "status": "completed"
+  },
+  "grpo_1gpu": {
+    "gpus": 1,
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "dataset": "GSM8K",
+    "epochs": 1,
+    "total_steps": 29,
+    "final_val_accuracy": 0.507,
+    "status": "completed"
+  },
+  "grpo_4gpu": {
+    "gpus": 4,
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "dataset": "GSM8K",
+    "epochs": 1,
+    "total_steps": 116,
+    "batch_size": 64,
+    "avg_step_time_s": 12.17,
+    "avg_throughput_tokens_per_s": 2585,
+    "val_accuracy_curve": [
+      0.005, 0.079, 0.207, 0.335, 0.425, 0.461, 0.471, 0.479, 0.483,
+      0.497, 0.487, 0.491, 0.488, 0.487, 0.494, 0.514, 0.518, 0.528,
+      0.519, 0.537, 0.536, 0.525, 0.528, 0.537
+    ],
+    "final_val_accuracy": 0.537,
+    "status": "completed"
+  },
+  "vlm_sft_1gpu": {
+    "gpus": 1,
+    "model": "Qwen/Qwen2-VL-2B-Instruct",
+    "dataset": "llamafactory/pokemon-gpt4o-captions (1499 train, 167 test)",
+    "epochs": 1,
+    "total_steps": 187,
+    "avg_step_time_s": 1.12,
+    "total_time_s": 237,
+    "avg_mfu": 0.114,
+    "loss_start": 2.676,
+    "loss_end": 1.780,
+    "fsdp_strategy": "fsdp2",
+    "max_length": 2048,
+    "status": "completed"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-04-02T13:27:43.247772",
+  "device_info": {
+    "device": "cuda",
+    "name": "NVIDIA A100 80GB PCIe",
+    "total_memory_gb": 79.251708984375,
+    "count": 1,
+    "pytorch_version": "2.10.0+cu129"
+  },
+  "attention": {
+    "eager_sdpa_ms": 0.057,
+    "eager_sdpa_std_ms": 0.005,
+    "flash_attn_ms": 0.09,
+    "flash_attn_std_ms": 0.006,
+    "config": {
+      "batch": 4,
+      "seq_len": 512,
+      "nheads": 16,
+      "head_dim": 64
+    }
+  },
+  "transformer": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "params_m": 494.0,
+    "attn_impl": "flash_attention_2",
+    "losses": [
+      3.7993,
+      1.9651,
+      0.9617,
+      0.4763,
+      0.2255
+    ],
+    "loss_final": 0.2255,
+    "step_times_ms": [
+      479.5,
+      88.4,
+      85.1,
+      84.8,
+      84.6
+    ],
+    "mean_step_ms": 164.5,
+    "grad_norms": [
+      612.0,
+      402.0,
+      145.0,
+      66.5,
+      32.75
+    ],
+    "peak_memory_gb": 4.66,
+    "nan_count": 0
+  },
+  "fused_kernel": {
+    "fused_kernel_ms": 0.684,
+    "fused_kernel_std_ms": 0.01,
+    "fused_kernel_available": true,
+    "eager_entropy_ms": 0.103,
+    "config": {
+      "batch": 16,
+      "hidden_dim": 512,
+      "vocab": 32000
+    }
+  },
+  "summary": {
+    "device": "cuda",
+    "attention_eager_ms": 0.057,
+    "transformer_mean_step_ms": 164.5,
+    "transformer_peak_mem_gb": 4.66,
+    "fused_kernel_ms": 0.684,
+    "eager_entropy_ms": 0.103
+  }
+}

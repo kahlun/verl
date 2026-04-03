@@ -1,0 +1,69 @@
+{
+  "timestamp": "2026-04-01T03:11:16.133231",
+  "device_info": {
+    "device": "xpu",
+    "name": "Intel(R) Arc(TM) Pro B60 Graphics",
+    "total_memory_gb": 23.90625,
+    "count": 4,
+    "pytorch_version": "2.11.0+xpu"
+  },
+  "attention": {
+    "eager_sdpa_ms": 0.584,
+    "eager_sdpa_std_ms": 0.022,
+    "config": {
+      "batch": 4,
+      "seq_len": 512,
+      "nheads": 16,
+      "head_dim": 64
+    }
+  },
+  "transformer": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "params_m": 494.0,
+    "attn_impl": "eager",
+    "losses": [
+      3.8049,
+      1.9831,
+      1.0102,
+      0.4927,
+      0.2409
+    ],
+    "loss_final": 0.2409,
+    "step_times_ms": [
+      3613.6,
+      194.0,
+      184.8,
+      188.2,
+      192.5
+    ],
+    "mean_step_ms": 874.6,
+    "grad_norms": [
+      608.0,
+      406.0,
+      148.0,
+      70.0,
+      34.25
+    ],
+    "peak_memory_gb": 4.64,
+    "nan_count": 0
+  },
+  "fused_kernel": {
+    "fused_kernel_ms": 5.029,
+    "fused_kernel_std_ms": 1.041,
+    "fused_kernel_available": true,
+    "eager_entropy_ms": 0.197,
+    "config": {
+      "batch": 16,
+      "hidden_dim": 512,
+      "vocab": 32000
+    }
+  },
+  "summary": {
+    "device": "xpu",
+    "attention_eager_ms": 0.584,
+    "transformer_mean_step_ms": 874.6,
+    "transformer_peak_mem_gb": 4.64,
+    "fused_kernel_ms": 5.029,
+    "eager_entropy_ms": 0.197
+  }
+}
