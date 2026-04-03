@@ -60,10 +60,14 @@ def get_default_attention_implementation() -> str:
     """Get default attention implementation for current device.
 
     Returns:
-        str: "eager" for XPU (flash_attn unavailable), "flash_attention_2" otherwise
+        str: "sdpa" for XPU (F.scaled_dot_product_attention → SYCL-TLA Flash natively),
+             "flash_attention_2" for CUDA/NPU (native flash_attn package).
+        NOTE: "flash_attention_2" is blocked on XPU because HF checks for the
+        flash_attn *package* at model init time.  "sdpa" is the correct path —
+        it calls F.sdpa() directly, which dispatches to SYCL-TLA on XPU.
     """
     if is_xpu_available:
-        return "eager"  # XPU doesn't support flash_attn
+        return "sdpa"  # F.scaled_dot_product_attention → SYCL-TLA Flash kernel (native, no IPEX)
     else:
         return "flash_attention_2"  # Default for CUDA/NPU
 
@@ -348,6 +352,9 @@ def is_support_ipc() -> bool:
     For GPU devices, always returns True.
     For NPU devices, checks the software version and CANN toolkit version
     to determine if IPC is supported.
+    For XPU devices, returns False because the Intel XPU backend does not
+    expose CUDA-style IPC handles (cudaIpcGetMemHandle/cudaIpcOpenMemHandle).
+    Weight transfer falls back to shared memory (use_shm=True).
 
     Returns:
         bool: True if IPC is supported, False otherwise.
@@ -355,6 +362,10 @@ def is_support_ipc() -> bool:
     # If CUDA is available, it's a GPU device
     if is_cuda_available:
         return True
+
+    # XPU does not support CUDA-style IPC handles; fall back to shared memory.
+    if is_xpu_available:
+        return False
 
     # For NPU devices, check the software version and CANN toolkit version
     if is_npu_available:

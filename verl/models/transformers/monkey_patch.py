@@ -24,6 +24,13 @@ from transformers.modeling_flash_attention_utils import _flash_attention_forward
 from transformers.modeling_utils import PreTrainedModel
 
 from verl.utils.device import is_xpu_available
+
+# On XPU, replace the HF flash_attention_forward (which requires the CUDA-only
+# flash_attn package) with our SDPA-based equivalent.  This single override
+# makes _ulysses_flash_attention_forward and the global monkey-patch at the
+# bottom of this file work on XPU without any additional code changes.
+if is_xpu_available:
+    from verl.models.transformers.xpu_attn import xpu_flash_attention_forward as _flash_attention_forward  # noqa: F811
 from verl.utils.import_utils import is_trl_available
 from verl.utils.transformers_compat import is_transformers_version_in_range
 from verl.utils.ulysses import (

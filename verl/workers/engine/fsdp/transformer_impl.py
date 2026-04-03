@@ -139,6 +139,12 @@ class FSDPEngine(BaseEngine):
         if self._qat_enabled:
             logger.info(f"QAT enabled: mode={self._qat_config.mode}, group_size={self._qat_config.group_size}")
 
+        # Auto-disable torch.compile on XPU — causes L0 driver hang/OOM (Bug 2, §7)
+        self._use_torch_compile = self.engine_config.use_torch_compile
+        if device_name == "xpu" and self._use_torch_compile:
+            logger.warning("[XPU] Disabling torch.compile — causes L0 driver hang on XPU. Set engine.use_torch_compile=False.")
+            self._use_torch_compile = False
+
         if self.engine_config.entropy_from_logits_with_chunking:
             entropy_from_logits = verl_F.entropy_from_logits_with_chunking
         else:
@@ -146,7 +152,7 @@ class FSDPEngine(BaseEngine):
 
         self.compute_entropy_from_logits = (
             torch.compile(entropy_from_logits, dynamic=True)
-            if self.engine_config.use_torch_compile  #  use torch compile by default
+            if self._use_torch_compile
             else entropy_from_logits
         )
 

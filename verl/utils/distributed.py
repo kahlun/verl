@@ -32,6 +32,11 @@ def set_numa_affinity():
 
     initialized = False
     try:
+        # XPU: NUMA affinity via pynvml is NVIDIA-specific, skip for Intel GPUs
+        from verl.utils.device import is_xpu_available
+        if is_xpu_available:
+            return
+
         libnuma = ctypes.CDLL("libnuma.so")
         if libnuma.numa_available() < 0:
             return
