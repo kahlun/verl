@@ -113,6 +113,26 @@ class TorchTitanEngine(BaseEngine):
         attn_type = self.engine_config.attn_type
         self._verl_attn_type = attn_type
 
+        # Override TorchTitan model's attn_backend to match verl's attn_type.
+        # TorchTitan model specs default to "sdpa" which expects attention_masks=None.
+        # When verl uses "flex" or "varlen" attention (for document masking / remove_padding),
+        # we need to propagate this setting to the TorchTitan model's attention config.
+        if attn_type in ("flex", "varlen"):
+            from dataclasses import replace as _dc_replace
+            try:
+                new_attn_cfg = _dc_replace(model_spec.model.layer.attention, attn_backend=attn_type)
+                new_layer_cfg = _dc_replace(model_spec.model.layer, attention=new_attn_cfg)
+                new_model_cfg = _dc_replace(model_spec.model, layer=new_layer_cfg)
+                model_spec = _dc_replace(model_spec, model=new_model_cfg)
+                logger.warning(
+                    f"Overriding TorchTitan model attn_backend to '{attn_type}' to match verl engine.attn_type."
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to override TorchTitan model attn_backend to '{attn_type}': {e}. "
+                    "Training may fail if the model's default attn_backend (sdpa) is incompatible with verl attention masks."
+                )
+
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,
             lr=self.optimizer_config.lr,
@@ -621,11 +641,10 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
                     position_ids, padding=0, output_size=(batch_size, max_seq_len)
                 )
 
-            attention_mask_list = [torch.ones_like(t, dtype=torch.int32) for t in loss_mask]
-            attention_mask = torch.nested.as_nested_tensor(attention_mask_list, layout=torch.jagged)
-            attention_mask = torch.nested.to_padded_tensor(
-                attention_mask, padding=0, output_size=(batch_size, max_seq_len)
-            )
+            # TorchTitan with sdpa backend handles causal masking internally and requires
+            # attention_masks=None. The 2D padding mask is not supported by TorchTitan's
+            # sdpa attention; pass None to let TorchTitan handle causal masking itself.
+            attention_mask = None
 
         extra_inputs = {
             "positions": position_ids,
