@@ -172,6 +172,13 @@ class TorchTitanEngine(BaseEngine):
         training_kwargs = {}
         if self.engine_config.max_seq_len is not None:
             training_kwargs["seq_len"] = self.engine_config.max_seq_len
+        # When PP is enabled, verl manages micro-batching externally via
+        # prepare_micro_batches() and loops over them in _pp_forward_backward_batch().
+        # TorchTitan's pp_schedule requires n_microbatches >= num_stages at init.
+        # We set local_batch_size = pp_degree (minimum valid value) here, then
+        # override _n_microbatches at runtime to match the actual micro-batch count.
+        if self.engine_config.pipeline_parallel_size > 1:
+            training_kwargs["local_batch_size"] = self.engine_config.pipeline_parallel_size
         if self.engine_config.offload_policy or self.engine_config.forward_only:
             training = TrainingConfig(enable_cpu_offload=True, **training_kwargs)
         else:
@@ -800,20 +807,33 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
 
         Architecture note
         -----------------
-        Non-PP uses the pattern:  forward → get logits → compute loss → loss.backward()
-        PP uses:  pp_schedule.step() which handles forward+backward for ALL pipeline
-        stages in a single call.  The two patterns cannot be mixed, which is why PP
-        bypasses forward_step / model_forward_step entirely for the training path.
+        TorchTitan's pp_schedule.step() expects a WHOLE batch and splits it into
+        microbatches internally.  But verl uses remove_padding (variable-length
+        packed sequences), so each micro-batch has batch_dim=1 and can't be split
+        further by step().
+
+        Solution: prepare all micro-batch inputs in a first pass, then call
+        pp_schedule._step_microbatches() directly with pre-split arg/kwarg lists,
+        bypassing the high-level step() splitting logic.  We dynamically set
+        _n_microbatches to match the actual count from verl's prepare_micro_batches.
+
+        Uniform-length padding
+        ----------------------
+        PyTorch's pipeline schedule validates that all micro-batch outputs have the
+        same shape (for fixed-size p2p send/recv buffers).  With remove_padding,
+        each micro-batch packs a different number of tokens → different hidden state
+        shapes.  We pad shorter micro-batches to the max token count across the
+        batch, regenerate attention masks for the padded length, and unpad outputs.
 
         forward_only mode (log-prob computation during rollout / reference policy)
         --------------------------------------------------------------------------
-        - Calls pp_schedule.step(return_outputs=True) — no backward.
+        - Runs schedule with return_outputs=True, no backward.
         - Last PP stage: gets logits → compute log_probs via prepare_model_outputs.
         - Non-last PP stages: return zero-filled dummy output (same shape, no grad).
 
         training mode (SFT / fine-tuning gradient update)
         -------------------------------------------------
-        - Calls pp_schedule.step(target=labels, losses=losses) — forward+backward.
+        - Runs schedule with target/losses — forward+backward.
         - Uses TorchTitan's built-in cross-entropy loss on ALL tokens.
           ⚠ This differs from verl's masked loss (response-tokens only).
           For response-masked SFT, run without PP (pipeline_parallel_size=1) until
@@ -834,78 +854,193 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
             data=data, dp_group=dp_group, same_micro_num_in_dp=True
         )
 
-        output_lst = []
         has_first = self.trainer.pp_has_first_stage
         has_last = self.trainer.pp_has_last_stage
         pp_schedule = self.trainer.pp_schedule
+
+        # ── Phase 1: Prepare all micro-batch inputs ──────────────────────
+        arg_mbs = []
+        kwarg_mbs = []
+        target_mbs = []
+        micro_batch_data = []  # (micro_batch, output_args) for post-processing
+        all_positions = []     # track positions for all stages (needed for padding)
+        all_seq_lens = []      # original sequence lengths before PP padding
 
         for micro_batch in micro_batches:
             micro_batch = micro_batch.to(get_device_id())
             input_ids, extra_inputs, extra_kwargs, output_args = self.prepare_model_inputs(micro_batch=micro_batch)
             labels = output_args.get("labels")
 
-            if forward_only:
-                # ── Forward-only (no backward) ────────────────────────────────
-                with torch.no_grad(), self.trainer.train_context():
-                    if has_first:
-                        raw_out = pp_schedule.step(
-                            input_ids, **extra_inputs, **extra_kwargs, return_outputs=True
-                        )
-                    else:
-                        raw_out = pp_schedule.step(**extra_kwargs, return_outputs=True)
+            if has_first:
+                arg_mbs.append((input_ids,))
+                # Include positions in kwargs for all stages (needed for RoPE)
+                kwarg_mbs.append({**extra_inputs, **extra_kwargs})
+            else:
+                arg_mbs.append(())
+                # Non-first stages also need positions for RoPE in every layer
+                kwarg_mbs.append({**extra_inputs, **extra_kwargs})
 
-                if has_last and raw_out is not None:
-                    with torch.autocast(device_type=device_name, dtype=torch.bfloat16):
-                        model_output = self.prepare_model_outputs(
-                            logits=raw_out, output_args=output_args, micro_batch=micro_batch
-                        )
-                    if loss_function is not None:
-                        loss, metrics = loss_function(
-                            model_output=model_output, data=micro_batch, dp_group=dp_group
-                        )
+            target_mbs.append(labels if has_last else None)
+            micro_batch_data.append((micro_batch, output_args))
+            all_positions.append(extra_inputs["positions"])
+            all_seq_lens.append(input_ids.shape[1])
+
+        n_mbs = len(micro_batches)
+
+        # ── Phase 1b: Pad micro-batches to uniform length ────────────────
+        # PyTorch's pipeline schedule allocates fixed recv/send buffers on
+        # the first forward call.  ALL subsequent micro-batches (across ALL
+        # steps) must produce outputs of that exact shape.  With
+        # remove_padding, each micro-batch packs a different number of
+        # tokens, so we pad every micro-batch to a FIXED global maximum.
+        # The attention mask isolates padding (position_id=0 → position
+        # reset → separate "document" in block-diagonal mask).
+        max_seq_len = max(all_seq_lens) if all_seq_lens else 0
+        pp_max_token_len = tu.get_non_tensor_data(data, key="max_token_len_per_gpu", default=None)
+        if pp_max_token_len is not None:
+            pp_fixed_seq_len = int(pp_max_token_len) * max(self.engine_config.tensor_parallel_size, 1)
+            # TP padding headroom: round up to seq_len_divisor
+            if self.parallel_dims.tp_enabled:
+                divisor = self.parallel_dims.seq_len_divisor
+                remainder = pp_fixed_seq_len % divisor
+                if remainder != 0:
+                    pp_fixed_seq_len += divisor - remainder
+        else:
+            # Fallback when max_token_len_per_gpu unavailable
+            pp_fixed_seq_len = max_seq_len
+        # Ensure we cover any micro-batch that somehow exceeds the budget
+        pp_fixed_seq_len = max(pp_fixed_seq_len, max_seq_len)
+        device = get_device_id()
+
+        for i in range(n_mbs):
+            pp_pad_len = pp_fixed_seq_len - all_seq_lens[i]
+            # Store pp_pad_len in output_args for output unpadding
+            micro_batch_data[i][1]["pp_pad_len"] = pp_pad_len
+            if pp_pad_len <= 0:
+                continue
+
+            # Pad input_ids (first stage)
+            if has_first:
+                (input_ids,) = arg_mbs[i]
+                arg_mbs[i] = (torch.nn.functional.pad(input_ids, (0, pp_pad_len), value=0),)
+
+            # Pad positions (all stages — needed for RoPE and mask generation)
+            positions = all_positions[i]
+            if positions.dim() == 3:
+                padded_pos = torch.nn.functional.pad(positions, (0, pp_pad_len), value=0)
+            else:
+                padded_pos = torch.nn.functional.pad(positions, (0, pp_pad_len), value=0)
+            all_positions[i] = padded_pos
+
+            # Regenerate attention mask for padded length
+            dummy_input = torch.zeros(1, pp_fixed_seq_len, dtype=torch.long, device=device)
+            new_mask = get_attention_masks(
+                input_batch=dummy_input,
+                positions=padded_pos,
+                attn_type=self._verl_attn_type,
+            )
+            kwarg_mbs[i]["positions"] = padded_pos
+            kwarg_mbs[i]["attention_masks"] = new_mask
+
+            # Pad labels (last stage — use -100 ignore_index for padding)
+            if has_last and target_mbs[i] is not None:
+                target_mbs[i] = torch.nn.functional.pad(target_mbs[i], (0, pp_pad_len), value=-100)
+
+        # ── Phase 2: Update schedule's n_microbatches to match actual count
+        # verl's micro-batch count can vary per step (dynamic batching);
+        # the schedule adapts — only _n_microbatches and the warmup/steady
+        # counters inside _step_microbatches are affected.
+        pp_schedule._n_microbatches = n_mbs
+
+        # ── Phase 3: Run the pipeline schedule ───────────────────────────
+        output_lst = []
+
+        if forward_only:
+            # Temporarily disable loss_fn to prevent _maybe_compute_loss from
+            # crashing when target_mbs is not provided in forward-only mode.
+            saved_loss_fn = pp_schedule._loss_fn
+            pp_schedule._loss_fn = None
+            try:
+                with torch.no_grad(), self.trainer.train_context():
+                    pp_schedule._has_backward = False
+                    pp_schedule._stage.has_backward = False
+                    pp_schedule._stage.clear_runtime_states()
+                    pp_schedule._step_microbatches(
+                        arg_mbs, kwarg_mbs,
+                        target_mbs=None, losses=None,
+                        return_outputs=True,
+                    )
+            finally:
+                pp_schedule._loss_fn = saved_loss_fn
+
+            # ── Phase 4a: Collect forward-only outputs ───────────────────
+            if has_last:
+                output_chunks = pp_schedule._stage.output_chunks
+                for i, (micro_batch, output_args) in enumerate(micro_batch_data):
+                    raw_out = output_chunks[i] if i < len(output_chunks) else None
+                    if raw_out is not None:
+                        # Remove PP padding before prepare_model_outputs
+                        # (which separately removes TP padding)
+                        pp_pad = output_args.get("pp_pad_len", 0)
+                        if pp_pad > 0:
+                            raw_out = raw_out[:, :-pp_pad, :]
+                        with torch.autocast(device_type=device_name, dtype=torch.bfloat16):
+                            model_output = self.prepare_model_outputs(
+                                logits=raw_out, output_args=output_args, micro_batch=micro_batch
+                            )
+                        if loss_function is not None:
+                            loss, metrics = loss_function(
+                                model_output=model_output, data=micro_batch, dp_group=dp_group
+                            )
+                        else:
+                            loss = torch.tensor(1.0, device=device_name)
+                            metrics = {}
                     else:
+                        model_output = self._make_pp_dummy_output(micro_batch)
                         loss = torch.tensor(1.0, device=device_name)
                         metrics = {}
-                else:
-                    # Non-last PP stage: return zeros so postprocess_batch_func works
-                    model_output = self._make_pp_dummy_output(micro_batch)
-                    loss = torch.tensor(1.0, device=device_name)
-                    metrics = {}
 
-                output_lst.append({
-                    "model_output": model_output,
-                    "loss": loss.detach().item() if torch.is_tensor(loss) else float(loss),
-                    "metrics": metrics,
-                })
-
+                    output_lst.append({
+                        "model_output": model_output,
+                        "loss": loss.detach().item() if torch.is_tensor(loss) else float(loss),
+                        "metrics": metrics,
+                    })
             else:
-                # ── Training (forward + backward inside pp_schedule.step) ─────
-                # losses list is populated by the schedule on the last stage only.
-                losses: list = [] if has_last else None  # type: ignore[assignment]
-                targets = labels if has_last else None
+                # Non-last PP stage: all outputs are dummy
+                for micro_batch, output_args in micro_batch_data:
+                    output_lst.append({
+                        "model_output": self._make_pp_dummy_output(micro_batch),
+                        "loss": 1.0,
+                        "metrics": {},
+                    })
 
-                with self.trainer.train_context():
-                    if has_first:
-                        pp_schedule.step(
-                            input_ids, **extra_inputs, **extra_kwargs,
-                            target=targets, losses=losses, return_outputs=False,
-                        )
-                    else:
-                        pp_schedule.step(
-                            **extra_kwargs,
-                            target=targets, losses=losses, return_outputs=False,
-                        )
+        else:
+            # ── Training path ────────────────────────────────────────────
+            losses_list: list = [] if has_last else None  # type: ignore[assignment]
 
-                loss_val = (
-                    torch.sum(torch.stack(losses)).item()
-                    if (losses and has_last)
-                    else 0.0
+            with self.trainer.train_context():
+                pp_schedule._has_backward = True
+                pp_schedule._stage.has_backward = True
+                pp_schedule._stage.clear_runtime_states()
+                pp_schedule._step_microbatches(
+                    arg_mbs, kwarg_mbs,
+                    target_mbs=target_mbs,
+                    losses=losses_list,
+                    return_outputs=False,
                 )
-                # In training mode, log_probs are not computed — return zeros.
+
+            # ── Phase 4b: Collect training outputs ───────────────────────
+            total_loss = (
+                torch.sum(torch.stack(losses_list)).item()
+                if (losses_list and has_last)
+                else 0.0
+            )
+            per_mb_loss = total_loss / n_mbs if n_mbs > 0 else 0.0
+            for micro_batch, output_args in micro_batch_data:
                 model_output = self._make_pp_dummy_output(micro_batch)
                 output_lst.append({
                     "model_output": model_output,
-                    "loss": loss_val,
+                    "loss": per_mb_loss,
                     "metrics": {},
                 })
 
