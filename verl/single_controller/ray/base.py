@@ -781,17 +781,7 @@ class RayWorkerGroup(WorkerGroup):
         self.method_names = self._bind_worker_method(self.ray_cls_with_init.cls, func_generator)
 
     def _execute_remote_single_worker(self, worker, method_name: str, *args, **kwargs):
-        """Execute a method on a single worker remotely.
-
-        Args:
-            worker: The worker actor handle
-            method_name: Name of the method to execute
-            *args: Positional arguments for the method
-            **kwargs: Keyword arguments for the method
-
-        Returns:
-            Remote object reference to the method execution
-        """
+        """Execute a method on a single worker remotely."""
         if self.fused_worker_used and method_name not in self.method_names:
             remote_call = getattr(worker, self.fused_worker_execute_fn_name)
             return remote_call.remote(f"{self.sub_cls_name}_fwmn_{method_name}", *args, **kwargs)

@@ -143,6 +143,18 @@ def xpu_varlen_sdpa(
         ki = k[k_s:k_e].unsqueeze(0).transpose(1, 2)
         vi = v[k_s:k_e].unsqueeze(0).transpose(1, 2)
 
+        # GQA expansion: SYCL-TLA Flash does not broadcast K/V over Q heads;
+        # repeat_interleave to make nheads_k == nheads_q.
+        nheads_q = qi.shape[1]
+        nheads_k_actual = ki.shape[1]
+        if nheads_k_actual != nheads_q and nheads_k_actual != 1:
+            assert nheads_q % nheads_k_actual == 0, (
+                f"nheads_q={nheads_q} must be divisible by nheads_k={nheads_k_actual}"
+            )
+            repeats = nheads_q // nheads_k_actual
+            ki = ki.repeat_interleave(repeats, dim=1)
+            vi = vi.repeat_interleave(repeats, dim=1)
+
         if use_window:
             mask = _build_window_mask(
                 q_e - q_s, k_e - k_s, window_size, causal,

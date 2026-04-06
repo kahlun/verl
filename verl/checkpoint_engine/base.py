@@ -402,12 +402,7 @@ class CheckpointEngineManager:
 
     @auto_await
     async def update_weights(self, global_steps: int = None):
-        """Update weights from trainer to rollout replicas.
-
-        Args:
-            global_steps: The global steps of the trainer.
-        """
-
+        """Update weights from trainer to rollout replicas."""
         # 0. update weights for sync training with colocated trainer and rollout
         if self.backend == "naive":
             ray.get(self.trainer.update_weights(global_steps=global_steps))

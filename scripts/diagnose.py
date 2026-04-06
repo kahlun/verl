@@ -215,8 +215,24 @@ def _get_cpu_memory():
 
 def _get_gpu_info():
     """
-    Get GPU type, GPU memory, and GPU count using nvidia-smi command.
+    Get GPU type, GPU memory, and GPU count.
+    Supports NVIDIA (via nvidia-smi) and Intel XPU (via torch.xpu).
     """
+    # Try Intel XPU first
+    try:
+        import torch
+        if torch.xpu.is_available():
+            gpu_count = torch.xpu.device_count()
+            gpu_info = []
+            for i in range(gpu_count):
+                name = torch.xpu.get_device_name(i)
+                free, total = torch.xpu.mem_get_info(i)
+                gpu_info.append({"type": name, "memory": total / (1024**3)})
+            return gpu_count, gpu_info
+    except (ImportError, AttributeError):
+        pass
+
+    # Fall back to NVIDIA nvidia-smi
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=gpu_name,memory.total", "--format=csv,noheader,nounits"],
@@ -237,7 +253,7 @@ def _get_gpu_info():
             )
         return gpu_count, gpu_info
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("Failed to execute nvidia-smi command.")
+        print("Failed to detect GPU info (tried XPU and nvidia-smi).")
         return 0, []
 
 
