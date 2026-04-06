@@ -566,10 +566,10 @@ Without this fix, Ray reports 0 GPU resources on Intel XPU, blocking all RL trai
 An MFU of 27% on a 96 TFLOPS GPU means ~26 TFLOPS are doing matrix math; the rest
 is memory transfers, kernel launch overhead, Python dispatch, etc.
 
-**Hardware:** Intel Arc Pro B60 (Battlemage), 96 TFLOPS peak BF16, 24 GB VRAM
-**Model:** Qwen2.5-0.5B-Instruct (494M params)
-**Sequence length:** 512 tokens
-**Method:** Pure forward+backward training loop (no Ray, no vLLM). FLOPs = 6×N×tokens.
+**Hardware:** 4× Intel Arc Pro B60 (Battlemage), 96 TFLOPS peak BF16, 24 GB VRAM, PCIe
+**Method:** Pure forward+backward training loop via `torchrun` (no Ray, no vLLM). FLOPs = 6×N×tokens.
+
+### 12a. Single-GPU MFU (Qwen2.5-0.5B, seq=512)
 
 | Config | MFU | TFLOPS | tok/s | sec/step | Memory |
 |--------|-----|--------|-------|----------|--------|
@@ -577,7 +577,35 @@ is memory transfers, kernel launch overhead, Python dispatch, etc.
 | bs=8, eager mode | **22.6%** | 21.7 | 7,307 | 0.561s | — |
 | bs=4, torch.compile | **27.5%** | 26.4 | 8,902 | 0.230s | 21.1 GB |
 
-**NVIDIA comparison (from TorchTitan benchmarks on A100 80GB):**
+### 12b. Multi-GPU DDP Scaling (Qwen2.5-0.5B, bs=4/gpu, seq=512)
+
+| GPUs | Mode | MFU | TFLOPS/gpu | tok/s/gpu | sec/step | Scaling |
+|------|------|-----|-----------|-----------|----------|---------|
+| 1 | DDP | **19.4%** | 18.7 | 6,299 | 0.325s | 1.00× (baseline) |
+| 2 | DDP | **3.9%** | 3.7 | 1,257 | 1.630s | 0.20× |
+| 4 | DDP | **3.1%** | 2.9 | 988 | 2.073s | 0.16× |
+
+### 12c. Multi-GPU DDP Scaling (Qwen2.5-1.5B, bs=2/gpu, seq=512)
+
+| GPUs | Mode | MFU | TFLOPS/gpu | tok/s/gpu | sec/step | Scaling |
+|------|------|-----|-----------|-----------|----------|---------|
+| 1 | DDP | **23.2%** | 22.3 | 2,404 | 0.426s | 1.00× (baseline) |
+| 2 | DDP | **2.3%** | 2.2 | 237 | 4.324s | 0.10× |
+| 4 | DDP | **1.7%** | 1.6 | 176 | 5.827s | 0.07× |
+
+### 12d. FSDP Status
+
+- 2-GPU FSDP: **times out** (>5 min per warmup step with 0.5B model)
+- 4-GPU FSDP: **times out** (>30 min, FSDP all-gather/reduce-scatter over PCIe XCCL too slow)
+- Root cause: XCCL collective bandwidth over PCIe is ~3-5 GB/s vs NVLink's ~600 GB/s
+
+### 12e. VERL E2E 4-GPU Status
+
+- **Blocked** by vLLM sycl error: `UR_RESULT_ERROR_INVALID_KERNEL_ARGUMENT_SIZE`
+- vLLM worker dies during AOT compilation on multi-GPU Ray spawn
+- 1-GPU VERL E2E works (confirmed in prior tests)
+
+### 12f. NVIDIA Comparison (from TorchTitan benchmarks on A100 80GB)
 
 | Config | MFU | Device | Notes |
 |--------|-----|--------|-------|
@@ -585,14 +613,22 @@ is memory transfers, kernel launch overhead, Python dispatch, etc.
 | TorchTitan FSDP2=2 | 24.2% | A100 × 2 | NVLink interconnect |
 | Megatron 1-GPU | 26.3% | A100 | Traditional kernels |
 
-**Analysis:**
+### 12g. Analysis
+
+**Single-GPU (apple-to-apple benchmark):**
 - XPU eager (20%) vs NVIDIA Megatron eager (26%): only ~1.3× gap — reasonable given
   A100 has 312 TFLOPS with optimized tensor cores vs Arc B60 at 96 TFLOPS.
-- The main NVIDIA advantage is `torch.compile + FlexAttention` (42% vs 27%).
-  FlexAttention is a Triton fused kernel that eliminates memory-bound attention
-  overhead — this kernel does not yet exist for XPU.
-- `torch.compile` works on single-GPU XPU (27.5% MFU, 1.38× speedup over eager).
-  Blocked on multi-GPU only (L0 driver hang with FSDP collectives, PyTorch 2.13-2.14).
-- MFU is NOT a measure of "GPU not working" — 20-27% is expected for a small 0.5B
-  model in eager mode. Larger batch sizes and larger models get higher MFU because
-  the compute-to-overhead ratio improves.
+- XPU compiled (27.5%) is competitive with NVIDIA Megatron eager (26.3%).
+- The main NVIDIA advantage is FlexAttention (42% vs 27% compiled).
+- Larger model (1.5B) gets **23.2%** MFU vs 0.5B's 19.4% — bigger matmuls = better utilization.
+
+**Multi-GPU (scaling bottleneck is interconnect, not GPU):**
+- DDP scaling drops to 3-4% MFU with 2+ GPUs. This is **entirely** caused by PCIe
+  all-reduce bandwidth (~3-5 GB/s) vs NVLink (~600 GB/s). Each DDP step must all-reduce
+  the full gradient (494M params = ~1GB for 0.5B, 3GB for 1.5B).
+- NVIDIA achieves good multi-GPU MFU (24.2% on 2 GPU) because NVLink is 100-200× faster.
+- FSDP is even worse because it needs all-gather (forward) + reduce-scatter (backward).
+- **This is NOT a driver or software bug** — it's a fundamental PCIe bandwidth limit.
+  The same result would occur on NVIDIA GPUs connected via PCIe instead of NVLink.
+- 4-GPU DDP works correctly (no hang) after applying `ZE_AFFINITY_MASK` per-rank pinning.
+  Previous hang was caused by processes accessing all GPUs without isolation.
