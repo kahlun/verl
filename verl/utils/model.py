@@ -667,6 +667,9 @@ def load_valuehead_model(local_path, torch_dtype, model_config, trust_remote_cod
         attn_implementation=attn_impl,
         trust_remote_code=trust_remote_code,
     )
+    # vlm models
+    if hasattr(model_config, "text_config"):
+        ori_model.config.hidden_size = model_config.text_config.hidden_size
     model = AutoModelForCausalLMWithValueHead.from_pretrained(ori_model)
     patch_valuehead_model(model)
     return model
