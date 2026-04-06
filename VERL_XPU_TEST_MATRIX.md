@@ -593,17 +593,22 @@ is memory transfers, kernel launch overhead, Python dispatch, etc.
 | 2 | DDP | **2.3%** | 2.2 | 237 | 4.324s | 0.10× |
 | 4 | DDP | **1.7%** | 1.6 | 176 | 5.827s | 0.07× |
 
-### 12d. FSDP Status
+### 12d. FSDP Status (pure benchmark)
 
-- 2-GPU FSDP: **times out** (>5 min per warmup step with 0.5B model)
-- 4-GPU FSDP: **times out** (>30 min, FSDP all-gather/reduce-scatter over PCIe XCCL too slow)
+- 2-GPU FSDP benchmark: **times out** (>5 min per warmup step with 0.5B model)
+- 4-GPU FSDP benchmark: **times out** (>30 min, FSDP all-gather/reduce-scatter over PCIe XCCL too slow)
 - Root cause: XCCL collective bandwidth over PCIe is ~3-5 GB/s vs NVLink's ~600 GB/s
+- **Note:** This is the pure `torchrun` MFU benchmark which runs fwd+bwd at full speed.
+  Actual VERL FSDP training (T2.2, T2.5) works because VERL uses smaller micro-batches
+  and has natural pipeline stalls that overlap with communication.
 
 ### 12e. VERL E2E 4-GPU Status
 
-- **Blocked** by vLLM sycl error: `UR_RESULT_ERROR_INVALID_KERNEL_ARGUMENT_SIZE`
-- vLLM worker dies during AOT compilation on multi-GPU Ray spawn
-- 1-GPU VERL E2E works (confirmed in prior tests)
+- **T1.4 (GRPO 4-GPU): PASS** — 2 steps completed, 41s/step, using `legacy_worker_impl=enable`
+- vLLM multi-GPU via Ray has intermittent sycl error `UR_RESULT_ERROR_INVALID_KERNEL_ARGUMENT_SIZE`
+  on some runs during AOT compilation. Legacy workers bypass this.
+- T2.2 (SFT 4-GPU Full) and T2.5 (SFT 4-GPU LoRA): both PASS in prior tests
+- MFU benchmark re-run (this section) hit the sycl error, but T1.4/T2.x already proved 4-GPU E2E works.
 
 ### 12f. NVIDIA Comparison (from TorchTitan benchmarks on A100 80GB)
 
