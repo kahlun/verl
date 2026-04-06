@@ -376,7 +376,7 @@ The following bugs were identified and fixed during the A100 test session:
 | M8.3 (prev) | Megatron | Qwen2.5-0.5B | 2 | PP=2 | **6.6%** | 1.253 | PCIe PP overhead |
 | **T10.1 (new)** | **TorchTitan** | **Llama-3.1-8B** | **4** | **FSDP2=4, TP=1** | **5.82%** | 0.492 | flex+varlen, PCIe FSDP2 |
 | **T10.2 (new)** | **FSDP** | **Llama-3.1-8B** | **4** | **DP=4** | **5.74%** | 0.468 | FlashAttn2, PCIe DP |
-| T10.3 | TorchTitan | Llama-3.1-8B | 4 | FSDP2=2, TP=2 | **FAILED** | — | verl data dispatch bug |
+| T10.3 | TorchTitan | Llama-3.1-8B | 4 | FSDP2=2, TP=2 | **FAILED** | — | Sequence Parallel uneven seqlen bug |
 | T10.4 | FSDP | Llama-3.1-8B | 1 | DP=1 | **OOM** | — | Adam states 64GB+model 16GB > 80GB |
 
 ### 10b. The Real Story: Three Findings
@@ -428,18 +428,43 @@ For NVLink systems (e.g., 4× A100 SXM):
 - Communication overhead: 37× smaller → step time ~2-3 seconds instead of 17
 - Expected MFU on NVLink: ~(1/3) × 42% ≈ **25-35%** (still limited by other factors)
 
-### 10d. TorchTitan TP=2 Bug (verl data dispatch incompatibility)
+### 10d. TorchTitan TP=2 Bug (Sequence Parallel + remove_padding incompatibility)
 
-TorchTitan TP>1 fails with verl's SFT trainer due to a data distribution mismatch:
-- Ranks within the same TP group (e.g., rank 0 and rank 1) should process **identical** micro-batches
-- verl's `engine_workers.py` sends **different** micro-batches to all ranks independently
-- TP group members then have different sequence lengths → RoPE position assertion fails:
-  ```
-  assert positions.shape == (1, seqlen)  # seqlen differs between TP ranks
-  AssertionError
-  ```
-- **Fix required**: verl must replicate micro_batches within TP groups before dispatch
-- This is a **verl integration bug**, not a TorchTitan bug
+TorchTitan TP>1 fails with verl's `remove_padding` mode due to uneven sequence lengths:
+
+**Root cause (confirmed via debug prints):**
+- verl's `remove_padding` packs variable-length sequences into a single flat tensor `(1, total_tokens)`
+- TorchTitan's TP plan uses **Sequence Parallel**: `tok_embeddings` output is `Shard(1)` (sharded along seq dim),
+  norms use `SequenceParallel()`, and `PrepareModuleInput` all-gathers before attention
+- When `total_tokens` is **not divisible by TP degree**, DTensor Shard(1) creates uneven local shards
+- After all-gather/redistribute, the hidden states `x` get padded to different lengths per rank,
+  but `positions` (a plain tensor, not DTensor) retains the original unpadded length
+
+**Example from actual crash (TP=2, DP group 1 had total_tokens=3137, odd):**
+```
+rank 2: x.shape=(1, 3138, 16, 64)  positions.shape=(1, 3137)  → seqlen MISMATCH
+rank 3: x.shape=(1, 3136, 16, 64)  positions.shape=(1, 3137)  → seqlen MISMATCH
+rank 0: x.shape=(1, 3196, 16, 64)  positions.shape=(1, 3196)  → OK (even, 3196%2==0)
+rank 1: x.shape=(1, 3196, 16, 64)  positions.shape=(1, 3196)  → OK (even, 3196%2==0)
+```
+
+TorchTitan itself documents this limitation:
+```python
+# parallelize_llama() in torchtitan/models/llama3/parallelize.py:
+# TODO: TP currently cannot handle uneven seq_len because we set
+#       `use_local_output=True` to use plain Tensors for legacy reasons.
+assert training.seq_len % parallel_dims.seq_len_divisor == 0
+```
+But this assertion only checks the **configured** `seq_len` (2048, always even), not the **runtime** packed token count.
+
+**Bug ownership: upstream verl + TorchTitan incompatibility (NOT our XPU code).**
+- TorchTitan's TP plan requires seq_len divisible by TP degree (known limitation with TODO)
+- verl's `prepare_model_inputs` with `remove_padding` doesn't pad to the required alignment
+- Neither upstream verl nor TorchTitan has a fix for this interaction
+- Our XPU modifications (attn_backend override, sdpa fix) do NOT touch this code path
+
+**Fix needed**: In verl's `prepare_model_inputs`, when TP>1 and `use_remove_padding=True`,
+pad `input_ids` and `position_ids` to the nearest multiple of `parallel_dims.seq_len_divisor`.
 
 ### 10e. Updated Key Findings for XPU Team
 
@@ -447,7 +472,7 @@ TorchTitan TP>1 fails with verl's SFT trainer due to a data distribution mismatc
 
 2. **TorchTitan is valuable for single-GPU training**: The 42.2% vs 26.3% (Megatron) advantage is real for 1-GPU SFT. For XPU single-GPU testing, prefer TorchTitan.
 
-3. **TorchTitan TP>1 is not ready in verl**: The data dispatch bug must be fixed before TP≥2 can be used. For now, only TP=1 + FSDP2/DP is functional.
+3. **TorchTitan TP>1 is not ready in verl with `remove_padding`**: The Sequence Parallel + uneven seqlen bug (§10d) must be fixed before TP≥2 can be used with packed sequences. For now, only TP=1 + FSDP2/DP is functional.
 
 4. **8B model requires ≥2 GPUs for standard Adam**: Adam fp32 states (64GB) + model weights (16GB) = 80GB → cannot fit single 80GB GPU. Use ≥2 GPUs with FSDP (sharding reduces per-GPU memory proportionally).
 
