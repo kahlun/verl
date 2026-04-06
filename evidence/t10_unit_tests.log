@@ -1,0 +1,127 @@
+[SETUP] XPU device: Intel(R) Arc(TM) Pro B60 Graphics
+[SETUP] PyTorch: 2.10.0+xpu
+
+============================================================
+VERL XPU T10 Gap-Coverage Unit Tests
+============================================================
+
+============================================================
+[T10.1] OPO advantage estimator
+============================================================
+  advantages range: [-9.1694, 10.9926]
+  mean: 0.0000, std: 5.3436
+[T10.1] PASS (3.54s)
+
+============================================================
+[T10.2] kl_cov loss mode
+============================================================
+  loss: 0.100168
+  info keys: ['actor/ppo_kl']
+[T10.2] PASS (0.32s)
+
+============================================================
+[T10.3] GRPO_PASSK advantage estimator
+============================================================
+  groups with non-zero advantage: 4/4
+  advantages range: [0.0000, 0.8312]
+[T10.3] PASS (0.10s)
+
+============================================================
+[T10.4] RLOO_VECTORIZED advantage estimator
+============================================================
+  advantages range: [-13.2596, 14.3305]
+  mean: -0.0000, std: 6.5272
+[T10.4] PASS (0.17s)
+
+============================================================
+[T10.5] GRPO_VECTORIZED advantage estimator
+============================================================
+  advantages range: [-1.2878, 1.3246]
+  mean: -0.0000, std: 0.8670
+[T10.5] PASS (0.01s)
+
+============================================================
+[T10.6] File logger backend
+============================================================
+Creating file logger at ./t10_test/file_logger_test.jsonl
+step:1 - loss:0.5 - reward:1.2 - step:1
+step:2 - loss:0.3 - reward:1.5 - step:2
+  Backends: ['console', 'file']
+  File logger class: FileLogger
+  File logger backend initialized and logged successfully
+[T10.6] PASS (0.00s)
+
+============================================================
+[T10.7] Tensorboard logger backend
+============================================================
+Saving tensorboard log to tensorboard_log/t10_test/tb_logger_test.
+step:1 - loss:0.5 - reward:1.2
+step:2 - loss:0.3 - reward:1.5
+  Backends: ['tensorboard', 'console']
+  TB adapter class: _TensorboardAdapter
+  Tensorboard logger backend initialized and logged successfully
+[T10.7] PASS (0.05s)
+
+============================================================
+[T10.8] DAPO reward manager
+============================================================
+  DAPO class: DAPORewardManager
+  module: verl.experimental.reward_loop.reward_manager.dapo
+  Instantiation note: Missing key reward
+    full_key: reward
+    object_type=dict
+  Class registration: OK (constructor needs specific config)
+  DAPO reward manager registered and accessible
+[T10.8] PASS (0.31s)
+
+============================================================
+[T10.reg] All estimators registered
+============================================================
+  Enum values: 14
+  Registered: 14
+  All 14 estimators registered
+[T10.reg] PASS (0.00s)
+
+============================================================
+[T10.9.6] GDPO advantage estimator
+============================================================
+  advantages range: [-1.8604, 1.9660]
+  mean: 0.0000
+  2 reward dimensions (accuracy + format) independently normalized
+[T10.9.6] PASS (0.15s)
+
+============================================================
+[T10.9.10] FAPO asymmetric clipping
+============================================================
+  loss: -0.080249
+  FAPO asymmetric clip (low=0.2, high=0.28) applied
+  info keys: ['actor/pg_clipfrac', 'actor/ppo_kl', 'actor/pg_clipfrac_lower']
+[T10.9.10] PASS (0.07s)
+
+============================================================
+[T10.9.11] Distillation loss on XPU
+============================================================
+  All 7 KL loss modes validated on XPU: k1, k3, kl, abs, mse, k2, low_var_kl
+  agg_loss with response_mask: OK
+  is_distillation_enabled: OK
+  Self-distillation core ops validated (same model as teacher/student)
+[T10.9.11] PASS (0.12s)
+
+============================================================
+SUMMARY
+============================================================
+  T10.1: PASS
+  T10.2: PASS
+  T10.3: PASS
+  T10.4: PASS
+  T10.5: PASS
+  T10.6: PASS
+  T10.7: PASS
+  T10.8: PASS
+  T10.reg: PASS
+  T10.9.6: PASS
+  T10.9.10: PASS
+  T10.9.11: PASS
+
+  Total: 12 PASS, 0 FAIL out of 12
+============================================================

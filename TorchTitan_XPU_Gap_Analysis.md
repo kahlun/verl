@@ -187,12 +187,13 @@ Setting `offload_policy=True` triggers `enable_cpu_offload()` in torchtitan, whi
 4. **Version alignment** — ensure v0.2.x tags remain compatible with the torch version they target. Current `v0.2.2` tag already drifted from stable torch.
 
 ### For VERL Team:
-1. Fix V1 (add "xpu" to EngineRegistry) — 1 line (**already done locally**)
-2. Fix V2 (handle factory function configs) — 3 lines (**already done locally**)
-3. Fix V3 (stash `attn_type` on engine instance instead of writing to torchtitan Config) — ~5 lines (**already done locally**)
-4. Fix V5 (`torch.cuda.empty_cache()` → `get_torch_device().empty_cache()`) — 2 lines (**already done locally**)
+1. Fix V1 (add "xpu" to EngineRegistry) — 1 line (**done**, committed)
+2. Fix V2 (handle factory function configs) — 3 lines (**done**, committed)
+3. Fix V3 (stash `attn_type` on engine instance instead of writing to torchtitan Config) — ~5 lines (**done**, committed)
+4. Fix V5 (`torch.cuda.empty_cache()` → `get_torch_device().empty_cache()`) — 2 lines (**done**, committed)
 5. Pin torchtitan version or add compat layer for both tag and main
-6. **Fix PP `NotImplementedError`** — **DONE locally (2026-04-03)**. See §6 for details.
+6. Fix PP `NotImplementedError` — **done** (commit `71d4aecc`, 2026-04-05). Full PP implementation with forward-only and training paths. See §6.
+7. Fix GQA head expansion in `xpu_varlen_sdpa` — **done** (commit `11ce2353`). `repeat_interleave` for nheads_q != nheads_k.
 
 ### For PyTorch XPU Team:
 1. Ship `ShardPlacementResult` in next XPU wheel (if it's in nightly, it should flow down)
@@ -235,7 +236,7 @@ verl's original architecture assumed the non-PP pattern throughout: `forward_ste
 | Training uses TorchTitan's CE loss (all tokens) | SFT loss differs from verl's masked CE (response-only). Same weight update direction, different loss value. | Inject verl's loss into pipeline stages (TorchTitan API not exposed yet) |
 | Non-last PP stages return zero log_probs | RL algorithms (GRPO/PPO) need log_probs on all DP ranks — zeros won't compute correct advantages | Broadcast log_probs from last PP stage to all PP stages after forward |
 | CPU offload + PP | TorchTitan CPU offload bug also affects PP (params don't move to device before forward) | Wait for TorchTitan Bug 2 fix |
-| PP not validated on XPU | Only 1-GPU non-PP SFT was tested | Next: test PP=2 with 2-GPU + Llama-3.2-3B |
+| PP not validated multi-GPU on XPU | Only 1-GPU non-PP SFT was tested | Next: test PP=2 with 2-GPU + Llama-3.2-3B (now feasible since B11 resolved and 4-GPU XCCL works) |
 
 ### What PP Enables
 

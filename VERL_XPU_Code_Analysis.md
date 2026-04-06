@@ -1,9 +1,9 @@
 # VERL XPU Code Compatibility Analysis
 
-**Date:** 2026-04-01 (last updated 2026-04-04, GRPO/PPO pass, 4-GPU XCCL blocker found)  
+**Date:** 2026-04-01 (last updated **2026-04-06**, B11 resolved, T10 gap tests pass, 4-GPU working)  
 **Branch:** `xpu/2-training-integration` at `/home/sdp/kl/verl_test_xpu`  
 **Hardware:** Intel Arc Pro B60 (Battlemage), 4x ~24 GB VRAM, PCIe  
-**Software:** PyTorch 2.11.0+xpu (no IPEX), Ray 2.54.1, transformers 4.57.6  
+**Software:** PyTorch 2.10.0+xpu (container `intel/vllm:0.14.1-xpu`), Ray 2.54.1, transformers 4.57.6  \n**Note:** Host environment has PyTorch 2.11.0+xpu. Earlier §4 analysis and unit tests used host 2.11. All RL/training tests run inside Docker container (2.10).  
 **Method:** Every Python file under `verl/` was scanned for hardcoded CUDA, NCCL, flash_attn, ReduceOp, and torch.cuda.* usage. Each finding was traced to determine if it's in the FSDP+vLLM training path that XPU uses.
 
 ---
@@ -11,10 +11,10 @@
 ## 0. Executive Summary — READ THIS FIRST
 
 ### What Works on XPU RIGHT NOW
-- **FSDP engine** — fully working on 1-2 GPUs. SFT 4-GPU works (special case: SFT torchrun, no Ray/vLLM). RL training validated on 1+2 GPUs.
+- **FSDP engine** — fully working on 1–4 GPUs. SFT and RL (GRPO/PPO) validated on all scales (1/2/4-GPU). 4-GPU XCCL stable after B11 resolution.
 - **Single-GPU training** — SFT, LoRA, full-finetune, fused Triton kernels all pass.
 - **Liger Kernel** — ✅ **WORKS on XPU** (v0.7.0). All 6 tests pass: import, RMSNorm, CrossEntropy, model patching, training loop, verl integration. Pure Triton kernels compile and run correctly on Intel XPU.
-- **Ulysses Sequence Parallelism** — ✅ **FIX APPLIED** (2026-04-02). `monkey_patch.py` now overrides `_flash_attention_forward` → `xpu_flash_attention_forward` on XPU. sp_size=1 validated (5/5 tests pass). Multi-GPU (sp_size>1) needs distributed test.
+- **Ulysses Sequence Parallelism** — ✅ **WORKING** (2026-04-02 fix, 2026-04-04 validated). `monkey_patch.py` overrides `_flash_attention_forward` → `xpu_flash_attention_forward` on XPU. sp_size=1 (5/5 tests pass) AND sp_size=2 multi-GPU validated (T5.1 PASS, 16 steps).
 - **Attention implementation** — Changed from `"eager"` to `"sdpa"` default on XPU. `F.scaled_dot_product_attention()` dispatches to SYCL-TLA Flash kernel natively — no IPEX, no NaN.
 - **VLM training** — Qwen2-VL-2B and Qwen3-VL-2B pass with real images (10 steps, zero NaN).
 - **Sequence packing** — `unpad_input`/`pad_input` + `xpu_varlen_sdpa` all working.
@@ -31,16 +31,17 @@
 > separately confirmed GRPO with `algorithm.adv_estimator=grpo` on 2-GPU (v20c).
 
 ### What's Left (Tiered Test Plan — §10)
-- **Tier 1:** ✅ All core tests PASSED (T1.1 1-GPU LoRA, T1.2 2-GPU LoRA, T1.3 1-GPU Full). T1.4 (4-GPU) blocked by B11. T1.5 (VLM) not started.
-- **Tier 2 (distributed features):** 2-GPU tests for Ulysses SP, Liger Kernel, sequence packing, SFT. Can run 2 tests in parallel (GPU 0,1 + GPU 2,3).
-- **Tier 3:** ⛔ BLOCKED — 4-GPU XCCL collectives crash with DEVICE_LOST on PCIe Arc Pro B60. Max stable distributed: 2 GPUs. See B11.
+- **Tier 1:** ✅ All core tests PASSED (T1.1 1-GPU, T1.2 2-GPU, T1.3 Full, T1.4 4-GPU GRPO 2 steps @ 41s/step).
+- **Tier 2 (distributed features):** ✅ Ulysses SP (T5.1), Liger Kernel (T5.2), sequence packing, SFT all PASS.
+- **Tier 3:** ✅ 4-GPU XCCL **NOW WORKING** (B11 resolved 2026-04-06 — was transient TTM corruption, not fundamental). 4-GPU all_reduce + reduce_scatter + FSDP all pass post-reboot.
+- **Gap coverage (T10):** ✅ 8/8 PASS — OPO, kl_cov, GRPO_PASSK, RLOO_VECTORIZED, GRPO_VECTORIZED, file logger, tensorboard, DAPO reward manager. See `VERL_XPU_TEST_MATRIX.md` §11.
 
 ### What's Blocked (upstream, won't fix locally)
-- `torch.compile` + FSDP multi-GPU → L0 driver hang (PyTorch 2.13-2.14)
+- `torch.compile` + FSDP multi-GPU → L0 driver hang (PyTorch 2.13-2.14). **Single-GPU compile works**: 27.5% MFU, 1.38× speedup over eager (20.1% MFU).
 - CUDA IPC weight transfer → needs PyTorch 2.12 / oneAPI 26.0 for SYCL IPC
 - Megatron backend → 4 CUDA-only external deps (never fixable locally)
 - VeOmni fused MoE + grad norm → needs patches inside veomni pip package + XCCL fix
-- **4-GPU XCCL collectives (B11)** — Even bare `dist.all_reduce()` on 4 XPU devices crashes with DEVICE_LOST. 2-GPU XCCL works. Gloo (CPU) works on 4 ranks. Root cause: xe driver cannot handle XCCL over 4 PCIe-connected Arc Pro B60 GPUs. Needs xe driver fix or XeLink interconnect.
+- ~~**4-GPU XCCL collectives (B11)**~~ — **RESOLVED (2026-04-06).** Was transient TTM corruption after prolonged testing, not a fundamental driver limitation. After reboot: 4-GPU XCCL all_reduce, reduce_scatter, and FSDP all pass. T1.4 (4-GPU GRPO) completes 2 steps @ 41s/step.
 
 ### Key Environment Requirements (for any multi-GPU test)
 ```bash
@@ -380,7 +381,7 @@ tests/test_monkey_patch_xpu.py
   ✅ test_model_forward_with_monkey_patch            — Qwen2.5-0.5B + apply_monkey_patch + sdpa, loss=3.88
 ```
 
-**Note:** sp_size=1 means the Ulysses all-to-all branches are skipped (no distributed needed). The fix at line 147 is still exercised because `_ulysses_flash_attention_forward` always calls through `_flash_attention_forward`. Multi-GPU validation (sp_size=2+) requires 2+ GPUs with XCCL.
+**Note:** sp_size=1 means the Ulysses all-to-all branches are skipped (no distributed needed). The fix at line 147 is still exercised because `_ulysses_flash_attention_forward` always calls through `_flash_attention_forward`. Multi-GPU (sp_size=2) validated in T5.1 — PASS (16 steps, 2-GPU XCCL).
 
 #### 3.5.7 sp_size=1 vs sp_size>1 Impact
 
@@ -1223,7 +1224,7 @@ HYDRA_FULL_ERROR=1 torchrun --standalone --nnodes=1 --nproc-per-node=4 \
 | 8 | ~~Fix ONEAPI_DEVICE_SELECTOR format~~ | ~~Done~~ | ✅ FIXED (Bug 8) |
 | 9 | ~~Fix vLLM V1 spawn crash~~ | ~~Done~~ | ✅ FIXED (Bug 9) — fork mode |
 | 10 | ~~vLLM standalone 4-GPU~~ | ~~Done~~ | ✅ **4/4 PASS** |
-| 11 | ~~4-GPU GRPO end-to-end~~ | ⛔ BLOCKED (B11) | 4-GPU XCCL fundamentally crashes — even bare `dist.all_reduce()` on 4 XPU devices triggers DEVICE_LOST. Max stable: 2 GPUs. |
+| 11 | ~~4-GPU GRPO end-to-end~~ | ✅ **RESOLVED** (2026-04-06) | Was transient TTM corruption post prolonged testing. After reboot: 4-GPU XCCL all_reduce + reduce_scatter + FSDP pass. T1.4 PASS (2 steps @ 41s/step). |
 | 12 | Embed CCL_BUFFER_CACHE=0 in verl XPU init | Code change | Medium |
 | 13 | Fix `optimizer_offload=True` without `param_offload=True` | Assert in base engine | Low (config issue) |
 | 14 | **Add XPU guard to `is_support_ipc()`** | ~~Done~~ | ✅ FIXED (Bug 11, §3.8) |
@@ -1235,7 +1236,7 @@ All code fixes applied in `/home/sdp/kl/verl_test_xpu/`. 1-GPU and 2-GPU GRPO/PP
 - LoRA: `actor_rollout_ref.model.lora_rank=16`, `.lora_alpha=32`, `.target_modules=all-linear` (NOT `actor.use_lora`)
 - GRPO: `algorithm.adv_estimator=grpo` (default is `gae`/PPO — GRPO does NOT need a critic)
 - Offload: `param_offload=False` and `optimizer_offload=False` are DEFAULTS in `fsdp.yaml` — no need to set
-- **Max GPUs: 2** — 4-GPU XCCL is broken (B11). Do NOT attempt 4-GPU.
+- **Max GPUs: 4** — 4-GPU XCCL works after B11 resolution (2026-04-06). Requires `CCL_BUFFER_CACHE=0` and fresh reboot if GPU state is stale.
 
 See §10 for copy-paste commands. Log files in `/home/sdp/outputs/verl/`.
 

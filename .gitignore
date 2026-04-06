@@ -68,6 +68,7 @@ output.txt
 
 # Django stuff:
 *.log
+!evidence/*.log
 local_settings.py
 
 # Flask stuff:

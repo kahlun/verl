@@ -37,6 +37,7 @@ _DEVICE_FLOPS = {
     "910B": 354e12,
     "Ascend910": 354e12,
     "RTX 3070 Ti": 21.75e12,
+    "Arc(TM) Pro B60": 96e12,  # Intel Battlemage BMG-G21, 160 Xe2-cores @ ~2.35GHz, BF16 XMX
 }
 
 
