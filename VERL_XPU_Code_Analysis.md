@@ -1,6 +1,6 @@
 # VERL XPU Code Compatibility Analysis
 
-**Date:** 2026-04-01 (last updated 2026-04-02, Liger+Ulysses deep analysis added)  
+**Date:** 2026-04-01 (last updated 2026-04-04, GRPO/PPO pass, 4-GPU XCCL blocker found)  
 **Branch:** `xpu/2-training-integration` at `/home/sdp/kl/verl_test_xpu`  
 **Hardware:** Intel Arc Pro B60 (Battlemage), 4x ~24 GB VRAM, PCIe  
 **Software:** PyTorch 2.11.0+xpu (no IPEX), Ray 2.54.1, transformers 4.57.6  
@@ -11,7 +11,7 @@
 ## 0. Executive Summary — READ THIS FIRST
 
 ### What Works on XPU RIGHT NOW
-- **FSDP engine** — fully working. 4-GPU SFT training validated (5 steps, zero NaN, clean exit).
+- **FSDP engine** — fully working on 1-2 GPUs. SFT 4-GPU works (special case: SFT torchrun, no Ray/vLLM). RL training validated on 1+2 GPUs.
 - **Single-GPU training** — SFT, LoRA, full-finetune, fused Triton kernels all pass.
 - **Liger Kernel** — ✅ **WORKS on XPU** (v0.7.0). All 6 tests pass: import, RMSNorm, CrossEntropy, model patching, training loop, verl integration. Pure Triton kernels compile and run correctly on Intel XPU.
 - **Ulysses Sequence Parallelism** — ✅ **FIX APPLIED** (2026-04-02). `monkey_patch.py` now overrides `_flash_attention_forward` → `xpu_flash_attention_forward` on XPU. sp_size=1 validated (5/5 tests pass). Multi-GPU (sp_size>1) needs distributed test.
@@ -22,14 +22,25 @@
 - **TorchTitan engine** — 1-GPU SFT E2E pass (Llama-3.2-1B, loss decreasing, checkpoint saved).
 - **VeOmni engine** — FSDP2 core works (3-step training, optimizer, offload). Blockers only in VeOmni-specific features.
 
-### What's Left (ONE high-priority item)
-- **4-GPU GRPO end-to-end** — the only HIGH-priority remaining test. All 11 code bugs are fixed. The run previously got through FSDP init + vLLM server launch, then lost GPU access. Needs one retry.
+- **GRPO E2E** — ✅ PASSED on 1-GPU (T1.1, 16 steps) and 2-GPU (v20c, 16 steps). Valid metrics (entropy, loss, grad_norm).
+- **PPO/GAE E2E** — ✅ PASSED on 1-GPU (T1.1 default was GAE) and 2-GPU (T1.2 default was GAE).
+- **Full-finetune** — ✅ PASSED (T1.3, 16 steps, entropy decreasing).
+
+> **NOTE (2026-04-04):** The default `adv_estimator` in VERL is `gae` (PPO with GAE),
+> NOT `grpo`. Our T1.1–T1.3 runs used the default, so they were PPO tests. We
+> separately confirmed GRPO with `algorithm.adv_estimator=grpo` on 2-GPU (v20c).
+
+### What's Left (Tiered Test Plan — §10)
+- **Tier 1:** ✅ All core tests PASSED (T1.1 1-GPU LoRA, T1.2 2-GPU LoRA, T1.3 1-GPU Full). T1.4 (4-GPU) blocked by B11. T1.5 (VLM) not started.
+- **Tier 2 (distributed features):** 2-GPU tests for Ulysses SP, Liger Kernel, sequence packing, SFT. Can run 2 tests in parallel (GPU 0,1 + GPU 2,3).
+- **Tier 3:** ⛔ BLOCKED — 4-GPU XCCL collectives crash with DEVICE_LOST on PCIe Arc Pro B60. Max stable distributed: 2 GPUs. See B11.
 
 ### What's Blocked (upstream, won't fix locally)
 - `torch.compile` + FSDP multi-GPU → L0 driver hang (PyTorch 2.13-2.14)
 - CUDA IPC weight transfer → needs PyTorch 2.12 / oneAPI 26.0 for SYCL IPC
 - Megatron backend → 4 CUDA-only external deps (never fixable locally)
 - VeOmni fused MoE + grad norm → needs patches inside veomni pip package + XCCL fix
+- **4-GPU XCCL collectives (B11)** — Even bare `dist.all_reduce()` on 4 XPU devices crashes with DEVICE_LOST. 2-GPU XCCL works. Gloo (CPU) works on 4 ranks. Root cause: xe driver cannot handle XCCL over 4 PCIe-connected Arc Pro B60 GPUs. Needs xe driver fix or XeLink interconnect.
 
 ### Key Environment Requirements (for any multi-GPU test)
 ```bash
@@ -68,7 +79,7 @@ export ZE_AFFINITY_MASK=3
 | Engine | XPU Status | What it Provides | Effort |
 |---|---|---|---|
 | **FSDP** | ✅ **Working** (4-GPU validated) | DP + ZeRO sharding | Done |
-| **TorchTitan** | ✅ **1-GPU validated** (5 patches) | TP + EP + CP + DP | Done for 1-GPU; multi-GPU untested |
+| **TorchTitan** | ✅ **1-GPU validated** (5 patches + PP impl 2026-04-03) | TP + EP + CP + PP + DP | SFT done; PP impl done; multi-GPU TP/PP untested |
 | **VeOmni** | 🟡 **Core works** (5 blockers, 3 in veomni pkg) | EP + Ulysses SP | Needs veomni pkg patches |
 | **Megatron** | 🔴 **Blocked** (4 CUDA-only deps) | TP + PP + EP + CP + DP | Not fixable locally |
 
@@ -537,7 +548,7 @@ verl has **6 engine backends** — not just FSDP and Megatron:
 | Feature | TorchTitan | Config Key |
 |---|---|---|
 | Tensor Parallel (TP) | ✅ | `tensor_parallel_size` |
-| Pipeline Parallel (PP) | ⚠️ Registered but `NotImplementedError` in verl forward_step | `pipeline_parallel_size` |
+| Pipeline Parallel (PP) | ✅ **Implemented (2026-04-03)** — `pp_schedule.step()` integration, see §3.6.9a | `pipeline_parallel_size` |
 | Expert Parallel (EP) | ✅ | `expert_parallel_size` |
 | Context Parallel (CP) | ✅ | `context_parallel_size` |
 | FSDP2 Data Parallel | ✅ | `data_parallel_shard_size` |
@@ -588,11 +599,30 @@ Additionally, a monkey-patch for `ShardPlacementResult` (missing from PyTorch 2.
 - **FSDP2 + TP combined** → optimal memory/throughput for large models
 
 **Remaining risks if TorchTitan is enabled on XPU:**
-1. Pipeline Parallel raises `NotImplementedError` in verl's forward_step — PP is not yet implemented in verl's TorchTitan integration regardless of device
+1. ~~Pipeline Parallel raises `NotImplementedError`~~ → **✅ FIXED (2026-04-03)** — PP implemented via `pp_schedule.step()`. Known limitation: training uses TorchTitan's full-token CE loss (not verl's response-masked loss). RL (GRPO/PPO) with PP also needs log_prob broadcast from last PP stage — unvalidated.
 2. `torch.compile` with TP on XPU is unvalidated — may hit the same OOM as FSDP `torch.compile` (§7b Bug 2)  
 3. Expert Parallel `all_gather` on XCCL is unvalidated — XCCL may lack some collective ops
 4. `attn_type: flex` (FlexAttention) on XPU is unvalidated — may need fallback to `sdpa`
 5. The torchtitan `CompileConfig`, `ParallelismConfig`, `TrainingConfig` imports from the terminal test showed `CompileConfig: MISSING` — the torchtitan 0.2.2 API may have changed vs what verl expects
+
+##### §3.6.9a Pipeline Parallel — Implementation Summary (2026-04-03)
+
+PP execution requires `pp_schedule.step()` (TorchTitan's Trainer already builds and holds this object). The verl code had `NotImplementedError` because the non-PP pattern (`forward → logits → loss.backward()`) cannot be used with PP — the schedule does forward+backward together, and only the last stage rank has logits.
+
+**What was implemented in `verl/workers/engine/torchtitan/transformer_impl.py`:**
+
+| Added | Purpose |
+|---|---|
+| `TorchTitanEngine.model_forward_step` PP branch | Calls `self.trainer.pp_schedule.step(return_outputs=True)`; returns logits on last stage, `None` on others |
+| `TorchTitanEngineWithLMHead.forward_backward_batch` override | Routes to `_pp_forward_backward_batch` when `pp_enabled` |
+| `_pp_forward_backward_batch` | Per-microbatch `pp_schedule.step()`: forward-only or training (F+B together) |
+| `_make_pp_dummy_output` | Zero `log_probs`/`entropy` nested tensors for non-last PP stage ranks |
+| `forward_step` null-logits guard | Returns dummy output if called on non-last PP stage directly |
+
+**Known limitations of PP in verl (not TorchTitan limitations):**
+- Training loss is TorchTitan's CE on all tokens — verl's response-masked loss can't be injected into the pipeline schedule yet
+- RL (GRPO/PPO) with PP: non-last stages return zero log_probs → needs broadcast from last stage → **unvalidated**
+- PP=2 multi-GPU not yet tested on XPU (next test: Llama-3.2-3B with PP=2 on 2× B60)
 
 ##### VeOmni — Deep XPU Analysis (2026-04-02)
 
@@ -613,7 +643,7 @@ ByteDance's VeOmni (v0.1.4) framework uses PyTorch-native DTensor/DeviceMesh for
 | Data Parallel | ✅ FSDP/FSDP2 | ✅ FSDP1/FSDP2 | ✅ FSDP2 |
 | Expert Parallel | ❌ | ✅ EP via parallel_plan | ✅ EP via torchtitan |
 | Tensor Parallel | ❌ | ❌ (in verl integration) | ✅ TP via DTensor |
-| Pipeline Parallel | ❌ | ❌ | ⚠️ NotImplementedError in verl |
+| Pipeline Parallel | ❌ | ❌ | ✅ **Implemented (2026-04-03)** — `pp_schedule.step()` integration (see §3.6.9a) |
 | Context Parallel | ❌ | ❌ (in verl integration) | ✅ CP |
 | Sequence Parallel | ❌ (Ulysses blocked on XPU) | ✅ Ulysses SP | ❌ (in verl integration) |
 | Fused MoE Kernels | ❌ | ✅ group_gemm (Triton) | ❌ |
@@ -1193,15 +1223,21 @@ HYDRA_FULL_ERROR=1 torchrun --standalone --nnodes=1 --nproc-per-node=4 \
 | 8 | ~~Fix ONEAPI_DEVICE_SELECTOR format~~ | ~~Done~~ | ✅ FIXED (Bug 8) |
 | 9 | ~~Fix vLLM V1 spawn crash~~ | ~~Done~~ | ✅ FIXED (Bug 9) — fork mode |
 | 10 | ~~vLLM standalone 4-GPU~~ | ~~Done~~ | ✅ **4/4 PASS** |
-| 11 | **4-GPU GRPO end-to-end** | Need coordinated GPU (no conflict) | **HIGH** — all code fixes applied, needs one retry with free GPUs |
+| 11 | ~~4-GPU GRPO end-to-end~~ | ⛔ BLOCKED (B11) | 4-GPU XCCL fundamentally crashes — even bare `dist.all_reduce()` on 4 XPU devices triggers DEVICE_LOST. Max stable: 2 GPUs. |
 | 12 | Embed CCL_BUFFER_CACHE=0 in verl XPU init | Code change | Medium |
 | 13 | Fix `optimizer_offload=True` without `param_offload=True` | Assert in base engine | Low (config issue) |
 | 14 | **Add XPU guard to `is_support_ipc()`** | ~~Done~~ | ✅ FIXED (Bug 11, §3.8) |
 | 15 | Sleep mode on XPU (yma11/vllm) | Blocked: `torch.xpu.memory.MemPool` missing in torch 2.10+xpu | Medium — needs Intel torch211 image or future torch 2.12+ |
 | 16 | ZE_AFFINITY_MASK + fork conflict (Bug 12) | No code fix — use ONEAPI_DEVICE_SELECTOR only | Low — only affects single-GPU isolation, not 4-GPU GRPO |
 
-**For the next person running 4-GPU GRPO on XPU:**
-All code fixes are applied in `/home/sdp/kl/verl_test_xpu/`. The GRPO run (1-GPU attempt with Llama-3.2-1B-Instruct) got through FSDP init and Ray worker spawn, but the vLLM EngineCore failed because GPU0 was already occupied by another `vllm serve` process (21.6 GB used). The **4-GPU GRPO retry** needs coordinated GPU access — run when all 4 GPUs are free, no ZE_AFFINITY_MASK needed.
+**GRPO/PPO on XPU — PROVEN (2026-04-04):**
+All code fixes applied in `/home/sdp/kl/verl_test_xpu/`. 1-GPU and 2-GPU GRPO/PPO E2E pass (16 steps each, valid metrics). Key Hydra config notes:
+- LoRA: `actor_rollout_ref.model.lora_rank=16`, `.lora_alpha=32`, `.target_modules=all-linear` (NOT `actor.use_lora`)
+- GRPO: `algorithm.adv_estimator=grpo` (default is `gae`/PPO — GRPO does NOT need a critic)
+- Offload: `param_offload=False` and `optimizer_offload=False` are DEFAULTS in `fsdp.yaml` — no need to set
+- **Max GPUs: 2** — 4-GPU XCCL is broken (B11). Do NOT attempt 4-GPU.
+
+See §10 for copy-paste commands. Log files in `/home/sdp/outputs/verl/`.
 
 **Container `pt` current state (2026-04-03):**
 - vLLM: `yma11/vllm` branch `sleep-mode-1` at `/workspace/vllm` (old intel-innersource moved to `/workspace/vllm-innersource`)
@@ -1275,9 +1311,10 @@ docker exec pt bash -c '
 '
 ```
 
-**Remaining tests to run (need GPU access):**
-1. **4-GPU GRPO end-to-end** — all code fixes applied, one retry needed
-2. Algorithm variants (RLOO, REINFORCE++, DPO) — blocked on GRPO working first
+**Remaining tests to run:**
+1. ~~4-GPU GRPO end-to-end~~ → ⛔ BLOCKED (B11: XCCL 4-GPU DEVICE_LOST)
+2. Algorithm variants (RLOO, REINFORCE++, DPO) — ready to run (just swap `algorithm.adv_estimator`)
+3. T1.5 (VLM GRPO 1-GPU) — not started
 
 ---
 
@@ -1803,7 +1840,8 @@ These tests were run outside of VERL to validate TorchTitan's underlying XPU com
 | 15 | VLM unit tests | 18/18 xpu_attn + integration tests | ✅ All pass | §8.2 |
 | 16 | VLM real training | Qwen2-VL-2B, 10 steps with real images, 22.28 GB | ✅ Pass | §8.6 |
 | 17 | VLM model matrix | 2/4 pass (Qwen2-VL, Qwen3-VL), 2 OOM (expected) | ✅ Done | §8.7 |
-| 18 | TorchTitan | 5 patches, Llama-3.2-1B SFT E2E, loss 1.59→0.79 | ✅ Pass | §9 |
+| 18 | TorchTitan SFT | 5 patches, Llama-3.2-1B SFT E2E, loss 1.59→0.79 | ✅ Pass | §9 |
+| 25 | TorchTitan PP impl | `_pp_forward_backward_batch` + `model_forward_step` PP branch + dummy output helper | ✅ Done (2026-04-03) | §3.6.9a |
 | 19 | VeOmni analysis | Deep dive: 5 blockers mapped, FSDP2 core works on XPU | ✅ Done | §3.6.9 |
 | 20 | Megatron analysis | 4 CUDA-only deps, not fixable, use FSDP/TorchTitan instead | ✅ Done | §3.6 |
 | 21 | Ulysses SP fix | monkey_patch.py `_flash_attention_forward` override + `"sdpa"` default | ✅ Done | §3.5 |
@@ -1811,17 +1849,192 @@ These tests were run outside of VERL to validate TorchTitan's underlying XPU com
 | 23 | flash_attn audit | Complete audit of all 50+ flash_attn refs in verl/ — all safe or fixed | ✅ Done | §3.5.5 |
 | 24 | monkey_patch tests | 5/5 pass: override verify, sdpa default, ulysses sp1, model fwd, monkey_patch fwd | ✅ Done | §3.5.6 |
 
-### Remaining Work
+### Remaining Work — Revised Test Plan (2026-04-03)
 
-| # | Item | Priority | Type | GPU Needed? | Depends On | Notes |
-|---|---|---|---|---|---|---|
-| **A** | **4-GPU GRPO E2E** | **HIGH** | Test run | Yes (4 GPU, Docker `pt`) | Nothing — all code ready | The ONLY high-priority item. Previous run got through FSDP init + vLLM launch. See §7b for copy-paste command. |
-| B | Embed `CCL_BUFFER_CACHE=0` in verl XPU init | Medium | Code (1 line) | No | Nothing | Prevents users forgetting the env var |
-| C | TorchTitan multi-GPU (TP/EP/CP) | Medium | Test run | Yes (2-4 GPU) | Nothing | Same hardware setup as A |
-| C2 | Ulysses SP multi-GPU (sp_size=2) | Medium | Test run | Yes (2+ GPU) | Nothing | Fix applied (§3.5), sp_size=1 validated. Needs XCCL all-to-all test. |
-| D | Algorithm variants (RLOO, REINFORCE++, DPO) | Low | Test runs | Yes (needs A first) | A passes | Same framework, different `adv_estimator` |
-| E | TorchTitan CPU offload bug | Low | Debug | Yes (1 GPU) | Nothing | FSDP2 prefetch broken on non-CUDA |
-| F | Fix `optimizer_offload` without `param_offload` | Low | Config fix | No | Nothing | Assert in base engine |
+**Hardware:** 4× Intel Arc Pro B60, 24 GB each, PCIe. All GPUs have equal memory — more GPUs does NOT speed up 0.5B training (model fits in 1 GPU easily; extra GPUs just add FSDP communication overhead). Multi-GPU tests exist purely for **correctness validation** of distributed code paths.
+
+**Strategy:** Start with 1-GPU (fastest turnaround, matches official examples). Then 2-GPU (validates all distributed ops). 4-GPU only for NVIDIA comparison parity. **2 GPUs per test means we can run 2 tests in parallel** on our 4-GPU machine (GPU 0,1 + GPU 2,3).
+
+#### Tier 1 — Must Pass (Core GRPO E2E)
+
+| # | Test | GPUs | What It Validates | Est. Time | Cmd |
+|---|---|---|---|---|---|
+| **T1.1** | **1-GPU GRPO LoRA (0.5B)** | 1 | Full GRPO loop: FSDP actor → vLLM rollout → ref logprobs → reward → PPO update. | ✅ PASS | 16 steps, valid metrics (default was GAE/PPO) |
+| **T1.2** | **2-GPU GRPO LoRA (0.5B)** | 2 | FSDP sharding across 2 GPUs, XCCL all-reduce, Ray 2-worker placement, vLLM on 2 GPUs. | ✅ PASS | 16 steps (v20c, `adv_estimator=grpo` confirmed) |
+| **T1.3** | **1-GPU GRPO full-finetune (0.5B)** | 1 | Same as T1.1 but no LoRA — full weight training. | ✅ PASS | 16 steps, entropy decreasing |
+
+#### Tier 2 — Distributed Feature Validation (can run in parallel: GPU 0,1 + GPU 2,3)
+
+| # | Test | GPUs | What It Validates | Depends On |
+|---|---|---|---|---|
+| T2.1 | 2-GPU Ulysses SP (sp_size=2) | 2 | XCCL all-to-all inside `_ulysses_flash_attention_forward` + monkey_patch.py XPU override. New fix from §3.5. | T1.2 |
+| T2.2 | 2-GPU GRPO + Liger Kernel | 2 | Triton fused kernels + distributed training. `model.use_liger=True` | T1.2 |
+| T2.3 | 2-GPU GRPO + sequence packing | 2 | `use_remove_padding=True` with `xpu_varlen_sdpa` across 2 GPUs | T1.2 |
+| T2.4 | 2-GPU SFT (new engine) | 2 | SFT distributed without Ray (torchrun), validates `all_reduce_avg` workaround | T1.1 |
+
+#### Tier 3 — ⛔ BLOCKED (was: NVIDIA Comparison, 4-GPU parity)
+
+> **2026-04-04:** All Tier 3 tests are BLOCKED by B11 (4-GPU XCCL DEVICE_LOST).
+> Even `dist.all_reduce()` on 4 XPU devices crashes. HYBRID_SHARD (2x2 mesh) also crashes.
+> 2-GPU XCCL works fine. Gloo (CPU) works on 4 ranks.
+> Standalone test scripts: `/home/sdp/outputs/verl/basic_allreduce.py`, `fsdp_warmup.py`, `gloo_test.py`
+
+| # | Test | GPUs | Purpose | Status |
+|---|---|---|---|---|
+| T3.1 | 4-GPU GRPO LoRA (0.5B) | 4 | Direct comparison with NVIDIA 4-GPU setup | ⛔ BLOCKED (B11) |
+| T3.2 | 4-GPU GRPO (1.5B) | 4 | Larger model, 4-way FSDP sharding | ⛔ BLOCKED (B11) |
+| T3.3 | 4-GPU GRPO + Liger + SP + packing | 4 | All features simultaneously | ⛔ BLOCKED (B11) |
+| T3.4 | Algorithm variants (RLOO, REINFORCE++, DPO) | 4 | Swap `algorithm.adv_estimator` | ⛔ BLOCKED (B11) |
+
+#### Tier 4 — Nice-to-Have
+
+| # | Test | GPUs | What |
+|---|---|---|---|
+| T4.1 | TorchTitan PP=2 SFT (Llama-3.2-3B) | 2 | First PP validation on XPU — 3B OOMs on 1 GPU, PP splits across 2 (**next priority after GRPO**) |
+| T4.2 | TorchTitan TP=2 (any model) | 2 | Tensor parallelism via TorchTitan engine |
+| T4.3 | VLM GRPO (Qwen2-VL-2B) | 1 | VLM + RL combined — validates VLM attention patches under GRPO |
+| T4.4 | Long-context (32K) + SP | 2 | Ulysses SP with actual long sequences |
+
+---
+
+### Copy-Paste Commands
+
+**Prerequisites (all tests):**
+```bash
+# 1. Job timeout (sudo, one-time per reboot)
+find /sys/devices -name "job_timeout_ms" -not -path "*/.defaults/*" | while read f; do echo 10000 | sudo tee "$f" > /dev/null; done
+
+# 2. Docker container `pt` must be running
+docker start pt
+
+# 3. Inside Docker: Ray + env vars
+docker exec pt bash -c '
+  export CCL_BUFFER_CACHE=0
+  export RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR=1
+  ray stop --force 2>/dev/null
+  ray start --head --num-cpus=16 --resources='"'"'{"xpu": 4}'"'"' --num-gpus=0
+'
+```
+
+**§T1.1 — 1-GPU GRPO LoRA (0.5B) — matches official example exactly:**
+```bash
+docker exec pt bash -c '
+  cd /host/home/sdp/kl/verl_test_xpu &&
+  export CCL_BUFFER_CACHE=0 RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR=1 HYDRA_FULL_ERROR=1
+  python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
+    data.train_files=/host/home/sdp/data/gsm8k/train.parquet \
+    data.val_files=/host/home/sdp/data/gsm8k/test.parquet \
+    data.train_batch_size=1 data.max_prompt_length=512 data.max_response_length=1024 \
+    data.filter_overlong_prompts=True data.truncation=error data.shuffle=False \
+    actor_rollout_ref.model.path=Qwen/Qwen2.5-0.5B-Instruct \
+    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.lora_rank=32 actor_rollout_ref.model.lora_alpha=32 \
+    actor_rollout_ref.model.target_modules=all-linear \
+    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.actor.optim.lr=3e-5 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=1 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.use_kl_loss=True actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.entropy_coeff=0.001 \
+    actor_rollout_ref.actor.fsdp_config.param_offload=True \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.1 \
+    actor_rollout_ref.rollout.n=1 actor_rollout_ref.rollout.enforce_eager=True \
+    actor_rollout_ref.rollout.max_num_seqs=512 actor_rollout_ref.rollout.max_model_len=1536 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=1536 \
+    actor_rollout_ref.rollout.enable_chunked_prefill=False \
+    actor_rollout_ref.rollout.load_format=safetensors \
+    actor_rollout_ref.rollout.layered_summon=True \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size=1 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size=1 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    algorithm.kl_ctrl.kl_coef=0.001 algorithm.use_kl_in_reward=False \
+    trainer.critic_warmup=0 trainer.logger=console \
+    trainer.val_before_train=False \
+    trainer.n_gpus_per_node=1 trainer.nnodes=1 \
+    trainer.save_freq=-1 trainer.test_freq=5 trainer.total_epochs=1 \
+    trainer.device=xpu trainer.default_local_dir=/tmp/verl_grpo_1gpu \
+    +ray_kwargs.ray_init.address=auto 2>&1 | tee /tmp/grpo_1gpu.log
+'
+```
+
+**§T1.2 — 2-GPU GRPO LoRA (0.5B) — same as T1.1, just change GPU count + batch sizes:**
+```bash
+docker exec pt bash -c '
+  cd /host/home/sdp/kl/verl_test_xpu &&
+  export CCL_BUFFER_CACHE=0 RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR=1 HYDRA_FULL_ERROR=1
+  python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
+    data.train_files=/host/home/sdp/data/gsm8k/train.parquet \
+    data.val_files=/host/home/sdp/data/gsm8k/test.parquet \
+    data.train_batch_size=2 data.max_prompt_length=512 data.max_response_length=1024 \
+    data.filter_overlong_prompts=True data.truncation=error data.shuffle=False \
+    actor_rollout_ref.model.path=Qwen/Qwen2.5-0.5B-Instruct \
+    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.lora_rank=32 actor_rollout_ref.model.lora_alpha=32 \
+    actor_rollout_ref.model.target_modules=all-linear \
+    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.actor.optim.lr=3e-5 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=2 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.use_kl_loss=True actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.entropy_coeff=0.001 \
+    actor_rollout_ref.actor.fsdp_config.param_offload=True \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.1 \
+    actor_rollout_ref.rollout.n=1 actor_rollout_ref.rollout.enforce_eager=True \
+    actor_rollout_ref.rollout.max_num_seqs=512 actor_rollout_ref.rollout.max_model_len=1536 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=1536 \
+    actor_rollout_ref.rollout.enable_chunked_prefill=False \
+    actor_rollout_ref.rollout.load_format=safetensors \
+    actor_rollout_ref.rollout.layered_summon=True \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size=1 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size=1 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    algorithm.kl_ctrl.kl_coef=0.001 algorithm.use_kl_in_reward=False \
+    trainer.critic_warmup=0 trainer.logger=console \
+    trainer.val_before_train=False \
+    trainer.n_gpus_per_node=2 trainer.nnodes=1 \
+    trainer.save_freq=-1 trainer.test_freq=5 trainer.total_epochs=1 \
+    trainer.device=xpu trainer.default_local_dir=/tmp/verl_grpo_2gpu \
+    +ray_kwargs.ray_init.address=auto 2>&1 | tee /tmp/grpo_2gpu.log
+'
+```
+
+**§T1.3 — 1-GPU GRPO full-finetune (0.5B) — no LoRA, tests full weight training:**
+```bash
+# Same as T1.1 but remove lora_rank/lora_alpha/target_modules lines
+# and keep param_offload=True, optimizer_offload=True (required for full-ft on 24GB)
+```
+
+### What Each GPU Count Proves
+
+| GPUs | Distributed ops validated | What's NEW over fewer GPUs |
+|---|---|---|
+| **1** | vLLM↔FSDP weight transfer (within same GPU), CPU offload/reload, full GRPO loop | Baseline — proves the pipeline works at all |
+| **2** | Everything in 1-GPU **PLUS**: XCCL all-reduce (gradient sync), FSDP 2-way sharding, Ray 2-worker placement, vLLM multi-instance coordination, distributed log-prob computation, `all_reduce_avg` workaround | **All distributed code paths exercised.** This is the critical test. |
+| **4** | Everything in 2-GPU **PLUS**: 4-way FSDP sharding (more comm), NVIDIA parity comparison | Incremental — no NEW code paths over 2-GPU. Value is NVIDIA comparison only. |
+
+### Parallel Test Scheduling (4 GPUs available)
+
+Since 2-GPU tests use only half the GPUs, we can run two tests simultaneously:
+
+```
+Slot A (GPU 0,1)              Slot B (GPU 2,3)
+─────────────────             ─────────────────
+T1.2: 2-GPU GRPO LoRA   ||   T2.4: 2-GPU SFT
+T2.1: 2-GPU Ulysses SP  ||   T2.2: 2-GPU GRPO+Liger
+T2.3: 2-GPU seq packing ||   (idle)
+```
+
+To pin tests to specific GPUs, use `ONEAPI_DEVICE_SELECTOR=level_zero:0,1` or `level_zero:2,3` and adjust `ray start --resources='{"xpu": 2}'`.
 
 ### Upstream Blockers (cannot fix locally)
 
@@ -1832,20 +2045,3 @@ These tests were run outside of VERL to validate TorchTitan's underlying XPU com
 | XCCL `ReduceOp.MAX` returns SUM | VeOmni grad norm affected (verl has workaround) | XCCL upstream fix | Already worked around in verl code |
 | VeOmni `ops/__init__` CUDA crash | Cannot use VeOmni custom models or fused MoE | Needs veomni pkg patch | B3 in §3.6.9 |
 | Megatron external deps | No Megatron strategy on XPU | Never (NVIDIA proprietary) | Use TorchTitan instead |
-
-### Decision Tree for Next Agent
-
-```
-Are you running a GPU test?
-├── YES → Is Docker container `pt` running?
-│         ├── YES → Run 4-GPU GRPO (item A). Command in §7b.
-│         └── NO  → Start it: docker start pt
-│                   Then: docker exec pt bash
-│                   Install verl: cd /host/home/sdp/kl/verl_test_xpu && pip install -e .
-├── NO  → Are you making code changes?
-│         ├── YES → Work in /home/sdp/kl/verl_test_xpu/
-│         │         All XPU patches are already applied.
-│         │         For new changes, follow the NPU pattern (elif is_xpu_available).
-│         └── NO  → Are you reviewing/planning?
-│                   This doc has everything. Start with §0 (executive summary).
-```

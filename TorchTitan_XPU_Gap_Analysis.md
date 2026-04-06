@@ -121,6 +121,8 @@ These are bugs in VERL's TorchTitan integration, not in TorchTitan itself.
 | v0.2.2 tag | ❌ No `CompileConfig` | ✅ | Not usable |
 | main branch | ✅ All APIs present | ❌ `ShardPlacementResult` | Needs monkey-patch |
 
+**Container access (2026-04-05 update):** torchtitan 0.2.2 IS accessible in the Docker container at `/host/home/sdp/miniforge3/lib/python3.12/site-packages/torchtitan/` — it was NOT on `PYTHONPATH` but all 9 VERL imports resolve when the path is added. This means T7.2/T7.3 are **not blocked** by package installation — just by missing `PYTHONPATH`. Use: `export PYTHONPATH=/host/home/sdp/miniforge3/lib/python3.12/site-packages:$PYTHONPATH`
+
 ---
 
 ### Gap V5: `torch.cuda.empty_cache()` in utils.py
@@ -142,6 +144,12 @@ With all 5 local patches (V1+V2+V3+V5 in VERL, T1 monkey-patch), the VERL TorchT
 - Completes **forward pass** through full VERL SFT pipeline on XPU ✅
 - **Completes full training loop** (forward + backward + optimizer step + validation + checkpoint) with 1B model ✅
 - 3B model OOMs during backward on single 24GB GPU (not an XPU bug — same on CUDA)
+
+> **Note (2026-04-05):** torchtitan 0.2.2 package is accessible inside the Docker
+> container via host mount at `/host/home/sdp/miniforge3/lib/python3.12/site-packages/torchtitan/`.
+> All 9 VERL imports resolve when `PYTHONPATH` includes this path. B12 in the test
+> matrix has been reclassified from "Blocked" to "Ready". T7.2 (PP=2) and T7.3
+> (TP=2) are now runnable — they just need `PYTHONPATH` set before launch.
 
 ### E2E VERL + TorchTitan SFT Test Results (2026-04-02)
 
@@ -179,11 +187,12 @@ Setting `offload_policy=True` triggers `enable_cpu_offload()` in torchtitan, whi
 4. **Version alignment** — ensure v0.2.x tags remain compatible with the torch version they target. Current `v0.2.2` tag already drifted from stable torch.
 
 ### For VERL Team:
-1. Fix V1 (add "xpu" to EngineRegistry) — 1 line
-2. Fix V2 (handle factory function configs) — 3 lines  
-3. Fix V3 (stash `attn_type` on engine instance instead of writing to torchtitan Config) — ~5 lines
-4. Fix V5 (`torch.cuda.empty_cache()` → `get_torch_device().empty_cache()`) — 2 lines
+1. Fix V1 (add "xpu" to EngineRegistry) — 1 line (**already done locally**)
+2. Fix V2 (handle factory function configs) — 3 lines (**already done locally**)
+3. Fix V3 (stash `attn_type` on engine instance instead of writing to torchtitan Config) — ~5 lines (**already done locally**)
+4. Fix V5 (`torch.cuda.empty_cache()` → `get_torch_device().empty_cache()`) — 2 lines (**already done locally**)
 5. Pin torchtitan version or add compat layer for both tag and main
+6. **Fix PP `NotImplementedError`** — **DONE locally (2026-04-03)**. See §6 for details.
 
 ### For PyTorch XPU Team:
 1. Ship `ShardPlacementResult` in next XPU wheel (if it's in nightly, it should flow down)
@@ -191,7 +200,64 @@ Setting `offload_policy=True` triggers `enable_cpu_offload()` in torchtitan, whi
 
 ---
 
-## 6. Test Commands
+## 6. Pipeline Parallel — Implementation Status (2026-04-03)
+
+### Why PP Had `NotImplementedError`
+
+Non-PP and PP have fundamentally different execution models:
+
+| | Non-PP | PP |
+|---|---|---|
+| Forward | `model(inputs)` → logits | `pp_schedule.step(inputs, ...)` → schedule coordinates stages |
+| Backward | Caller calls `loss.backward()` | `pp_schedule.step(target=labels, losses=[])` does F+B **together** |
+| Logits | Available on single rank | Only on **last PP stage rank** |
+| Loss fn | Verl's custom fn (masked CE, RL terms) | **Baked into schedule at construction time** (TorchTitan's CE) |
+
+verl's original architecture assumed the non-PP pattern throughout: `forward_step → get logits → loss.backward()`. PP can't use any of these steps directly.
+
+### What Was Fixed (2026-04-03)
+
+**File:** `verl/workers/engine/torchtitan/transformer_impl.py`
+
+| Change | Where | What |
+|---|---|---|
+| PP forward-only | `TorchTitanEngine.model_forward_step` | Call `pp_schedule.step(return_outputs=True)`; return logits on last stage, `None` elsewhere |
+| PP router | `TorchTitanEngineWithLMHead.forward_backward_batch` | Detect `pp_enabled` → dispatch to `_pp_forward_backward_batch` |
+| PP training | `TorchTitanEngineWithLMHead._pp_forward_backward_batch` | Per-microbatch `pp_schedule.step(target=labels, losses=[])` — schedule handles F+B |
+| PP inference | same method | Per-microbatch `pp_schedule.step(return_outputs=True)` — last stage computes log_probs |
+| None-logits guard | `TorchTitanEngineWithLMHead.forward_step` | Return zero dummy output on non-last PP stage if called directly |
+| Dummy output helper | `TorchTitanEngineWithLMHead._make_pp_dummy_output` | Zero-filled `log_probs`/`entropy` nested tensors for non-last stages |
+
+### Known Limitations of PP Implementation
+
+| Limitation | Impact | Fix |
+|---|---|---|
+| Training uses TorchTitan's CE loss (all tokens) | SFT loss differs from verl's masked CE (response-only). Same weight update direction, different loss value. | Inject verl's loss into pipeline stages (TorchTitan API not exposed yet) |
+| Non-last PP stages return zero log_probs | RL algorithms (GRPO/PPO) need log_probs on all DP ranks — zeros won't compute correct advantages | Broadcast log_probs from last PP stage to all PP stages after forward |
+| CPU offload + PP | TorchTitan CPU offload bug also affects PP (params don't move to device before forward) | Wait for TorchTitan Bug 2 fix |
+| PP not validated on XPU | Only 1-GPU non-PP SFT was tested | Next: test PP=2 with 2-GPU + Llama-3.2-3B |
+
+### What PP Enables
+
+With PP=2 on 2× Intel Arc Pro B60 (24 GB each):
+- 48 GB effective memory → can train **7B models** that OOM on single GPU
+- PP=4 → 96 GB → can train **30B+ models** (with also FSDP DP sharding)
+
+### TorchTitan PP Features Available (already in torchtitan 0.2.2)
+
+TorchTitan's PP is MORE advanced than Megatron's:
+
+| Schedule | Description |
+|---|---|
+| `ScheduleGPipe` | All-forward then all-backward |
+| `Schedule1F1B` | Interleaved forward/backward (standard) |
+| `ScheduleInterleaved1F1B` | Looped 1F1B (more stages per rank) |
+| `ScheduleInterleavedZeroBubble` | Near-zero bubble overhead |
+| `ScheduleZBVZeroBubble` | ZBV variant |
+| `ScheduleDualPipeV` | Dual-pipe variant |
+| `ScheduleLoopedBFS` | BFS looped scheduling |
+
+Configure via `engine.pipeline_parallel_schedule` in verl config.
 
 ```bash
 # Quick smoke test: flex_attention on XPU
