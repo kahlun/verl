@@ -614,6 +614,30 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
             else:
                 position_ids = position_ids.values().unsqueeze(0)
 
+            # Pad packed sequence to nearest multiple of seq_len_divisor for TP
+            # Sequence Parallel compatibility. TorchTitan's TP plan shards the
+            # sequence dimension (Shard(1)), which requires even divisibility.
+            # See: https://github.com/pytorch/torchtitan/issues/1306
+            tp_pad_len = 0
+            if self.parallel_dims.tp_enabled:
+                divisor = self.parallel_dims.seq_len_divisor
+                total_tokens = input_ids.shape[1]
+                remainder = total_tokens % divisor
+                if remainder != 0:
+                    tp_pad_len = divisor - remainder
+                    pad_ids = torch.zeros(1, tp_pad_len, dtype=input_ids.dtype, device=input_ids.device)
+                    input_ids = torch.cat([input_ids, pad_ids], dim=1)
+                    # Use position 0 for padding — creates a position reset that
+                    # the document mask treats as a separate (masked) document.
+                    if position_ids.dim() == 3:
+                        pad_pos = torch.zeros(1, position_ids.shape[1], tp_pad_len,
+                                              dtype=position_ids.dtype, device=position_ids.device)
+                        position_ids = torch.cat([position_ids, pad_pos], dim=2)
+                    else:
+                        pad_pos = torch.zeros(1, tp_pad_len, dtype=position_ids.dtype, device=position_ids.device)
+                        position_ids = torch.cat([position_ids, pad_pos], dim=1)
+            output_args["tp_pad_len"] = tp_pad_len
+
             labels = torch.roll(input_ids, shifts=-1, dims=1)
             attn_type = self._verl_attn_type
             attention_mask = get_attention_masks(
@@ -681,6 +705,12 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
         input_ids = micro_batch["input_ids"]
         cu_seqlens = input_ids.offsets()
         if use_remove_padding:
+            # Strip TP sequence padding if it was applied in prepare_model_inputs
+            tp_pad_len = output_args.get("tp_pad_len", 0)
+            if tp_pad_len > 0:
+                logits = logits[:, :-tp_pad_len, :]
+                labels = labels[:, :-tp_pad_len]
+
             labels = labels.squeeze(0)
             logits_rmpad = logits.squeeze(0)
             # PyTorch's autograd doesn't allow in-place modification of views when gradients need to flow back

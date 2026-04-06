@@ -376,7 +376,8 @@ The following bugs were identified and fixed during the A100 test session:
 | M8.3 (prev) | Megatron | Qwen2.5-0.5B | 2 | PP=2 | **6.6%** | 1.253 | PCIe PP overhead |
 | **T10.1 (new)** | **TorchTitan** | **Llama-3.1-8B** | **4** | **FSDP2=4, TP=1** | **5.82%** | 0.492 | flex+varlen, PCIe FSDP2 |
 | **T10.2 (new)** | **FSDP** | **Llama-3.1-8B** | **4** | **DP=4** | **5.74%** | 0.468 | FlashAttn2, PCIe DP |
-| T10.3 | TorchTitan | Llama-3.1-8B | 4 | FSDP2=2, TP=2 | **FAILED** | — | Sequence Parallel uneven seqlen bug |
+| ~~T10.3~~ | ~~TorchTitan~~ | ~~Llama-3.1-8B~~ | ~~4~~ | ~~FSDP2=2, TP=2~~ | ~~**FAILED**~~ | ~~—~~ | ~~Sequence Parallel uneven seqlen bug~~ |
+| **T10.3 (fixed)** | **TorchTitan** | **Llama-3.1-8B** | **4** | **FSDP2=2, TP=2** | **10.46%** | 0.492 | **TP padding fix applied** |
 | T10.4 | FSDP | Llama-3.1-8B | 1 | DP=1 | **OOM** | — | Adam states 64GB+model 16GB > 80GB |
 
 ### 10b. The Real Story: Three Findings
@@ -428,7 +429,7 @@ For NVLink systems (e.g., 4× A100 SXM):
 - Communication overhead: 37× smaller → step time ~2-3 seconds instead of 17
 - Expected MFU on NVLink: ~(1/3) × 42% ≈ **25-35%** (still limited by other factors)
 
-### 10d. TorchTitan TP=2 Bug (Sequence Parallel + remove_padding incompatibility)
+### 10d. TorchTitan TP=2 Bug — Root Cause and Fix
 
 TorchTitan TP>1 fails with verl's `remove_padding` mode due to uneven sequence lengths:
 
@@ -448,33 +449,44 @@ rank 0: x.shape=(1, 3196, 16, 64)  positions.shape=(1, 3196)  → OK (even, 3196
 rank 1: x.shape=(1, 3196, 16, 64)  positions.shape=(1, 3196)  → OK (even, 3196%2==0)
 ```
 
-TorchTitan itself documents this limitation:
-```python
-# parallelize_llama() in torchtitan/models/llama3/parallelize.py:
-# TODO: TP currently cannot handle uneven seq_len because we set
-#       `use_local_output=True` to use plain Tensors for legacy reasons.
-assert training.seq_len % parallel_dims.seq_len_divisor == 0
-```
-But this assertion only checks the **configured** `seq_len` (2048, always even), not the **runtime** packed token count.
+**Upstream root cause chain:**
+1. **PyTorch core bug** ([pytorch#130646](https://github.com/pytorch/pytorch/issues/130646)): DTensor conjugate bit handling broken → complex math (RoPE) numerically wrong with DTensor
+2. **TorchTitan workaround**: Force `use_local_output=True` to use plain tensors, avoiding DTensor+complex bug
+3. **Side effect**: Plain tensors can't handle uneven sequence splits → `seq_len % TP == 0` required
+4. **verl trigger**: `remove_padding` creates arbitrary-length packed sequences → hits the side effect
 
-**Bug ownership: upstream verl + TorchTitan incompatibility (NOT our XPU code).**
-- TorchTitan's TP plan requires seq_len divisible by TP degree (known limitation with TODO)
-- verl's `prepare_model_inputs` with `remove_padding` doesn't pad to the required alignment
-- Neither upstream verl nor TorchTitan has a fix for this interaction
-- Our XPU modifications (attn_backend override, sdpa fix) do NOT touch this code path
+Reported by the community as [torchtitan#1306](https://github.com/pytorch/torchtitan/issues/1306) (Jun 2025).
+PyTorch core fix merged Jul 2025 ([pytorch#158030](https://github.com/pytorch/pytorch/pull/158030)), but TorchTitan
+hasn't switched to `use_local_output=False` yet as of v0.2.2.
 
-**Fix needed**: In verl's `prepare_model_inputs`, when TP>1 and `use_remove_padding=True`,
-pad `input_ids` and `position_ids` to the nearest multiple of `parallel_dims.seq_len_divisor`.
+**Our fix (implemented in `transformer_impl.py` `prepare_model_inputs`):**
+In the `use_remove_padding` path, when TP is enabled, pad `input_ids` and `position_ids`
+to the nearest multiple of `parallel_dims.seq_len_divisor` before computing attention masks.
+In `prepare_model_outputs`, strip the padding from logits and labels.
+
+**Result: TP=2 + FSDP2=2 now works — and MFU nearly doubled vs pure FSDP2=4:**
+
+| Config | MFU (mean) | val/loss | Notes |
+|--------|-----------|----------|-------|
+| TorchTitan FSDP2=4, TP=1 | 5.82% | 0.492 | All 4 GPUs doing FSDP all-gather/reduce-scatter |
+| **TorchTitan FSDP2=2, TP=2** | **10.46%** | **0.492** | **TP halves per-GPU param count → less FSDP comm** |
+| FSDP DP=4 | 5.74% | 0.468 | Standard FSDP baseline |
+
+**Why TP=2 is nearly 2× faster on PCIe**: With TP=2, each GPU holds half the model params.
+FSDP all-gather/reduce-scatter traffic is proportional to params-per-GPU, so with half the
+params sharded across only 2 FSDP ranks (instead of 4), the PCIe communication volume drops
+dramatically. TP communication (all-reduce of activations) is much smaller than FSDP's
+full-parameter all-gather. On PCIe-bottlenecked systems, this tradeoff strongly favors TP+FSDP.
 
 ### 10e. Updated Key Findings for XPU Team
 
-1. **Use NVLink GPUs if you want multi-GPU efficiency**: On PCIe (XPU too), the inter-GPU bandwidth is the dominant bottleneck. MFU ≈ 6% at 4 GPUs regardless of engine.
+1. **TP+FSDP is the optimal strategy on PCIe systems**: TP=2 + FSDP2=2 achieves **10.5% MFU** vs 5.8% for pure FSDP2=4 — nearly **2× faster** on 4× A100 PCIe. TP reduces per-GPU param count, dramatically cutting FSDP communication volume.
 
-2. **TorchTitan is valuable for single-GPU training**: The 42.2% vs 26.3% (Megatron) advantage is real for 1-GPU SFT. For XPU single-GPU testing, prefer TorchTitan.
+2. **Our TP padding fix works and should be upstreamed to verl**: The fix in `prepare_model_inputs` (pad to `seq_len_divisor`) is simple, general, and enables TP>1 with `remove_padding` for all TorchTitan models. Same val/loss as TP=1, proving correctness.
 
-3. **TorchTitan TP>1 is not ready in verl with `remove_padding`**: The Sequence Parallel + uneven seqlen bug (§10d) must be fixed before TP≥2 can be used with packed sequences. For now, only TP=1 + FSDP2/DP is functional.
+3. **TorchTitan is valuable for single-GPU training**: The 42.2% vs 26.3% (Megatron) advantage is real for 1-GPU SFT. For XPU single-GPU testing, prefer TorchTitan.
 
-4. **8B model requires ≥2 GPUs for standard Adam**: Adam fp32 states (64GB) + model weights (16GB) = 80GB → cannot fit single 80GB GPU. Use ≥2 GPUs with FSDP (sharding reduces per-GPU memory proportionally).
+4. **8B model requires ≥2 GPUs for standard Adam**: Adam fp32 states (64GB) + model weights (16GB) = 80GB → cannot fit single 80GB GPU. Use ≥2 GPUs with FSDP.
 
-5. **For XPU 4-GPU training at 8B scale**: Expect ~5-7% MFU if XPU-to-XPU bandwidth is similar to PCIe A100. The bottleneck is interconnect, not the XPU compute units.
+5. **For XPU 4-GPU training at 8B scale**: Use TP=2 + FSDP2=2 (with the padding fix). Expect ~10% MFU if XPU interconnect is similar to PCIe A100. With NVLink-class interconnect, expect significantly higher.
 
