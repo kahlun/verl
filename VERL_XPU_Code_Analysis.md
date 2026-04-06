@@ -37,7 +37,7 @@
 - **Gap coverage (T10):** ✅ 8/8 PASS — OPO, kl_cov, GRPO_PASSK, RLOO_VECTORIZED, GRPO_VECTORIZED, file logger, tensorboard, DAPO reward manager. See `VERL_XPU_TEST_MATRIX.md` §11.
 
 ### What's Blocked (upstream, won't fix locally)
-- `torch.compile` + FSDP multi-GPU → L0 driver hang (PyTorch 2.13-2.14)
+- `torch.compile` + FSDP multi-GPU → L0 driver hang (PyTorch 2.13-2.14). **Single-GPU compile works**: 27.5% MFU, 1.38× speedup over eager (20.1% MFU).
 - CUDA IPC weight transfer → needs PyTorch 2.12 / oneAPI 26.0 for SYCL IPC
 - Megatron backend → 4 CUDA-only external deps (never fixable locally)
 - VeOmni fused MoE + grad norm → needs patches inside veomni pip package + XCCL fix

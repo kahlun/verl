@@ -557,3 +557,42 @@ before `main_ppo` runs. This fixes two issues:
 2. Worker creation at `base.py:406` which requests `{"xpu": num_gpus}` custom resource
 
 Without this fix, Ray reports 0 GPU resources on Intel XPU, blocking all RL training.
+
+---
+
+## 12. MFU (Model FLOPs Utilization) Benchmark (2026-04-06)
+
+**What is MFU?** The fraction of GPU peak theoretical compute actually doing useful math.
+An MFU of 27% on a 96 TFLOPS GPU means ~26 TFLOPS are doing matrix math; the rest
+is memory transfers, kernel launch overhead, Python dispatch, etc.
+
+**Hardware:** Intel Arc Pro B60 (Battlemage), 96 TFLOPS peak BF16, 24 GB VRAM
+**Model:** Qwen2.5-0.5B-Instruct (494M params)
+**Sequence length:** 512 tokens
+**Method:** Pure forward+backward training loop (no Ray, no vLLM). FLOPs = 6×N×tokens.
+
+| Config | MFU | TFLOPS | tok/s | sec/step | Memory |
+|--------|-----|--------|-------|----------|--------|
+| bs=4, eager mode | **20.1%** | 19.3 | 6,518 | 0.314s | 12.1 GB |
+| bs=8, eager mode | **22.6%** | 21.7 | 7,307 | 0.561s | — |
+| bs=4, torch.compile | **27.5%** | 26.4 | 8,902 | 0.230s | 21.1 GB |
+
+**NVIDIA comparison (from TorchTitan benchmarks on A100 80GB):**
+
+| Config | MFU | Device | Notes |
+|--------|-----|--------|-------|
+| TorchTitan 1-GPU (Qwen3-0.6B) | 42.2% | A100 (312 TFLOPS) | torch.compile + FlexAttention (fused Triton) |
+| TorchTitan FSDP2=2 | 24.2% | A100 × 2 | NVLink interconnect |
+| Megatron 1-GPU | 26.3% | A100 | Traditional kernels |
+
+**Analysis:**
+- XPU eager (20%) vs NVIDIA Megatron eager (26%): only ~1.3× gap — reasonable given
+  A100 has 312 TFLOPS with optimized tensor cores vs Arc B60 at 96 TFLOPS.
+- The main NVIDIA advantage is `torch.compile + FlexAttention` (42% vs 27%).
+  FlexAttention is a Triton fused kernel that eliminates memory-bound attention
+  overhead — this kernel does not yet exist for XPU.
+- `torch.compile` works on single-GPU XPU (27.5% MFU, 1.38× speedup over eager).
+  Blocked on multi-GPU only (L0 driver hang with FSDP collectives, PyTorch 2.13-2.14).
+- MFU is NOT a measure of "GPU not working" — 20-27% is expected for a small 0.5B
+  model in eager mode. Larger batch sizes and larger models get higher MFU because
+  the compute-to-overhead ratio improves.

@@ -1,0 +1,9 @@
+bs=4 eager: 0.314s  19.3 TFLOPS  MFU=20.1%  6518 tok/s
+bs=8 eager: 0.561s  21.7 TFLOPS  MFU=22.6%  7307 tok/s
+bs=4 compiled: 0.230s  26.4 TFLOPS  MFU=27.5%  8902 tok/s
+
+Peak memory: 21.1 GB
+Model: Qwen/Qwen2.5-0.5B-Instruct (494M params)
+Device: Intel(R) Arc(TM) Pro B60 Graphics
+Peak BF16: 96 TFLOPS
+Saved to evidence/mfu_benchmark.json
