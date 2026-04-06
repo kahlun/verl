@@ -39,6 +39,7 @@ from vllm.v1.engine.async_llm import AsyncLLM
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available
 from verl.utils.device import is_xpu_available
+
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
@@ -115,16 +116,24 @@ class vLLMHttpServer:
             cuda_visible_devices (str): cuda visible devices.
         """
         if is_xpu_available:
-            os.environ[get_visible_devices_keyword()] = f"level_zero:{cuda_visible_devices}"
-            # XPU L0 driver crashes when multiple vLLM V1 instances spawn
-            # subprocesses simultaneously. Fork avoids re-initializing L0.
-            os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "fork")
+            # XPU: Do NOT set ZE_AFFINITY_MASK or ONEAPI_DEVICE_SELECTOR.
+            # Restricting device visibility causes L0 driver deadlocks when
+            # FSDP workers (which see all devices) share the same physical GPU.
+            # Instead, pass the target device index via a custom env var so
+            # the vLLM XPU worker can call torch.xpu.set_device(N) directly.
+            os.environ["VERL_XPU_DEVICE_ID"] = cuda_visible_devices
         else:
             os.environ[get_visible_devices_keyword()] = cuda_visible_devices
 
         self.config = self._init_config(config)
         self.model_config = self._init_model_config(model_config)
         self._validate_configs()
+
+        # XPU: disable sleep mode — torch.xpu.memory.MemPool is not available
+        # in PyTorch 2.10+xpu; enabling it causes sycl::exception in EngineCore.
+        if is_xpu_available and self.config.enable_sleep_mode:
+            logger.warning("[XPU] Forcing enable_sleep_mode=False — MemPool not supported on XPU (torch 2.10).")
+            object.__setattr__(self.config, "enable_sleep_mode", False)
 
         self.rollout_mode = rollout_mode
         self.workers = workers
@@ -762,6 +771,12 @@ class vLLMHttpServer:
             f"master_address: {self._master_address}, master_port: {self._master_port}, "
             f"data_parallel_rpc_port: {self._dp_rpc_port}, data_parallel_master_port: {self._dp_master_port}"
         )
+        if is_xpu_available:
+            import os as _os
+            for _k in ("VERL_XPU_DEVICE_ID", "ZE_AFFINITY_MASK", "ONEAPI_DEVICE_SELECTOR",
+                       "VLLM_WORKER_MULTIPROC_METHOD",
+                       "RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR"):
+                logger.info(f"[XPU-DEBUG] {_k}={_os.environ.get(_k, '<unset>')}")
 
     def _get_engine_kwargs_key(self) -> str:
         """Return the key under config.engine_kwargs for this engine (e.g. 'vllm')."""
