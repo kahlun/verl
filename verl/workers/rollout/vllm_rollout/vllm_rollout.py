@@ -156,11 +156,10 @@ class ServerAdapter(BaseRollout):
     ):
         """Update model weights via CUDA IPC (fallback to shared memory if IPC not supported) to inference workers."""
         start_time = time.time()
-
         future = await self._execute_method(
             "update_weights_from_ipc",
             non_block=True,
-            kwargs={**kwargs, "use_shm": self.use_shm},
+            kwargs={**kwargs, "use_shm": self.use_shm, "zmq_handle": self.zmq_handle},
         )
 
         bucket_size_mb = self.config.checkpoint_engine.update_weights_bucket_megabytes

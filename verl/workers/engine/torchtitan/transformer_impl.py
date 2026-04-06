@@ -377,10 +377,20 @@ class TorchTitanEngine(BaseEngine):
         parallel_dims = self.parallel_dims
 
         if parallel_dims.pp_enabled:
-            raise NotImplementedError(
-                "Pipeline parallelism is not yet supported in model_forward_step. "
-                "This will be implemented in a follow-up PR."
-            )
+            # PP forward-only: run the pipeline schedule and collect logits from the last stage.
+            # Non-last stages receive None — callers (forward_step, _pp_forward_backward_batch)
+            # must handle this.  PP *training* (forward+backward together) bypasses this method
+            # entirely — see forward_backward_batch override in TorchTitanEngineWithLMHead.
+            with self.trainer.train_context():
+                if self.trainer.pp_has_first_stage:
+                    outputs = self.trainer.pp_schedule.step(
+                        inputs, **extra_inputs, **extra_kwargs, return_outputs=True
+                    )
+                else:
+                    outputs = self.trainer.pp_schedule.step(**extra_kwargs, return_outputs=True)
+            # Only the last PP stage has real logits; all others return None.
+            pred = outputs if self.trainer.pp_has_last_stage else None
+            return pred
         else:
             # Non-PP forward
             assert len(model_parts) == 1
@@ -759,6 +769,148 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
 
         return model_output
 
+    # ── Pipeline Parallel helpers ──────────────────────────────────────────────
+
+    def _make_pp_dummy_output(self, micro_batch: TensorDict) -> dict:
+        """Zero-filled model_output dict for non-last PP stage ranks.
+
+        The last PP stage is the only rank that has real logits.  All other ranks
+        must still return a dict with the same keys so that postprocess_batch_func
+        can aggregate correctly (it will only use the values from the last stage
+        after a subsequent all-gather/broadcast in the RL loop).
+        """
+        cu_seqlens = micro_batch["input_ids"].offsets()
+        n_tokens = int(cu_seqlens[-1].item())
+        device = get_device_id()
+        calculate_entropy = tu.get_non_tensor_data(data=micro_batch, key="calculate_entropy", default=False)
+        dummy = torch.zeros(n_tokens, device=device, dtype=torch.bfloat16)
+        out = {"log_probs": torch.nested.nested_tensor_from_jagged(dummy, cu_seqlens)}
+        if calculate_entropy:
+            out["entropy"] = torch.nested.nested_tensor_from_jagged(dummy.clone(), cu_seqlens)
+        return out
+
+    def forward_backward_batch(self, data: TensorDict, loss_function: Callable, forward_only=False):
+        """Route to PP-aware implementation when Pipeline Parallel is enabled."""
+        if not self.parallel_dims.pp_enabled:
+            return super().forward_backward_batch(data, loss_function, forward_only)
+        return self._pp_forward_backward_batch(data, loss_function, forward_only)
+
+    def _pp_forward_backward_batch(self, data: TensorDict, loss_function: Callable, forward_only=False):
+        """Pipeline Parallel forward (and optionally backward) over a full batch.
+
+        Architecture note
+        -----------------
+        Non-PP uses the pattern:  forward → get logits → compute loss → loss.backward()
+        PP uses:  pp_schedule.step() which handles forward+backward for ALL pipeline
+        stages in a single call.  The two patterns cannot be mixed, which is why PP
+        bypasses forward_step / model_forward_step entirely for the training path.
+
+        forward_only mode (log-prob computation during rollout / reference policy)
+        --------------------------------------------------------------------------
+        - Calls pp_schedule.step(return_outputs=True) — no backward.
+        - Last PP stage: gets logits → compute log_probs via prepare_model_outputs.
+        - Non-last PP stages: return zero-filled dummy output (same shape, no grad).
+
+        training mode (SFT / fine-tuning gradient update)
+        -------------------------------------------------
+        - Calls pp_schedule.step(target=labels, losses=losses) — forward+backward.
+        - Uses TorchTitan's built-in cross-entropy loss on ALL tokens.
+          ⚠ This differs from verl's masked loss (response-tokens only).
+          For response-masked SFT, run without PP (pipeline_parallel_size=1) until
+          a custom loss injection API is added to TorchTitan's pipeline schedule.
+        - Only the last PP stage accumulates real loss values.
+        """
+        device_name = get_device_name()
+        dp_group = self.get_data_parallel_group()
+
+        tu.assign_non_tensor(data, sp_size=self.engine_config.tensor_parallel_size)
+        batch_num_tokens = data["loss_mask"].sum().to(get_device_id())
+        if dp_group is not None:
+            torch.distributed.all_reduce(batch_num_tokens, op=torch.distributed.ReduceOp.SUM, group=dp_group)
+        tu.assign_non_tensor(data, batch_num_tokens=batch_num_tokens.item())
+        tu.assign_non_tensor(data, dp_size=self.get_data_parallel_size())
+
+        micro_batches, indices = prepare_micro_batches(
+            data=data, dp_group=dp_group, same_micro_num_in_dp=True
+        )
+
+        output_lst = []
+        has_first = self.trainer.pp_has_first_stage
+        has_last = self.trainer.pp_has_last_stage
+        pp_schedule = self.trainer.pp_schedule
+
+        for micro_batch in micro_batches:
+            micro_batch = micro_batch.to(get_device_id())
+            input_ids, extra_inputs, extra_kwargs, output_args = self.prepare_model_inputs(micro_batch=micro_batch)
+            labels = output_args.get("labels")
+
+            if forward_only:
+                # ── Forward-only (no backward) ────────────────────────────────
+                with torch.no_grad(), self.trainer.train_context():
+                    if has_first:
+                        raw_out = pp_schedule.step(
+                            input_ids, **extra_inputs, **extra_kwargs, return_outputs=True
+                        )
+                    else:
+                        raw_out = pp_schedule.step(**extra_kwargs, return_outputs=True)
+
+                if has_last and raw_out is not None:
+                    with torch.autocast(device_type=device_name, dtype=torch.bfloat16):
+                        model_output = self.prepare_model_outputs(
+                            logits=raw_out, output_args=output_args, micro_batch=micro_batch
+                        )
+                    if loss_function is not None:
+                        loss, metrics = loss_function(
+                            model_output=model_output, data=micro_batch, dp_group=dp_group
+                        )
+                    else:
+                        loss = torch.tensor(1.0, device=device_name)
+                        metrics = {}
+                else:
+                    # Non-last PP stage: return zeros so postprocess_batch_func works
+                    model_output = self._make_pp_dummy_output(micro_batch)
+                    loss = torch.tensor(1.0, device=device_name)
+                    metrics = {}
+
+                output_lst.append({
+                    "model_output": model_output,
+                    "loss": loss.detach().item() if torch.is_tensor(loss) else float(loss),
+                    "metrics": metrics,
+                })
+
+            else:
+                # ── Training (forward + backward inside pp_schedule.step) ─────
+                # losses list is populated by the schedule on the last stage only.
+                losses: list = [] if has_last else None  # type: ignore[assignment]
+                targets = labels if has_last else None
+
+                with self.trainer.train_context():
+                    if has_first:
+                        pp_schedule.step(
+                            input_ids, **extra_inputs, **extra_kwargs,
+                            target=targets, losses=losses, return_outputs=False,
+                        )
+                    else:
+                        pp_schedule.step(
+                            **extra_kwargs,
+                            target=targets, losses=losses, return_outputs=False,
+                        )
+
+                loss_val = (
+                    torch.sum(torch.stack(losses)).item()
+                    if (losses and has_last)
+                    else 0.0
+                )
+                # In training mode, log_probs are not computed — return zeros.
+                model_output = self._make_pp_dummy_output(micro_batch)
+                output_lst.append({
+                    "model_output": model_output,
+                    "loss": loss_val,
+                    "metrics": {},
+                })
+
+        return postprocess_batch_func(output_lst=output_lst, indices=indices, data=data)
+
     def forward_step(self, micro_batch: TensorDict, loss_function, forward_only):
         device_name = get_device_name()
         micro_batch = micro_batch.to(get_device_id())
@@ -766,6 +918,14 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
 
         with torch.autocast(device_type=device_name, dtype=torch.bfloat16):
             logits = self.model_forward_step(inputs=input_ids, extra_inputs=extra_inputs, extra_kwargs=extra_kwargs)
+
+            # PP non-last stage: model_forward_step returns None; return dummy output.
+            # Training with PP goes through _pp_forward_backward_batch, so this branch
+            # is only reached when forward_step is called directly in PP mode (tests, etc.).
+            if logits is None and self.parallel_dims.pp_enabled and not self.trainer.pp_has_last_stage:
+                model_output = self._make_pp_dummy_output(micro_batch)
+                loss = torch.tensor(1.0, device=device_name)
+                return loss, {"model_output": model_output, "loss": 1.0, "metrics": {}}
 
             model_output = self.prepare_model_outputs(logits=logits, output_args=output_args, micro_batch=micro_batch)
 

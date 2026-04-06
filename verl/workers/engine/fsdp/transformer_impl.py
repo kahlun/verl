@@ -621,6 +621,10 @@ class FSDPEngine(BaseEngine):
                 if not forward_only:
                     loss.backward()
 
+            # XPU: sync after each micro-batch to prevent kernel queue buildup hitting driver timeout
+            if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                torch.xpu.synchronize()
+
             output_lst.append(meta_info)
 
         # postprocess and return
@@ -698,11 +702,18 @@ class FSDPEngine(BaseEngine):
             if optimizer and self.optimizer is not None:
                 load_fsdp_optimizer(self.optimizer, device)
             gc.collect()
+            # XPU: sync after loading to GPU to ensure all HtoD transfers complete
+            if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                torch.xpu.synchronize()
         elif device == "cpu":
             if model:
                 offload_fsdp_model_to_cpu(self.module)
             if optimizer and self.optimizer is not None:
                 offload_fsdp_optimizer(self.optimizer)
+            # XPU: sync after offload to ensure all non_blocking DtoH transfers complete
+            # before subsequent CCL operations (prevents kernel timeout from queue buildup)
+            if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                torch.xpu.synchronize()
         else:
             raise ValueError(f"Invalid device type: {device}")
 
@@ -790,8 +801,9 @@ class FSDPEngine(BaseEngine):
             per_tensor_param = params.items()
         else:
             device = get_device_id()  # used when fsdp2 set cpu_offload_policy
-            # TODO: cast fp32 to bf16 to reduce weight sync overhead, need more fine-grained control, e.g MoE gate
-            per_tensor_param = (
+            # IMPORTANT: Eagerly materialize instead of generator to avoid FSDP
+            # collective (full_tensor) deadlock in multi-GPU setups.
+            per_tensor_param = [
                 (
                     name,
                     param.to(device, non_blocking=True).full_tensor().to(torch.bfloat16, non_blocking=True)
@@ -799,7 +811,7 @@ class FSDPEngine(BaseEngine):
                     else param,
                 )
                 for name, param in params.items()
-            )
+            ]
 
         if self._qat_enabled:
             from verl.utils.qat.quantizer import QATQuantizer
