@@ -112,7 +112,7 @@ These prove the three most-used training paradigms work end-to-end.
 | **T1.2** | grpo | FSDP | 2 | Dense (Qwen2.5-0.5B) | LoRA | vLLM | Colocated | L3 | ✅ Pass (2026-04-04, v20c) |
 | **T1.3** | grpo | FSDP | 1 | Dense (Qwen2.5-0.5B) | Full | vLLM | Colocated | L2 | ✅ Pass (2026-04-03) |
 | **T1.4** | grpo | FSDP | 4 | Dense (Qwen2.5-0.5B) | LoRA | vLLM | Colocated | L4 | ✅ Pass (2 steps, legacy workers, 41s/step) |
-| **T1.5** | grpo | FSDP | 1 | VLM (Qwen2-VL-2B) | LoRA | vLLM | Colocated | L2 | ⏭️ Skip (no geo3k dataset, VLM needs TP=2+gpu_mem=0.6) |
+| **T1.5** | grpo | FSDP | 1 | VLM (Qwen2-VL-2B) | LoRA | vLLM | Colocated | L2 | ✅ Pass (5 steps, frozen vision, LoRA, 17.49/24 GB, 66-83 tok/s, geo3k dataset) |
 | **T2.1** | sft | FSDP | 1 | Dense (Qwen2.5-0.5B) | Full | — | — | L2 | ✅ Pass |
 | **T2.2** | sft | FSDP | 4 | Dense (Qwen2.5-0.5B) | Full | — | — | L3 | ✅ Pass |
 | **T2.3** | sft | FSDP | 1 | VLM (Qwen2-VL-2B) | Full | — | — | L2 | ✅ Pass |
@@ -140,7 +140,7 @@ These prove the non-GRPO algorithms and distributed features work.
 | **T7.1** | sft | TorchTitan | 1 | Dense (Llama-3.2-1B) | Full | — | L2 | ✅ Pass |
 | **T7.2** | sft PP=2 | TorchTitan | 2 | Dense (Llama-3.1-8B) | Full | — | L3 | ❌ Fail — `zeMemOpenIpcHandle: ZE_RESULT_ERROR_INVALID_ARGUMENT` (B60 PCIe lacks P2P IPC for PP stage transfers; used 8B model since 3B has `tie_word_embeddings` incompatible with PP) |
 | **T7.3** | sft TP=2 | TorchTitan | 2 | Dense (Llama-3.2-1B) | Full | — | L3 | ✅ Pass (5 steps, loss 1.31→0.80, val_loss 0.81, TP=2 via XCCL all-reduce) |
-| **T8.1** | grpo + VLM | FSDP | 2 | VLM (Qwen2-VL-2B) | LoRA | vLLM | L3 | ⏭️ Skip (no geo3k dataset, gpu_mem too tight) |
+| **T8.1** | grpo + VLM | FSDP | 2 | VLM (Qwen2-VL-2B) | LoRA | vLLM | L3 | ⏭️ Skip (geo3k available, but 2-GPU VLM needs TP=2 + gpu_mem=0.6 → OOM with 24 GB) |
 
 ### P2 — Nice to Have (Completeness: All Remaining Recipes)
 
@@ -155,7 +155,7 @@ All use 1-GPU FSDP + Dense + LoRA + vLLM + Colocated (same infra as T1.1, just s
 | **T9.5** | gpg | gpg | gpg | L2 | ✅ Pass (19 steps) |
 | **T9.6** | gdpo | gdpo | vanilla | L2 | ✅ Pass — unit test with 2-dim reward (accuracy+format), independent normalization on XPU. See §9b |
 | **T9.7** | gmpo | grpo | geo_mean | L2 | ✅ Pass (17 steps) |
-| **T9.8** | flowgrpo | grpo | vanilla (+sched) | L2 | ⏭️ Skip (diffusion image gen — needs vllm_omni + diffusion model, see §10) |
+| **T9.8** | flowgrpo | grpo | vanilla (+sched) | L2 | ⏭️ Skip (diffusion image gen — Intel uses SGLang for diffusion, not vllm_omni; see §10) |
 | **T9.9** | otb | optimal_token | vanilla | L2 | ✅ Pass (39 steps, legacy workers) |
 | **T9.10** | fapo (async) | grpo | vanilla | L2 | ✅ Pass — asymmetric clip (low=0.2, high=0.28), loss=0.108, pg_clipfrac_lower tracked. See §9b |
 | **T9.11** | distillation | RL + KL | vanilla | L2 | ✅ Pass — all 7 KL modes (k1,k3,kl,abs,mse,k2,low_var_kl) on XPU, self-distillation OK. See §9b |
@@ -197,6 +197,26 @@ TOTAL                     56     40      1         11            0          1
 > **Note**: B1, B11, and B12 moved to Resolved. T7.3 (TP=2) PASS. T7.2 (PP=2) FAIL (P2P IPC).
 > T9.6 (GDPO), T9.10 (FAPO), T9.11 (Distillation) all **PASS** — see §9b.
 > T10.1–T10.8 gap-coverage all **PASS** — see §9a.
+> **T1.5 VLM GRPO (1-GPU) PASS** — Qwen2-VL-2B, LoRA+frozen vision, geo3k dataset, 5 steps.
+
+> **2026-04-07 (VLM GRPO + Intel Omni Research):**
+> - **T1.5 VLM GRPO PASSED** on 1 GPU: Qwen2-VL-2B + LoRA + frozen vision encoder.
+>   geo3k dataset downloaded via `hiyouga/geometry3k`. 5 steps completed.
+>   max_memory: 17.49/24 GB. Throughput: 66-83 tok/s, ~33-49s/step.
+>   entropy: 0.93→0.66→0.65→0.73→0.89. critic/score/mean: 0.0 (geo3k geometry
+>   answers are hard with 128 response tokens — expected for proof-of-concept).
+>   Required fixing `flops_counter.py` — Qwen2VL vision config lacks `intermediate_size`,
+>   `out_hidden_size`, `in_channels` that Qwen3VL has. Fixed with `getattr()` fallbacks.
+> - **Intel Omni Image Discovery:** Found `intel/llm-scaler-omni:0.1.0-b6` (25.9 GB)
+>   already on the machine. Contains **SGLang** (not vllm-omni!) for diffusion serving,
+>   with `xDiT`, `ComfyUI`, `omni_xpu_kernel 0.1.0`, `diffusers 0.36.0`, PyTorch 2.9.0+xpu.
+>   Intel's diffusion serving stack uses `sglang serve` with `--attention-backend torch_sdpa`.
+>   This means the FlowGRPO bypass path should target SGLang (Intel's stack) rather than
+>   vllm-omni (not used by Intel).
+> - **vLLM version clarified:** Container uses Intel internal fork
+>   (`intel-innersource/applications.ai.gpu.vllm-xpu.git`), commit `fa99ccebd` (2026-02-06),
+>   rebased on upstream v0.14.1. Version string `0.1.dev12986+gfa99ccebd.xpu`.
+>   PyTorch 2.10.0+xpu, IPEX 2.10.10.post1+xpu.
 
 > **2026-04-04 update:** T1.1–T1.3, T3.1–T3.2 all PASSED. T1.4 blocked by newly
 > discovered B11 (4-GPU XCCL driver bug). The default `adv_estimator` in VERL is
@@ -404,7 +424,7 @@ These required custom configs, reward functions, or multi-GPU setup beyond a sin
 | **VLA/Robotics** (OpenVLA, Pi0-Torch) | Roadmap only — no training code, data loaders, or configs exist in VERL codebase (on any device). Requires Libero/Isaac Gym simulator + RT Core GPU (48GB) + packages: `timm`, `draccus`, `diffusers`, custom VLA models | Not implemented in VERL — architecture diagram mentions it as future axis |
 | **PrimeRewardManager** | Needs dense process reward model (NN) on GPU | No reward model available |
 | **RM Worker (NN reward model)** | Needs separate reward model forward pass | No reward model available |
-| **DiffusionAgentLoop / FlowGRPO** | Needs `vllm_omni` + diffusion models (see §10 for bypass analysis) | `vllm_omni` not installed; Qwen-Image 57.7 GB > 24 GB VRAM. Bypass possible (~600 LOC) via direct `diffusers` on XPU. Flux (12B) more feasible than Qwen-Image (29B). |
+| **DiffusionAgentLoop / FlowGRPO** | Needs diffusion rollout + models (see §10) | Intel uses SGLang (in `llm-scaler-omni` image), not vllm-omni. Qwen-Image 57.7 GB > 24 GB. Bypass possible (~500 LOC) via direct `diffusers` on XPU. Flux (12B) would need sequential loading + LoRA. |
 | **SGLang rollout** | SGLang **not installed** in container | Offline container, can't pip install |
 | **DynamicGenDataset** | Experimental, requires online generation loop + separate server | Complex infra setup |
 
@@ -432,7 +452,7 @@ Agent loops:               1/4        1/4   (ToolAgent not yet tested)
 Training engines (multi):  1 only     2     (+1: TorchTitan TP=2; PP=2 FAIL — P2P IPC)
 Data pipelines:            1/4        1/4   (MultiTurnSFT not yet tested)
 Distillation:              0/1        1/1   (+1: all 7 KL modes validated) ✅
-Total test IDs:           28 pass    39 pass (+8 T10 gap-coverage + 3 previously-skipped P2)
+Total test IDs:           28 pass    40 pass (+8 T10 gap-coverage + 3 previously-skipped P2 + T1.5 VLM)
 ```
 
 ---
@@ -441,12 +461,31 @@ Total test IDs:           28 pass    39 pass (+8 T10 gap-coverage + 3 previously
 
 FlowGRPO = GRPO applied to **diffusion image generation**. This is a different modality (images, not text) and cannot be tested with current infrastructure.
 
+#### Intel Omni Image Discovery (2026-04-07)
+
+Found `intel/llm-scaler-omni:0.1.0-b6` (25.9 GB) already on the machine.
+Intel does **NOT** use vllm-omni for diffusion serving — they use **SGLang** instead.
+
+| Component | Details |
+|-----------|--------|
+| **Serving** | SGLang `0.1.dev1+g0e53cee1f.d20260309` — `sglang serve` with `--attention-backend torch_sdpa` |
+| **Parallel** | `xDiT` (DiT parallelism) |
+| **UI** | `ComfyUI` (node-based diffusion workflow) |
+| **Kernels** | `omni_xpu_kernel 0.1.0` (custom XPU ops) |
+| **Diffusers** | `diffusers 0.36.0` |
+| **PyTorch** | 2.9.0+xpu (older than container's 2.10.0+xpu) |
+| **vllm** | **NOT present** — no vllm or vllm-omni package |
+
+**Implication:** For VERL FlowGRPO on XPU, the bypass path should target `diffusers` directly
+(already installed in container as 0.37.1) rather than trying to port vllm-omni.
+Intel's own stack demonstrates that SGLang + diffusers + xDiT is the XPU-native approach.
+
 #### What it needs
 
 | Component | Details |
 |-----------|---------|
 | **Model** | Qwen/Qwen-Image: 29B params (20.5B DiT + 8.3B text encoder + VAE) = **57.7 GB** BF16 |
-| **Rollout** | `vllm_omni` — a separate package from vLLM, not installed, not pip-available offline |
+| **Rollout** | `vllm_omni` — a separate package from vLLM, not installed. Intel uses SGLang instead (see above) |
 | **Pipeline** | `QwenImagePipelineWithLogProb` — 100% Qwen-Image-specific (Qwen VAE, Qwen text encoder, patch packing) |
 | **Scheduler** | `FlowMatchSDEDiscreteScheduler` — model-agnostic, works with any flow-matching model |
 | **Reward** | OCR-based (needs reward model) or `jpeg_compressibility` (rule-based, no model needed) |
