@@ -109,10 +109,30 @@ class TorchTitanEngine(BaseEngine):
         model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
         model_spec = model_module.model_registry(torchtitan_flavor)
 
-        # Override attn_backend on the model config if needed
+        # Store attn_type for later use in prepare_model_inputs
         attn_type = self.engine_config.attn_type
-        if hasattr(model_spec.model, "layer") and hasattr(model_spec.model.layer, "attention"):
-            model_spec.model.layer.attention.attn_backend = attn_type
+        self._verl_attn_type = attn_type
+
+        # Override TorchTitan model's attn_backend to match verl's attn_type.
+        # TorchTitan model specs default to "sdpa" which expects attention_masks=None.
+        # When verl uses "flex" or "varlen" attention (for document masking / remove_padding),
+        # we need to propagate this setting to the TorchTitan model's attention config.
+        if attn_type in ("flex", "varlen"):
+            from dataclasses import replace as _dc_replace
+            try:
+                new_attn_cfg = _dc_replace(model_spec.model.layer.attention, attn_backend=attn_type)
+                new_layer_cfg = _dc_replace(model_spec.model.layer, attention=new_attn_cfg)
+                new_model_cfg = _dc_replace(model_spec.model, layer=new_layer_cfg)
+                model_spec = _dc_replace(model_spec, model=new_model_cfg)
+                logger.warning(
+                    f"Overriding TorchTitan model attn_backend to '{attn_type}' to match verl engine.attn_type."
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to override TorchTitan model attn_backend to '{attn_type}': {e}. "
+                    "Training may fail if the model's default attn_backend (sdpa) "
+                    "is incompatible with verl attention masks."
+                )
 
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,
@@ -153,6 +173,13 @@ class TorchTitanEngine(BaseEngine):
         training_kwargs = {}
         if self.engine_config.max_seq_len is not None:
             training_kwargs["seq_len"] = self.engine_config.max_seq_len
+        # When PP is enabled, verl manages micro-batching externally via
+        # prepare_micro_batches() and loops over them in _pp_forward_backward_batch().
+        # TorchTitan's pp_schedule requires n_microbatches >= num_stages at init.
+        # We set local_batch_size = pp_degree (minimum valid value) here, then
+        # override _n_microbatches at runtime to match the actual micro-batch count.
+        if self.engine_config.pipeline_parallel_size > 1:
+            training_kwargs["local_batch_size"] = self.engine_config.pipeline_parallel_size
         if self.engine_config.offload_policy or self.engine_config.forward_only:
             training = TrainingConfig(enable_cpu_offload=True, **training_kwargs)
         else:
@@ -358,10 +385,20 @@ class TorchTitanEngine(BaseEngine):
         parallel_dims = self.parallel_dims
 
         if parallel_dims.pp_enabled:
-            raise NotImplementedError(
-                "Pipeline parallelism is not yet supported in model_forward_step. "
-                "This will be implemented in a follow-up PR."
-            )
+            # PP forward-only: run the pipeline schedule and collect logits from the last stage.
+            # Non-last stages receive None — callers (forward_step, _pp_forward_backward_batch)
+            # must handle this.  PP *training* (forward+backward together) bypasses this method
+            # entirely — see forward_backward_batch override in TorchTitanEngineWithLMHead.
+            with self.trainer.train_context():
+                if self.trainer.pp_has_first_stage:
+                    outputs = self.trainer.pp_schedule.step(
+                        inputs, **extra_inputs, **extra_kwargs, return_outputs=True
+                    )
+                else:
+                    outputs = self.trainer.pp_schedule.step(**extra_kwargs, return_outputs=True)
+            # Only the last PP stage has real logits; all others return None.
+            pred = outputs if self.trainer.pp_has_last_stage else None
+            return pred
         else:
             # Non-PP forward
             assert len(model_parts) == 1
@@ -574,7 +611,7 @@ class EngineTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["torchtitan"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["torchtitan"], device=["cuda", "npu", "xpu"])
 class TorchTitanEngineWithLMHead(TorchTitanEngine):
     """TorchTitan engine implementation for language models with LM head."""
 
@@ -595,8 +632,32 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
             else:
                 position_ids = position_ids.values().unsqueeze(0)
 
+            # Pad packed sequence to nearest multiple of seq_len_divisor for TP
+            # Sequence Parallel compatibility. TorchTitan's TP plan shards the
+            # sequence dimension (Shard(1)), which requires even divisibility.
+            # See: https://github.com/pytorch/torchtitan/issues/1306
+            tp_pad_len = 0
+            if self.parallel_dims.tp_enabled:
+                divisor = self.parallel_dims.seq_len_divisor
+                total_tokens = input_ids.shape[1]
+                remainder = total_tokens % divisor
+                if remainder != 0:
+                    tp_pad_len = divisor - remainder
+                    pad_ids = torch.zeros(1, tp_pad_len, dtype=input_ids.dtype, device=input_ids.device)
+                    input_ids = torch.cat([input_ids, pad_ids], dim=1)
+                    # Use position 0 for padding — creates a position reset that
+                    # the document mask treats as a separate (masked) document.
+                    if position_ids.dim() == 3:
+                        pad_pos = torch.zeros(1, position_ids.shape[1], tp_pad_len,
+                                              dtype=position_ids.dtype, device=position_ids.device)
+                        position_ids = torch.cat([position_ids, pad_pos], dim=2)
+                    else:
+                        pad_pos = torch.zeros(1, tp_pad_len, dtype=position_ids.dtype, device=position_ids.device)
+                        position_ids = torch.cat([position_ids, pad_pos], dim=1)
+            output_args["tp_pad_len"] = tp_pad_len
+
             labels = torch.roll(input_ids, shifts=-1, dims=1)
-            attn_type = self.trainer.model_config.layer.attention.attn_backend
+            attn_type = self._verl_attn_type
             attention_mask = get_attention_masks(
                 input_batch=input_ids,
                 positions=position_ids,
@@ -622,11 +683,10 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
                     position_ids, padding=0, output_size=(batch_size, max_seq_len)
                 )
 
-            attention_mask_list = [torch.ones_like(t, dtype=torch.int32) for t in loss_mask]
-            attention_mask = torch.nested.as_nested_tensor(attention_mask_list, layout=torch.jagged)
-            attention_mask = torch.nested.to_padded_tensor(
-                attention_mask, padding=0, output_size=(batch_size, max_seq_len)
-            )
+            # TorchTitan with sdpa backend handles causal masking internally and requires
+            # attention_masks=None. The 2D padding mask is not supported by TorchTitan's
+            # sdpa attention; pass None to let TorchTitan handle causal masking itself.
+            attention_mask = None
 
         extra_inputs = {
             "positions": position_ids,
@@ -663,6 +723,12 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
         input_ids = micro_batch["input_ids"]
         cu_seqlens = input_ids.offsets()
         if use_remove_padding:
+            # Strip TP sequence padding if it was applied in prepare_model_inputs
+            tp_pad_len = output_args.get("tp_pad_len", 0)
+            if tp_pad_len > 0:
+                logits = logits[:, :-tp_pad_len, :]
+                labels = labels[:, :-tp_pad_len]
+
             labels = labels.squeeze(0)
             logits_rmpad = logits.squeeze(0)
             # PyTorch's autograd doesn't allow in-place modification of views when gradients need to flow back
@@ -711,6 +777,276 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
 
         return model_output
 
+    # ── Pipeline Parallel helpers ──────────────────────────
+
+    def _make_pp_dummy_output(self, micro_batch: TensorDict) -> dict:
+        """Zero-filled model_output dict for non-last PP stage ranks.
+
+        The last PP stage is the only rank that has real logits.  All other ranks
+        must still return a dict with the same keys so that postprocess_batch_func
+        can aggregate correctly (it will only use the values from the last stage
+        after a subsequent all-gather/broadcast in the RL loop).
+        """
+        cu_seqlens = micro_batch["input_ids"].offsets()
+        n_tokens = int(cu_seqlens[-1].item())
+        device = get_device_id()
+        calculate_entropy = tu.get_non_tensor_data(data=micro_batch, key="calculate_entropy", default=False)
+        dummy = torch.zeros(n_tokens, device=device, dtype=torch.bfloat16)
+        out = {"log_probs": torch.nested.nested_tensor_from_jagged(dummy, cu_seqlens)}
+        if calculate_entropy:
+            out["entropy"] = torch.nested.nested_tensor_from_jagged(dummy.clone(), cu_seqlens)
+        return out
+
+    def forward_backward_batch(self, data: TensorDict, loss_function: Callable, forward_only=False):
+        """Route to PP-aware implementation when Pipeline Parallel is enabled."""
+        if not self.parallel_dims.pp_enabled:
+            return super().forward_backward_batch(data, loss_function, forward_only)
+        return self._pp_forward_backward_batch(data, loss_function, forward_only)
+
+    def _pp_forward_backward_batch(self, data: TensorDict, loss_function: Callable, forward_only=False):
+        """Pipeline Parallel forward (and optionally backward) over a full batch.
+
+        Architecture note
+        -----------------
+        TorchTitan's pp_schedule.step() expects a WHOLE batch and splits it into
+        microbatches internally.  But verl uses remove_padding (variable-length
+        packed sequences), so each micro-batch has batch_dim=1 and can't be split
+        further by step().
+
+        Solution: prepare all micro-batch inputs in a first pass, then call
+        pp_schedule._step_microbatches() directly with pre-split arg/kwarg lists,
+        bypassing the high-level step() splitting logic.  We dynamically set
+        _n_microbatches to match the actual count from verl's prepare_micro_batches.
+
+        Uniform-length padding
+        ----------------------
+        PyTorch's pipeline schedule validates that all micro-batch outputs have the
+        same shape (for fixed-size p2p send/recv buffers).  With remove_padding,
+        each micro-batch packs a different number of tokens → different hidden state
+        shapes.  We pad shorter micro-batches to the max token count across the
+        batch, regenerate attention masks for the padded length, and unpad outputs.
+
+        forward_only mode (log-prob computation during rollout / reference policy)
+        --------------------------------------------------------------------------
+        - Runs schedule with return_outputs=True, no backward.
+        - Last PP stage: gets logits → compute log_probs via prepare_model_outputs.
+        - Non-last PP stages: return zero-filled dummy output (same shape, no grad).
+
+        training mode (SFT / fine-tuning gradient update)
+        -------------------------------------------------
+        - Runs schedule with target/losses — forward+backward.
+        - Uses TorchTitan's built-in cross-entropy loss on ALL tokens.
+          ⚠ This differs from verl's masked loss (response-tokens only).
+          For response-masked SFT, run without PP (pipeline_parallel_size=1) until
+          a custom loss injection API is added to TorchTitan's pipeline schedule.
+        - Only the last PP stage accumulates real loss values.
+        """
+        device_name = get_device_name()
+        dp_group = self.get_data_parallel_group()
+
+        tu.assign_non_tensor(data, sp_size=self.engine_config.tensor_parallel_size)
+        batch_num_tokens = data["loss_mask"].sum().to(get_device_id())
+        if dp_group is not None:
+            torch.distributed.all_reduce(batch_num_tokens, op=torch.distributed.ReduceOp.SUM, group=dp_group)
+        tu.assign_non_tensor(data, batch_num_tokens=batch_num_tokens.item())
+        tu.assign_non_tensor(data, dp_size=self.get_data_parallel_size())
+
+        micro_batches, indices = prepare_micro_batches(
+            data=data, dp_group=dp_group, same_micro_num_in_dp=True
+        )
+
+        has_first = self.trainer.pp_has_first_stage
+        has_last = self.trainer.pp_has_last_stage
+        pp_schedule = self.trainer.pp_schedule
+
+        # ── Phase 1: Prepare all micro-batch inputs ─────────────────
+        arg_mbs = []
+        kwarg_mbs = []
+        target_mbs = []
+        micro_batch_data = []  # (micro_batch, output_args) for post-processing
+        all_positions = []     # track positions for all stages (needed for padding)
+        all_seq_lens = []      # original sequence lengths before PP padding
+
+        for micro_batch in micro_batches:
+            micro_batch = micro_batch.to(get_device_id())
+            input_ids, extra_inputs, extra_kwargs, output_args = self.prepare_model_inputs(micro_batch=micro_batch)
+            labels = output_args.get("labels")
+
+            if has_first:
+                arg_mbs.append((input_ids,))
+                # Include positions in kwargs for all stages (needed for RoPE)
+                kwarg_mbs.append({**extra_inputs, **extra_kwargs})
+            else:
+                arg_mbs.append(())
+                # Non-first stages also need positions for RoPE in every layer
+                kwarg_mbs.append({**extra_inputs, **extra_kwargs})
+
+            target_mbs.append(labels if has_last else None)
+            micro_batch_data.append((micro_batch, output_args))
+            all_positions.append(extra_inputs["positions"])
+            all_seq_lens.append(input_ids.shape[1])
+
+        n_mbs = len(micro_batches)
+
+        # ── Phase 1b: Pad micro-batches to uniform length ────────────────
+        # PyTorch's pipeline schedule allocates fixed recv/send buffers on
+        # the first forward call.  ALL subsequent micro-batches (across ALL
+        # steps) must produce outputs of that exact shape.  With
+        # remove_padding, each micro-batch packs a different number of
+        # tokens, so we pad every micro-batch to a FIXED global maximum.
+        # The attention mask isolates padding (position_id=0 → position
+        # reset → separate "document" in block-diagonal mask).
+        max_seq_len = max(all_seq_lens) if all_seq_lens else 0
+        pp_max_token_len = tu.get_non_tensor_data(data, key="max_token_len_per_gpu", default=None)
+        if pp_max_token_len is not None:
+            pp_fixed_seq_len = int(pp_max_token_len) * max(self.engine_config.tensor_parallel_size, 1)
+            # TP padding headroom: round up to seq_len_divisor
+            if self.parallel_dims.tp_enabled:
+                divisor = self.parallel_dims.seq_len_divisor
+                remainder = pp_fixed_seq_len % divisor
+                if remainder != 0:
+                    pp_fixed_seq_len += divisor - remainder
+        else:
+            # Fallback when max_token_len_per_gpu unavailable
+            pp_fixed_seq_len = max_seq_len
+        # Ensure we cover any micro-batch that somehow exceeds the budget
+        pp_fixed_seq_len = max(pp_fixed_seq_len, max_seq_len)
+        device = get_device_id()
+
+        for i in range(n_mbs):
+            pp_pad_len = pp_fixed_seq_len - all_seq_lens[i]
+            # Store pp_pad_len in output_args for output unpadding
+            micro_batch_data[i][1]["pp_pad_len"] = pp_pad_len
+            if pp_pad_len <= 0:
+                continue
+
+            # Pad input_ids (first stage)
+            if has_first:
+                (input_ids,) = arg_mbs[i]
+                arg_mbs[i] = (torch.nn.functional.pad(input_ids, (0, pp_pad_len), value=0),)
+
+            # Pad positions (all stages — needed for RoPE and mask generation)
+            positions = all_positions[i]
+            if positions.dim() == 3:
+                padded_pos = torch.nn.functional.pad(positions, (0, pp_pad_len), value=0)
+            else:
+                padded_pos = torch.nn.functional.pad(positions, (0, pp_pad_len), value=0)
+            all_positions[i] = padded_pos
+
+            # Regenerate attention mask for padded length
+            dummy_input = torch.zeros(1, pp_fixed_seq_len, dtype=torch.long, device=device)
+            new_mask = get_attention_masks(
+                input_batch=dummy_input,
+                positions=padded_pos,
+                attn_type=self._verl_attn_type,
+            )
+            kwarg_mbs[i]["positions"] = padded_pos
+            kwarg_mbs[i]["attention_masks"] = new_mask
+
+            # Pad labels (last stage — use -100 ignore_index for padding)
+            if has_last and target_mbs[i] is not None:
+                target_mbs[i] = torch.nn.functional.pad(target_mbs[i], (0, pp_pad_len), value=-100)
+
+        # ── Phase 2: Update schedule's n_microbatches to match actual count
+        # verl's micro-batch count can vary per step (dynamic batching);
+        # the schedule adapts — only _n_microbatches and the warmup/steady
+        # counters inside _step_microbatches are affected.
+        pp_schedule._n_microbatches = n_mbs
+
+        # ── Phase 3: Run the pipeline schedule ──────────────────────
+        output_lst = []
+
+        if forward_only:
+            # Temporarily disable loss_fn to prevent _maybe_compute_loss from
+            # crashing when target_mbs is not provided in forward-only mode.
+            saved_loss_fn = pp_schedule._loss_fn
+            pp_schedule._loss_fn = None
+            try:
+                with torch.no_grad(), self.trainer.train_context():
+                    pp_schedule._has_backward = False
+                    pp_schedule._stage.has_backward = False
+                    pp_schedule._stage.clear_runtime_states()
+                    pp_schedule._step_microbatches(
+                        arg_mbs, kwarg_mbs,
+                        target_mbs=None, losses=None,
+                        return_outputs=True,
+                    )
+            finally:
+                pp_schedule._loss_fn = saved_loss_fn
+
+            # ── Phase 4a: Collect forward-only outputs ───────────────────
+            if has_last:
+                output_chunks = pp_schedule._stage.output_chunks
+                for i, (micro_batch, output_args) in enumerate(micro_batch_data):
+                    raw_out = output_chunks[i] if i < len(output_chunks) else None
+                    if raw_out is not None:
+                        # Remove PP padding before prepare_model_outputs
+                        # (which separately removes TP padding)
+                        pp_pad = output_args.get("pp_pad_len", 0)
+                        if pp_pad > 0:
+                            raw_out = raw_out[:, :-pp_pad, :]
+                        with torch.autocast(device_type=device_name, dtype=torch.bfloat16):
+                            model_output = self.prepare_model_outputs(
+                                logits=raw_out, output_args=output_args, micro_batch=micro_batch
+                            )
+                        if loss_function is not None:
+                            loss, metrics = loss_function(
+                                model_output=model_output, data=micro_batch, dp_group=dp_group
+                            )
+                        else:
+                            loss = torch.tensor(1.0, device=device_name)
+                            metrics = {}
+                    else:
+                        model_output = self._make_pp_dummy_output(micro_batch)
+                        loss = torch.tensor(1.0, device=device_name)
+                        metrics = {}
+
+                    output_lst.append({
+                        "model_output": model_output,
+                        "loss": loss.detach().item() if torch.is_tensor(loss) else float(loss),
+                        "metrics": metrics,
+                    })
+            else:
+                # Non-last PP stage: all outputs are dummy
+                for micro_batch, output_args in micro_batch_data:
+                    output_lst.append({
+                        "model_output": self._make_pp_dummy_output(micro_batch),
+                        "loss": 1.0,
+                        "metrics": {},
+                    })
+
+        else:
+            # ── Training path ─────────────────────────
+            losses_list: list = [] if has_last else None  # type: ignore[assignment]
+
+            with self.trainer.train_context():
+                pp_schedule._has_backward = True
+                pp_schedule._stage.has_backward = True
+                pp_schedule._stage.clear_runtime_states()
+                pp_schedule._step_microbatches(
+                    arg_mbs, kwarg_mbs,
+                    target_mbs=target_mbs,
+                    losses=losses_list,
+                    return_outputs=False,
+                )
+
+            # ── Phase 4b: Collect training outputs ──────────────────
+            total_loss = (
+                torch.sum(torch.stack(losses_list)).item()
+                if (losses_list and has_last)
+                else 0.0
+            )
+            per_mb_loss = total_loss / n_mbs if n_mbs > 0 else 0.0
+            for micro_batch, output_args in micro_batch_data:
+                model_output = self._make_pp_dummy_output(micro_batch)
+                output_lst.append({
+                    "model_output": model_output,
+                    "loss": per_mb_loss,
+                    "metrics": {},
+                })
+
+        return postprocess_batch_func(output_lst=output_lst, indices=indices, data=data)
+
     def forward_step(self, micro_batch: TensorDict, loss_function, forward_only):
         device_name = get_device_name()
         micro_batch = micro_batch.to(get_device_id())
@@ -718,6 +1054,14 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
 
         with torch.autocast(device_type=device_name, dtype=torch.bfloat16):
             logits = self.model_forward_step(inputs=input_ids, extra_inputs=extra_inputs, extra_kwargs=extra_kwargs)
+
+            # PP non-last stage: model_forward_step returns None; return dummy output.
+            # Training with PP goes through _pp_forward_backward_batch, so this branch
+            # is only reached when forward_step is called directly in PP mode (tests, etc.).
+            if logits is None and self.parallel_dims.pp_enabled and not self.trainer.pp_has_last_stage:
+                model_output = self._make_pp_dummy_output(micro_batch)
+                loss = torch.tensor(1.0, device=device_name)
+                return loss, {"model_output": model_output, "loss": 1.0, "metrics": {}}
 
             model_output = self.prepare_model_outputs(logits=logits, output_args=output_args, micro_batch=micro_batch)
 
