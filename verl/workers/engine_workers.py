@@ -195,7 +195,12 @@ class TrainingWorker(Worker, DistProfilerExtension):
         loss = torch.sum(torch.tensor(output.pop("loss"), device=self.device_name))
         dp_group = self.engine.get_data_parallel_group()
         if dp_group is not None:
-            torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+            from verl.utils.distributed import all_reduce_avg
+
+            all_reduce_avg(loss, group=dp_group)
+        # XPU: sync before .item() to avoid kernel queue buildup hitting driver timeout
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            torch.xpu.synchronize()
         loss = loss.item()
 
         # For grad_norm, we do not perform all reduce because it is already been done when clipping grad
@@ -655,18 +660,6 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL, blocking=False)
     async def update_weights(self, global_steps: int = None):
-        """Update weights from trainer to rollout.
-
-        1. For sync training with colocated trainer and rollout, update rollout directly from model engine.
-           - before update_weights: rollout should be in sleep mode.
-           - after update_weights: rollout should be in wake_up mode.
-        2. For async training with disaggregated trainer and rollout, send_weights only by checkpoint engine.
-
-        LoRA handling: when model.lora.merge=True (peft_merge), LoRA is merged into
-        base weights before sync. The engine returns full HF-keyed params with
-        peft_config=None, so the rollout receives a standard weight update.
-        """
-
         # 0. send_weights only for async training with disaggregated trainer and rollout
         if self.config.rollout.checkpoint_engine.backend != "naive":
             per_tensor_param, _ = self.actor.engine.get_per_tensor_param()
@@ -681,37 +674,46 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             await self.rollout.resume(tags=["weights"])
         log_gpu_memory_usage("After resume weights", logger=logger)
 
-        # 2. determine if we need a base weight sync (adapter path only)
+        # 2. Eagerly collect ALL params from FSDP BEFORE sending to vLLM.
         per_tensor_param, peft_config = self.actor.engine.get_per_tensor_param(
             layered_summon=self.layered_summon, base_sync_done=True
         )
+        # Eagerly materialize generators containing FSDP collectives
+        if hasattr(per_tensor_param, "__next__"):
+            per_tensor_param = list(per_tensor_param)
 
         do_lora_base_sync = False
+        per_tensor_base_params = None
         if not self.peft_merge and peft_config is not None:
             self.rollout.sleep_level = 1
-            do_lora_base_sync = not self.base_sync_done
+            do_lora_base_sync = (not self.base_sync_done) or (
+                self.rollout.sleep_level != 1 and self.config.rollout.free_cache_engine
+            )
 
-        # 3. sync weights: For SGLang, we need base first (when needed), then adapter/merged
         if do_lora_base_sync:
-            per_tensor_param_base, peft_config = self.actor.engine.get_per_tensor_param(
+            per_tensor_base_params, _ = self.actor.engine.get_per_tensor_param(
                 layered_summon=self.layered_summon, base_sync_done=False
             )
-            await self.rollout.update_weights(
-                per_tensor_param_base, peft_config=peft_config, base_sync_done=False, global_steps=global_steps
-            )
+            # Eagerly materialize generators containing FSDP collectives
+            if hasattr(per_tensor_base_params, "__next__"):
+                per_tensor_base_params = list(per_tensor_base_params)
 
+        # 3. Now send weights to vLLM (no FSDP collectives from here)
         await self.rollout.update_weights(
             per_tensor_param, peft_config=peft_config, base_sync_done=True, global_steps=global_steps
         )
 
+        if do_lora_base_sync and per_tensor_base_params is not None:
+            await self.rollout.update_weights(per_tensor_base_params, peft_config=peft_config, base_sync_done=False)
+
         log_gpu_memory_usage("After update_weights", logger=logger)
 
-        # 3. offload model to cpu
+        # 4. offload model to cpu
         if self.actor.engine.is_param_offload_enabled:
             self.actor.engine.to("cpu", model=True, optimizer=False, grad=False)
         aggressive_empty_cache(force_sync=True)
 
-        # 4. resume kv_cache
+        # 5. resume kv_cache
         if self.config.rollout.free_cache_engine:
             await self.rollout.resume(tags=["kv_cache"])
         log_gpu_memory_usage("After resume kv_cache", logger=logger)
