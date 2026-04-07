@@ -182,14 +182,30 @@ def concat_nested_tensors(tensors: list[torch.Tensor]) -> torch.Tensor:
     """
     for tensor in tensors:
         assert tensor.is_nested and tensor.is_contiguous()
-    unbind_tensors = []
     for tensor in tensors:
         assert len(tensor.shape) >= 2, f"nested tensor must have 2 or more dimensions. Got {tensor.shape}"
-        unbind_tensor = tensor.unbind(0)
-        unbind_tensors.extend(list(unbind_tensor))
 
-    tensor = torch.nested.as_nested_tensor(unbind_tensors, layout=torch.jagged)
-    return tensor
+    # Fast path: try unbind(0) directly. This works for 2D jagged NestedTensors
+    # (e.g. input_ids, loss_mask) but crashes on 3D+ jagged NestedTensors
+    # (e.g. mRoPE position_ids with shape [B, *(ragged=4), seq_len]) due to
+    # PyTorch bug #153238 where split_with_sizes targets the wrong dimension.
+    try:
+        unbind_tensors = []
+        for tensor in tensors:
+            unbind_tensors.extend(list(tensor.unbind(0)))
+        return torch.nested.as_nested_tensor(unbind_tensors, layout=torch.jagged)
+    except RuntimeError:
+        pass
+
+    # Fallback for 3D+ jagged NestedTensors: pad → cat → reconstruct via offsets.
+    all_tensors = []
+    for nt in tensors:
+        offsets = nt.offsets()
+        lengths = offsets.diff().tolist()
+        padded = nt.to_padded_tensor(0)
+        for i, seq_len in enumerate(lengths):
+            all_tensors.append(padded[i, :seq_len] if padded.dim() == 2 else padded[i, :seq_len, ...])
+    return torch.nested.as_nested_tensor(all_tensors, layout=torch.jagged)
 
 
 def concat_tensordict_with_none_bsz(data: list[TensorDict]):
