@@ -134,11 +134,11 @@ def get_torch_device():
     device_name = get_device_name()
     try:
         return getattr(torch, device_name)
-    except AttributeError:
+    except AttributeError as err:
         raise RuntimeError(
             f"Device namespace 'torch.{device_name}' not found. "
             f"Ensure the correct PyTorch build is installed for device '{device_name}'."
-        )
+        ) from err
 
 
 def get_device_id() -> int:
