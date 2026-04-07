@@ -124,6 +124,9 @@ def derive_torchtitan_name_and_flavor(hf_config) -> tuple[str, str]:
     vocab_size = hf_config.vocab_size
 
     for flavor_name, model_cfg in model_configs.items():
+        # torchtitan >=0.2.2 stores configs as factory functions
+        if callable(model_cfg):
+            model_cfg = model_cfg()
         if (
             getattr(model_cfg, "dim", None) == hidden_size
             and getattr(model_cfg, "n_layers", None) == num_layers
@@ -348,4 +351,6 @@ def iter_per_tensor_params_ep(
             yield name_template.format(expert_id), all_experts[expert_id].to(torch.bfloat16).clone()
 
         del local_weights, local_stacked, gathered_list, all_experts
-        torch.cuda.empty_cache()
+        from verl.utils.device import get_torch_device
+
+        get_torch_device().empty_cache()
