@@ -1,0 +1,4509 @@
+W0406 14:44:50.518000 10345 torch/distributed/run.py:852] 
+W0406 14:44:50.518000 10345 torch/distributed/run.py:852] *****************************************
+W0406 14:44:50.518000 10345 torch/distributed/run.py:852] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0406 14:44:50.518000 10345 torch/distributed/run.py:852] *****************************************
+[W406 14:44:57.076295880 OperatorEntry.cpp:208] Warning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: aten::geometric_(Tensor(a!) self, float p, *, Generator? generator=None) -> Tensor(a!)
+    registered at /pytorch/build/aten/src/ATen/RegisterSchema.cpp:6
+  dispatch key: XPU
+  previous kernel: registered at /pytorch/aten/src/ATen/VmapModeRegistrations.cpp:36
+       new kernel: registered at /root/workspace/frameworks.ai.pytorch.ipex-gpu/build/Release/csrc/gpu/csrc/gpu/xpu/ATen/RegisterXPU_0.cpp:172 (function operator())
+[W406 14:44:59.510454857 OperatorEntry.cpp:208] Warning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: aten::geometric_(Tensor(a!) self, float p, *, Generator? generator=None) -> Tensor(a!)
+    registered at /pytorch/build/aten/src/ATen/RegisterSchema.cpp:6
+  dispatch key: XPU
+  previous kernel: registered at /pytorch/aten/src/ATen/VmapModeRegistrations.cpp:36
+       new kernel: registered at /root/workspace/frameworks.ai.pytorch.ipex-gpu/build/Release/csrc/gpu/csrc/gpu/xpu/ATen/RegisterXPU_0.cpp:172 (function operator())
+[Gloo] Rank 0 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 1 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+/host/home/sdp/kl/verl_test_xpu/verl/utils/tokenizer.py:68: UserWarning: tokenizer.pad_token_id is None. Now set to 128009
+  warnings.warn(f"tokenizer.pad_token_id is None. Now set to {tokenizer.eos_token_id}", stacklevel=1)
+/host/home/sdp/kl/verl_test_xpu/verl/utils/tokenizer.py:68: UserWarning: tokenizer.pad_token_id is None. Now set to 128009
+  warnings.warn(f"tokenizer.pad_token_id is None. Now set to {tokenizer.eos_token_id}", stacklevel=1)
+dataset len: 200
+dataset len: 200
+dataset len: 200
+dataset len: 200
+[2026-04-06 14:45:00,419][verl.workers.engine.torchtitan.utils][INFO] - Auto-derived torchtitan name='llama3', flavor='8B' from HF model_type='llama'
+[2026-04-06 14:45:00,419][verl.workers.engine.torchtitan.utils][INFO] - Auto-derived torchtitan name='llama3', flavor='8B' from HF model_type='llama'
+[2026-04-06 14:45:00,425][/host/home/sdp/kl/verl_test_xpu/verl/workers/engine/torchtitan/transformer_impl.py][WARNING] - Failed to override TorchTitan model attn_backend to 'varlen': GQAttention.Config.__init__() got an unexpected keyword argument 'attn_backend'. Training may fail if the model's default attn_backend (sdpa) is incompatible with verl attention masks.
+[2026-04-06 14:45:00,425][root][WARNING] - torch.distributed is already initialized. Skipping init_distributed. The provided comm_config and other settings will not take effect.
+[2026-04-06 14:45:00,426][/host/home/sdp/kl/verl_test_xpu/verl/workers/engine/torchtitan/transformer_impl.py][WARNING] - Failed to override TorchTitan model attn_backend to 'varlen': GQAttention.Config.__init__() got an unexpected keyword argument 'attn_backend'. Training may fail if the model's default attn_backend (sdpa) is incompatible with verl attention masks.
+[2026-04-06 14:45:00,426][root][WARNING] - torch.distributed is already initialized. Skipping init_distributed. The provided comm_config and other settings will not take effect.
+[2026-04-06 14:45:00,426][root][INFO] - [GC] Initial GC collection took 0.00 seconds
+[2026-04-06 14:45:00,427][root][INFO] - [GC] Initial GC collection took 0.00 seconds
+2026:04:06-14:45:00:10410 |CCL_WARN| did not find MPI-launcher specific variables, switch to ATL/OFI, to force enable ATL/MPI set CCL_ATL_TRANSPORT=mpi
+2026:04:06-14:45:00:10410 |CCL_WARN| value of CCL_BUFFER_CACHE changed to be 0 (default:1)
+2026:04:06-14:45:00:10410 |CCL_WARN| could not get local_idx/count from environment variables, trying to get them from ATL
+2026:04:06-14:45:00:10411 |CCL_WARN| did not find MPI-launcher specific variables, switch to ATL/OFI, to force enable ATL/MPI set CCL_ATL_TRANSPORT=mpi
+2026:04:06-14:45:00:10411 |CCL_WARN| could not get local_idx/count from environment variables, trying to get them from ATL
+2026:04:06-14:45:00:10410:[0] |CCL_WARN| topology recognition shows PCIe connection between devices. If this is not correct, you can disable topology recognition, with CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0. This will assume XeLinks across devices
+[2026-04-06 14:45:00,987][root][INFO] - Building device mesh with parallelism: pp=2, dp_replicate=1, dp_shard=1, cp=1, tp=1, ep=1, etp=1
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[2026-04-06 14:45:00,994][root][INFO] - Successfully created meshes with active dimensions: ['pp']
+[2026-04-06 14:45:00,997][root][INFO] - Loading tokenizer from tokenizer.json
+[2026-04-06 14:45:00,999][root][INFO] - Building device mesh with parallelism: pp=2, dp_replicate=1, dp_shard=1, cp=1, tp=1, ep=1, etp=1
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[2026-04-06 14:45:01,006][root][INFO] - Successfully created meshes with active dimensions: ['pp']
+[2026-04-06 14:45:01,008][root][INFO] - Loading tokenizer from tokenizer.json
+[2026-04-06 14:45:01,371][root][INFO] - Building llama3 8B with {
+  "param_init": null,
+  "dim": 4096,
+  "n_layers": 32,
+  "vocab_size": 128256,
+  "output": {
+    "param_init": {
+      "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.015625, a=-0.046875, b=0.046875)",
+      "bias": "<function zeros_ at 0x721d9c99b240>"
+    },
+    "bias": false
+  },
+  "tok_embeddings": {
+    "param_init": {
+      "weight": "functools.partial(<function normal_ at 0x721d9c99af20>, std=1.0)"
+    }
+  },
+  "norm": {
+    "param_init": {
+      "weight": "<function ones_ at 0x721d9c99b1a0>"
+    },
+    "eps": 1e-05,
+    "elementwise_affine": true
+  },
+  "rope": {
+    "param_init": null,
+    "dim": 128,
+    "max_seq_len": 2048,
+    "theta": 500000,
+    "backend": "complex",
+    "scaling": "llama",
+    "scaling_factor": 8.0,
+    "low_freq_factor": 1.0,
+    "high_freq_factor": 4.0,
+    "original_max_position_embeddings": 8192,
+    "rope_factor": 1.0,
+    "beta_fast": 32.0,
+    "beta_slow": 1.0,
+    "original_seq_len": 4096,
+    "mscale": 0.0
+  },
+  "layer": {
+    "param_init": null,
+    "attention": {
+      "param_init": null,
+      "n_heads": 32,
+      "inner_attention": {
+        "param_init": null
+      },
+      "mask_type": "causal",
+      "wqkv": {
+        "param_init": {
+          "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+          "bias": "<function zeros_ at 0x721d9c99b240>"
+        },
+        "bias": false
+      },
+      "wo": {
+        "param_init": {
+          "fn": "<function <lambda> at 0x721bfe20f4c0>"
+        },
+        "bias": false
+      },
+      "q_norm": null,
+      "k_norm": null,
+      "n_kv_heads": 8,
+      "head_dim": null,
+      "use_rope": true,
+      "rope_backend": "complex"
+    },
+    "feed_forward": {
+      "param_init": null,
+      "hidden_dim": 14336,
+      "w1": {
+        "param_init": {
+          "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+          "bias": "<function zeros_ at 0x721d9c99b240>"
+        },
+        "bias": false
+      },
+      "w2w3": {
+        "param_init": {
+          "fn": "<function <lambda> at 0x721bfe20f4c0>"
+        },
+        "bias": false
+      }
+    },
+    "moe": null,
+    "attention_norm": {
+      "param_init": {
+        "weight": "<function ones_ at 0x721d9c99b1a0>"
+      },
+      "eps": 1e-05,
+      "elementwise_affine": true
+    },
+    "ffn_norm": {
+      "param_init": {
+        "weight": "<function ones_ at 0x721d9c99b1a0>"
+      },
+      "eps": 1e-05,
+      "elementwise_affine": true
+    }
+  },
+  "layers": [
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.014142135623730949)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.014142135623730949)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.01)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.01)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.008164965809277261)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.008164965809277261)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0070710678118654745)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0070710678118654745)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.006324555320336759)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.006324555320336759)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.005773502691896258)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.005773502691896258)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.005345224838248488)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.005345224838248488)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.005)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.005)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0047140452079103175)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0047140452079103175)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.004472135954999579)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.004472135954999579)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.004264014327112209)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.004264014327112209)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.004082482904638631)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.004082482904638631)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.003922322702763681)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.003922322702763681)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.003779644730092272)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.003779644730092272)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0036514837167011074)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0036514837167011074)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0035355339059327372)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0035355339059327372)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0034299717028501765)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0034299717028501765)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0033333333333333335)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0033333333333333335)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.003244428422615251)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.003244428422615251)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0031622776601683794)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0031622776601683794)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0030860669992418383)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0030860669992418383)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0030151134457776364)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0030151134457776364)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002948839123097943)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002948839123097943)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002886751345948129)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002886751345948129)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.00282842712474619)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.00282842712474619)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002773500981126146)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002773500981126146)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002721655269759087)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002721655269759087)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002672612419124244)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002672612419124244)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002626128657194451)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.002626128657194451)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0025819888974716113)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0025819888974716113)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.00254000254000381)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.00254000254000381)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0025)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x721d9c99b060>, std=0.0025)",
+            "bias": "<function zeros_ at 0x721d9c99b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x721d9c99b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    }
+  ],
+  "enable_weight_tying": false
+}
+[2026-04-06 14:45:01,376][root][INFO] - Building llama3 8B with {
+  "param_init": null,
+  "dim": 4096,
+  "n_layers": 32,
+  "vocab_size": 128256,
+  "output": {
+    "param_init": {
+      "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.015625, a=-0.046875, b=0.046875)",
+      "bias": "<function zeros_ at 0x7e46fb30b240>"
+    },
+    "bias": false
+  },
+  "tok_embeddings": {
+    "param_init": {
+      "weight": "functools.partial(<function normal_ at 0x7e46fb30af20>, std=1.0)"
+    }
+  },
+  "norm": {
+    "param_init": {
+      "weight": "<function ones_ at 0x7e46fb30b1a0>"
+    },
+    "eps": 1e-05,
+    "elementwise_affine": true
+  },
+  "rope": {
+    "param_init": null,
+    "dim": 128,
+    "max_seq_len": 2048,
+    "theta": 500000,
+    "backend": "complex",
+    "scaling": "llama",
+    "scaling_factor": 8.0,
+    "low_freq_factor": 1.0,
+    "high_freq_factor": 4.0,
+    "original_max_position_embeddings": 8192,
+    "rope_factor": 1.0,
+    "beta_fast": 32.0,
+    "beta_slow": 1.0,
+    "original_seq_len": 4096,
+    "mscale": 0.0
+  },
+  "layer": {
+    "param_init": null,
+    "attention": {
+      "param_init": null,
+      "n_heads": 32,
+      "inner_attention": {
+        "param_init": null
+      },
+      "mask_type": "causal",
+      "wqkv": {
+        "param_init": {
+          "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+          "bias": "<function zeros_ at 0x7e46fb30b240>"
+        },
+        "bias": false
+      },
+      "wo": {
+        "param_init": {
+          "fn": "<function <lambda> at 0x7e455c953560>"
+        },
+        "bias": false
+      },
+      "q_norm": null,
+      "k_norm": null,
+      "n_kv_heads": 8,
+      "head_dim": null,
+      "use_rope": true,
+      "rope_backend": "complex"
+    },
+    "feed_forward": {
+      "param_init": null,
+      "hidden_dim": 14336,
+      "w1": {
+        "param_init": {
+          "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+          "bias": "<function zeros_ at 0x7e46fb30b240>"
+        },
+        "bias": false
+      },
+      "w2w3": {
+        "param_init": {
+          "fn": "<function <lambda> at 0x7e455c953560>"
+        },
+        "bias": false
+      }
+    },
+    "moe": null,
+    "attention_norm": {
+      "param_init": {
+        "weight": "<function ones_ at 0x7e46fb30b1a0>"
+      },
+      "eps": 1e-05,
+      "elementwise_affine": true
+    },
+    "ffn_norm": {
+      "param_init": {
+        "weight": "<function ones_ at 0x7e46fb30b1a0>"
+      },
+      "eps": 1e-05,
+      "elementwise_affine": true
+    }
+  },
+  "layers": [
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.014142135623730949)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.014142135623730949)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.01)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.01)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.008164965809277261)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.008164965809277261)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0070710678118654745)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0070710678118654745)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.006324555320336759)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.006324555320336759)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.005773502691896258)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.005773502691896258)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.005345224838248488)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.005345224838248488)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.005)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.005)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0047140452079103175)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0047140452079103175)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.004472135954999579)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.004472135954999579)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.004264014327112209)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.004264014327112209)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.004082482904638631)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.004082482904638631)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.003922322702763681)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.003922322702763681)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.003779644730092272)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.003779644730092272)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0036514837167011074)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0036514837167011074)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0035355339059327372)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0035355339059327372)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0034299717028501765)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0034299717028501765)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0033333333333333335)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0033333333333333335)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.003244428422615251)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.003244428422615251)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0031622776601683794)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0031622776601683794)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0030860669992418383)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0030860669992418383)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0030151134457776364)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0030151134457776364)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002948839123097943)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002948839123097943)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002886751345948129)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002886751345948129)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.00282842712474619)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.00282842712474619)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002773500981126146)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002773500981126146)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002721655269759087)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002721655269759087)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002672612419124244)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002672612419124244)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002626128657194451)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.002626128657194451)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0025819888974716113)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0025819888974716113)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.00254000254000381)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.00254000254000381)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    },
+    {
+      "param_init": null,
+      "attention": {
+        "param_init": null,
+        "n_heads": 32,
+        "inner_attention": {
+          "param_init": null
+        },
+        "mask_type": "causal",
+        "wqkv": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "wo": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0025)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "q_norm": null,
+        "k_norm": null,
+        "n_kv_heads": 8,
+        "head_dim": null,
+        "use_rope": true,
+        "rope_backend": "complex"
+      },
+      "feed_forward": {
+        "param_init": null,
+        "hidden_dim": 14336,
+        "w1": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.02)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        },
+        "w2w3": {
+          "param_init": {
+            "weight": "functools.partial(<function trunc_normal_ at 0x7e46fb30b060>, std=0.0025)",
+            "bias": "<function zeros_ at 0x7e46fb30b240>"
+          },
+          "bias": false
+        }
+      },
+      "moe": null,
+      "attention_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      },
+      "ffn_norm": {
+        "param_init": {
+          "weight": "<function ones_ at 0x7e46fb30b1a0>"
+        },
+        "eps": 1e-05,
+        "elementwise_affine": true
+      }
+    }
+  ],
+  "enable_weight_tying": false
+}
+[2026-04-06 14:45:01,508][root][INFO] - XPU capacity: Intel(R) Arc(TM) Pro B60 Graphics with 22.71GiB memory
+[2026-04-06 14:45:01,509][root][WARNING] - Error running lspci: [Errno 2] No such file or directory: 'lspci', fallback to use device_name
+[2026-04-06 14:45:01,510][root][WARNING] - Peak flops undefined for: Intel(R) Arc(TM) Pro B60 Graphics, fallback to A100
+[2026-04-06 14:45:01,510][root][INFO] - [34mModel llama3 8B [31msize: 8,030,261,248 total parameters[39m
+[2026-04-06 14:45:01,546][root][INFO] - PP rank 1 is building stage_idx 1 with modules ['layers.16', 'layers.17', 'layers.18', 'layers.19', 'layers.20', 'layers.21', 'layers.22', 'layers.23', 'layers.24', 'layers.25', 'layers.26', 'layers.27', 'layers.28', 'layers.29', 'layers.30', 'layers.31', 'norm', 'output']
+[2026-04-06 14:45:01,559][root][INFO] - XPU capacity: Intel(R) Arc(TM) Pro B60 Graphics with 22.71GiB memory
+[2026-04-06 14:45:01,560][root][WARNING] - Error running lspci: [Errno 2] No such file or directory: 'lspci', fallback to use device_name
+[2026-04-06 14:45:01,560][root][WARNING] - Peak flops undefined for: Intel(R) Arc(TM) Pro B60 Graphics, fallback to A100
+[2026-04-06 14:45:01,561][root][INFO] - [34mModel llama3 8B [31msize: 8,030,261,248 total parameters[39m
+[2026-04-06 14:45:01,561][root][INFO] - Applied selective activation checkpointing to the model
+[2026-04-06 14:45:01,562][root][INFO] - Using pipeline schedule 1F1B with 2 microbatches and 2 stages.
+[2026-04-06 14:45:01,596][root][INFO] - PP rank 0 is building stage_idx 0 with modules ['tok_embeddings', 'layers.0', 'layers.1', 'layers.2', 'layers.3', 'layers.4', 'layers.5', 'layers.6', 'layers.7', 'layers.8', 'layers.9', 'layers.10', 'layers.11', 'layers.12', 'layers.13', 'layers.14', 'layers.15']
+[2026-04-06 14:45:01,613][root][INFO] - Applied selective activation checkpointing to the model
+[2026-04-06 14:45:01,613][root][INFO] - Using pipeline schedule 1F1B with 2 microbatches and 2 stages.
+[2026-04-06 14:45:03,044][root][WARNING] - [31mPipeline Parallel loss is not visible. Please add [33mrank 1[31m to LOG_RANK environment variable in run_train.sh.[39m
+[2026-04-06 14:45:03,046][root][WARNING] - Error running lspci: [Errno 2] No such file or directory: 'lspci', fallback to use device_name
+[2026-04-06 14:45:03,046][root][WARNING] - Peak flops undefined for: Intel(R) Arc(TM) Pro B60 Graphics, fallback to A100
+[2026-04-06 14:45:03,046][root][INFO] - Peak FLOPS used for computing MFU: 3.120e+14
+[2026-04-06 14:45:03,046][root][INFO] - XPU memory usage for model: 14.96GiB(65.88%)
+[2026-04-06 14:45:03,058][root][INFO] - Checkpointing active. Checkpoints will be loaded from and saved to ./outputs/checkpoint
+[2026-04-06 14:45:03,059][root][WARNING] - Mixed precision training with TP or PP is only supported when FSDP/HSDP/CP/DDP is enabled.
+[2026-04-06 14:45:03,059][root][INFO] - Mixed precision training is disabled
+[2026-04-06 14:45:03,059][root][INFO] - Trainer is initialized with local batch size 2, global batch size 2, gradient accumulation steps 1, sequence length 2048, total steps 10000 (warmup 0)
+[2026-04-06 14:45:03,059][root][INFO] - Building device mesh with parallelism: pp=2, dp_replicate=1, dp_shard=1, cp=1, tp=1, ep=1, etp=1
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[2026-04-06 14:45:03,066][root][INFO] - Successfully created meshes with active dimensions: ['pp']
+[2026-04-06 14:45:03,067][root][INFO] - loading from HF safetensors from --checkpoint.initial_load_path: /root/.cache/huggingface/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659
+[2026-04-06 14:45:03,067][root][INFO] - Loading the checkpoint from /root/.cache/huggingface/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659.
+[2026-04-06 14:45:03,194][root][WARNING] - [31mPipeline Parallel loss is not visible. Please add [33mrank 1[31m to LOG_RANK environment variable in run_train.sh.[39m
+[2026-04-06 14:45:03,195][root][WARNING] - Error running lspci: [Errno 2] No such file or directory: 'lspci', fallback to use device_name
+[2026-04-06 14:45:03,195][root][WARNING] - Peak flops undefined for: Intel(R) Arc(TM) Pro B60 Graphics, fallback to A100
+[2026-04-06 14:45:03,196][root][INFO] - Peak FLOPS used for computing MFU: 3.120e+14
+[2026-04-06 14:45:03,196][root][INFO] - XPU memory usage for model: 14.96GiB(65.88%)
+[2026-04-06 14:45:03,209][root][INFO] - Checkpointing active. Checkpoints will be loaded from and saved to ./outputs/checkpoint
+[2026-04-06 14:45:03,209][root][WARNING] - Mixed precision training with TP or PP is only supported when FSDP/HSDP/CP/DDP is enabled.
+[2026-04-06 14:45:03,209][root][INFO] - Mixed precision training is disabled
+[2026-04-06 14:45:03,209][root][INFO] - Trainer is initialized with local batch size 2, global batch size 2, gradient accumulation steps 1, sequence length 2048, total steps 10000 (warmup 0)
+[2026-04-06 14:45:03,209][root][INFO] - Building device mesh with parallelism: pp=2, dp_replicate=1, dp_shard=1, cp=1, tp=1, ep=1, etp=1
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[2026-04-06 14:45:03,216][root][INFO] - Successfully created meshes with active dimensions: ['pp']
+[2026-04-06 14:45:03,217][root][INFO] - loading from HF safetensors from --checkpoint.initial_load_path: /root/.cache/huggingface/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659
+[2026-04-06 14:45:03,217][root][INFO] - Loading the checkpoint from /root/.cache/huggingface/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659.
+[2026-04-06 14:45:19,159][root][INFO] - [GC] GC collection for checkpoint loading. took 0.00 seconds
+[2026-04-06 14:45:19,159][root][INFO] - Finished loading the checkpoint in 16.09 seconds.
+{'model': {'_target_': 'verl.workers.config.HFModelConfig', 'path': '/root/.cache/huggingface/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659', 'hf_config_path': None, 'tokenizer_path': None, 'use_shm': False, 'trust_remote_code': False, 'custom_chat_template': None, 'external_lib': None, 'override_config': {}, 'enable_gradient_checkpointing': True, 'enable_activation_offload': False, 'use_remove_padding': True, 'lora_rank': 0, 'lora_alpha': 16, 'target_modules': 'all-linear', 'exclude_modules': None, 'lora_adapter_path': None, 'use_liger': False, 'use_fused_kernels': False, 'fused_kernel_options': {'impl_backend': 'torch'}, 'tiled_mlp': {'enabled': False, 'num_shards': 4}, 'mtp': {'_target_': 'verl.workers.config.MtpConfig', 'enable': False, 'enable_train': False, 'enable_rollout': False, 'detach_encoder': False, 'mtp_loss_scaling_factor': 0.1, 'speculative_algorithm': 'EAGLE', 'speculative_num_steps': 3, 'speculative_eagle_topk': 1, 'speculative_num_draft_tokens': 4, 'method': 'mtp', 'num_speculative_tokens': 1}, 'lora': {'type': 'lora', 'merge': False, 'rank': 0, 'alpha': 32, 'dropout': 0.0, 'target_modules': ['linear_qkv', 'linear_proj', 'linear_fc1', 'linear_fc2'], 'exclude_modules': [], 'dropout_position': 'pre', 'lora_A_init_method': 'xavier', 'lora_B_init_method': 'zero', 'a2a_experimental': False, 'dtype': None, 'adapter_path': None, 'freeze_vision_model': True, 'freeze_vision_projection': True, 'freeze_language_model': True}}, 'engine': {'_target_': 'verl.workers.config.TorchtitanEngineConfig', 'param_offload': False, 'optimizer_offload': False, 'wrap_policy': {'min_num_params': 0}, 'reshard_after_forward': 'default', 'forward_prefetch': False, 'use_orig_params': False, 'mixed_precision': False, 'use_torch_compile': False, 'entropy_from_logits_with_chunking': False, 'entropy_checkpointing': False, 'data_parallel_size': 1, 'data_parallel_replicate_size': 1, 'data_parallel_shard_size': 1, 'tensor_parallel_size': 1, 'expert_parallel_size': 1, 'pipeline_parallel_size': 2, 'context_parallel_size': 1, 'attn_type': 'varlen', 'max_seq_len': None, 'strategy': 'torchtitan', 'seed': 42, 'full_determinism': False, 'forward_only': False, 'dtype': 'bfloat16'}, 'optim': {'_target_': 'verl.workers.config.TorchtitanOptimizerConfig', 'name': 'AdamW', 'lr': 1e-05, 'lr_warmup_steps_ratio': 0.1, 'total_training_steps': -1, 'weight_decay': 0.01, 'lr_warmup_steps': -1, 'betas': [0.9, 0.999], 'clip_grad': 1.0, 'eps': 1e-08, 'decay_type': 'linear', 'min_lr_factor': 0.0}, 'profiler': {'_target_': 'verl.utils.profiler.ProfilerConfig', 'tool': 'torch', 'enable': False, 'all_ranks': False, 'ranks': [], 'save_path': 'outputs/profile', 'tool_config': {'npu': {'_target_': 'verl.utils.profiler.config.NPUToolConfig', 'contents': [], 'level': 'level0', 'analysis': True, 'discrete': False, 'name': 'npu'}, 'nsys': {'_target_': 'verl.utils.profiler.config.NsightToolConfig', 'discrete': '${oc.select:global_profiler.global_tool_config.nsys.discrete}', 'name': 'nsight'}, 'torch': {'_target_': 'verl.utils.profiler.config.TorchProfilerToolConfig', 'contents': [], 'discrete': False, 'name': 'torch'}, 'torch_memory': {'_target_': 'verl.utils.profiler.config.TorchMemoryToolConfig', 'trace_alloc_max_entries': '${oc.select:global_profiler.global_tool_config.torch_memory.trace_alloc_max_entries,100000}', 'stack_depth': '${oc.select:global_profiler.global_tool_config.torch_memory.stack_depth,32}', 'name': 'torch_memory'}, 'precision_debugger': {'_target_': 'verl.utils.profiler.config.PrecisionDebuggerToolConfig', 'enable': '${oc.select:global_profiler.global_tool_config.precision_debugger.enable,False}', 'config_path': '${oc.select:global_profiler.global_tool_config.precision_debugger.config_path,null}', 'data_dir': '${oc.select:global_profiler.global_tool_config.precision_debugger.data_dir,"outputs/precision_debug"}', 'steps': '${oc.select:global_profiler.global_tool_config.precision_debugger.steps,null}', 'stages': '${oc.select:global_profiler.global_tool_config.precision_debugger.stages,null}', 'name': 'precision_debugger'}}}, 'data': {'train_batch_size': 8, 'micro_batch_size_per_gpu': 2, 'max_token_len_per_gpu': 512, 'use_dynamic_bsz': False, 'train_files': '/host/home/sdp/data/gsm8k/train_sft.parquet', 'val_files': '/host/home/sdp/data/gsm8k/train_sft.parquet', 'train_max_samples': -1, 'val_max_samples': -1, 'messages_key': 'messages', 'tools_key': 'tools', 'enable_thinking_key': 'enable_thinking', 'enable_thinking_default': 'none', 'pad_mode': 'no_padding', 'max_length': 1024, 'truncation': 'error', 'balance_dp_token': False, 'custom_cls': {'path': None, 'name': None}, 'use_shm': False, 'apply_chat_template_kwargs': {}, 'num_workers': 8, 'ignore_input_ids_mismatch': True}, 'checkpoint': {'_target_': 'verl.trainer.config.CheckpointConfig', 'save_contents': ['model', 'optimizer', 'extra'], 'load_contents': '${checkpoint.save_contents}', 'mbridge_config': {}}, 'trainer': {'default_local_dir': '/host/home/sdp/outputs/verl/ckpt_t7_2', 'default_hdfs_dir': None, 'project_name': 't7_2_pp2', 'experiment_name': 'pp2_sft', 'total_epochs': 1, 'total_training_steps': 5, 'logger': ['console'], 'seed': 1, 'save_freq': -1, 'test_freq': -1, 'max_ckpt_to_keep': None, 'balance_batch': True, 'resume_mode': 'auto', 'resume_from_path': None, 'device': 'xpu', 'nnodes': 1, 'n_gpus_per_node': 1, 'profile_interval': [-1, -1]}, 'global_profiler': {'global_tool_config': {'nsys': {'worker_nsight_options': {'trace': 'cuda,nvtx,cublas,ucx', 'cuda-memory-usage': 'true', 'cuda-graph-trace': 'graph', 'capture-range': 'cudaProfilerApi', 'capture-range-end': None, 'kill': 'none'}}}}}
+[2026-04-06 14:45:19,167][root][INFO] - [GC] GC collection for checkpoint loading. took 0.00 seconds
+[2026-04-06 14:45:19,167][root][INFO] - Finished loading the checkpoint in 15.95 seconds.
+Epoch 1/1:   0%|          | 0/25 [00:00<?, ?it/s]Epoch 1/1:   0%|          | 0/25 [00:01<?, ?it/s]
+Error executing job with overrides: ['data.train_files=/host/home/sdp/data/gsm8k/train_sft.parquet', 'data.val_files=/host/home/sdp/data/gsm8k/train_sft.parquet', 'data.messages_key=messages', 'data.micro_batch_size_per_gpu=2', 'data.train_batch_size=8', 'data.use_dynamic_bsz=False', 'data.max_token_len_per_gpu=512', 'data.ignore_input_ids_mismatch=True', 'model=hf_model', 'model.path=/root/.cache/huggingface/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659', 'model.use_remove_padding=True', 'engine=torchtitan', 'engine.pipeline_parallel_size=2', 'engine.tensor_parallel_size=1', 'engine.data_parallel_shard_size=1', 'engine.use_torch_compile=false', 'engine.attn_type=varlen', 'optim=torchtitan', 'optim.lr=1e-5', 'optim.weight_decay=0.01', 'optim.lr_warmup_steps_ratio=0.1', 'optim.min_lr_factor=0.0', 'trainer.total_training_steps=5', 'trainer.total_epochs=1', 'trainer.test_freq=-1', 'trainer.save_freq=-1', 'trainer.device=xpu', 'trainer.logger=[console]', 'trainer.project_name=t7_2_pp2', 'trainer.experiment_name=pp2_sft', 'trainer.default_local_dir=/host/home/sdp/outputs/verl/ckpt_t7_2']
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/tests/run_sft_xpu_torchtitan.py", line 7, in <module>
+[rank1]:     main()
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/main.py", line 94, in decorated_main
+[rank1]:     _run_hydra(
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/_internal/utils.py", line 394, in _run_hydra
+[rank1]:     _run_app(
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/_internal/utils.py", line 457, in _run_app
+[rank1]:     run_and_report(
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/_internal/utils.py", line 223, in run_and_report
+[rank1]:     raise ex
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/_internal/utils.py", line 220, in run_and_report
+[rank1]:     return func()
+[rank1]:            ^^^^^^
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/_internal/utils.py", line 458, in <lambda>
+[rank1]:     lambda: hydra.run(
+[rank1]:             ^^^^^^^^^^
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/_internal/hydra.py", line 132, in run
+[rank1]:     _ = ret.return_value
+[rank1]:         ^^^^^^^^^^^^^^^^
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/core/utils.py", line 260, in return_value
+[rank1]:     raise self._return_value
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/hydra/core/utils.py", line 186, in run_job
+[rank1]:     ret.return_value = task_function(task_cfg)
+[rank1]:                        ^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/trainer/sft_trainer.py", line 463, in main
+[rank1]:     run_sft(config)
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/trainer/sft_trainer.py", line 455, in run_sft
+[rank1]:     trainer.fit()
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/trainer/sft_trainer.py", line 385, in fit
+[rank1]:     output = self.training_client.train_batch(data=data)
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/single_controller/base/decorator.py", line 427, in inner
+[rank1]:     return func(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/workers/engine_workers.py", line 356, in train_batch
+[rank1]:     output = self.engine.train_batch(data, loss_function=self.loss_fn)
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/workers/engine/base.py", line 126, in train_batch
+[rank1]:     outputs = self.forward_backward_batch(data, loss_function, forward_only=False)
+[rank1]:               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/workers/engine/torchtitan/transformer_impl.py", line 803, in forward_backward_batch
+[rank1]:     return self._pp_forward_backward_batch(data, loss_function, forward_only)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/host/home/sdp/kl/verl_test_xpu/verl/workers/engine/torchtitan/transformer_impl.py", line 1025, in _pp_forward_backward_batch
+[rank1]:     pp_schedule._step_microbatches(
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/torch/distributed/pipelining/schedules.py", line 869, in _step_microbatches
+[rank1]:     self._initialize_stage(arg_mbs[0], kwarg_mbs[0])
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/torch/distributed/pipelining/schedules.py", line 596, in _initialize_stage
+[rank1]:     _wait_batch_p2p(_batch_p2p(all_ops))
+[rank1]:                     ^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/torch/distributed/pipelining/schedules.py", line 505, in _batch_p2p
+[rank1]:     return dist.batch_isend_irecv(p2p_ops)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 2842, in batch_isend_irecv
+[rank1]:     p2p_op.op(
+[rank1]:   File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 2536, in irecv
+[rank1]:     return group.recv([tensor], group_src, tag)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]: RuntimeError: oneCCL: ze_call.cpp:28 do_call: EXCEPTION: ze error at zeMemOpenIpcHandle, code: ZE_RESULT_ERROR_INVALID_ARGUMENT
+W0406 14:45:22.235000 10345 torch/distributed/elastic/multiprocessing/api.py:1010] Sending process 10410 closing signal SIGTERM
+E0406 14:45:22.504000 10345 torch/distributed/elastic/multiprocessing/api.py:984] failed (exitcode: 1) local_rank: 1 (pid: 10411) of binary: /usr/bin/python3
+Traceback (most recent call last):
+  File "/usr/local/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 362, in wrapper
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/run.py", line 991, in main
+    run(args)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/run.py", line 982, in run
+    elastic_launch(
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/launcher/api.py", line 170, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/launcher/api.py", line 317, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+tests/run_sft_xpu_torchtitan.py FAILED
+------------------------------------------------------------
+Failures:
+[1]:
+  time      : 2026-04-06_14:45:22
+  host      : emr816608-vm01.jf.intel.com
+  rank      : 0 (local_rank: 0)
+  exitcode  : -15 (pid: 10410)
+  error_file: <N/A>
+  traceback : Signal 15 (SIGTERM) received by PID 10410
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-04-06_14:45:22
+  host      : emr816608-vm01.jf.intel.com
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 10411)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

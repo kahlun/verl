@@ -1,0 +1,20 @@
+{
+  "mode": "ddp",
+  "world_size": 4,
+  "bs_per_gpu": 4,
+  "global_bs": 16,
+  "seq_len": 512,
+  "avg_step_time": 2.073,
+  "global_tok_s": 3952,
+  "per_gpu_tok_s": 988,
+  "aggregate_tflops": 11.7,
+  "per_gpu_tflops": 2.9,
+  "mfu_pct": 3.1,
+  "peak_mem_gb": 13.5,
+  "loss_last": 12.0783,
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "params_M": 494,
+  "device": "Intel(R) Arc(TM) Pro B60 Graphics",
+  "peak_bf16_tflops": 96.0,
+  "pytorch": "2.10.0+xpu"
+}
