@@ -52,10 +52,12 @@ from verl.utils.activation_offload import enable_activation_offloading
 from verl.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.device import (
+    get_default_attention_implementation,
     get_device_id,
     get_device_name,
     get_nccl_backend,
     get_torch_device,
+    is_xpu_available,
     set_expandable_segments,
 )
 from verl.utils.flops_counter import FlopsCounter
@@ -395,7 +397,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
         # override model kwargs
-        attn_implementation = override_model_config.get("attn_implementation", "flash_attention_2")
+        attn_implementation = override_model_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
         actor_model_config = AutoConfig.from_pretrained(
             local_path, trust_remote_code=trust_remote_code, attn_implementation=attn_implementation
         )
@@ -404,6 +408,15 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         # Maybe support Ulysses in VisionAttention in the future and remove this patch
         if self.ulysses_sequence_parallel_size > 1 and hasattr(actor_model_config, "vision_config"):
             actor_model_config.vision_config._attn_implementation = "eager"
+
+        # XPU: force eager attention. SDPA works on PyTorch 2.11+ without IPEX, but
+        # eager is the safe default until SDPA is validated across all XPU environments.
+        if is_xpu_available and actor_model_config._attn_implementation != "eager":
+            print(
+                f"[XPU] Overriding attn_implementation='{actor_model_config._attn_implementation}' → 'eager' "
+                f"for actor model. Set get_default_attention_implementation() to change the default."
+            )
+            actor_model_config._attn_implementation = "eager"
 
         # patch for qwen2.5-vl: when using flash_attention_3, set vision tower to use flash_attention_2
         # because the vision tower does not support flash_attention_3
@@ -758,37 +771,49 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
 
     async def rollout_mode(self):
         """Context switch hybridengine to rollout mode."""
+        import sys as _sys
+        _rank = getattr(self, 'rank', '?')
+        print(f"[ROLLOUT-DBG] rank={_rank} entering rollout_mode", flush=True); _sys.stdout.flush()
         aggressive_empty_cache(force_sync=True)
+        print(f"[ROLLOUT-DBG] rank={_rank} after empty_cache", flush=True); _sys.stdout.flush()
 
         log_gpu_memory_usage("Before load_fsdp_model_to_gpu", logger=logger)
         if self._is_offload_param:
             load_fsdp_model_to_gpu(self.actor_module_fsdp)
         log_gpu_memory_usage("After load_fsdp_model_to_gpu", logger=logger)
+        print(f"[ROLLOUT-DBG] rank={_rank} after load_fsdp check", flush=True); _sys.stdout.flush()
 
         peft_config = None
         peft_model = getattr(self.actor_module_fsdp, "_fsdp_wrapped_module", self.actor_module_fsdp)
         if hasattr(peft_model, "peft_config"):  # LoRA
             peft_config = peft_model.peft_config.get("default", None)
+            print(
+                f"[ROLLOUT-DBG] rank={_rank} LoRA path, peft_merge={self.peft_merge}, "
+                f"base_sync_done={self.base_sync_done}",
+                flush=True,
+            )
+            _sys.stdout.flush()
             if self.peft_merge:
-                # Merge LoRA into base weights and extract with HF key names.
-                # Required for backends (e.g. SGLang) whose load_weights() expects
-                # standard HF param names and can't handle LoRA delta keys.
                 params = collect_merged_lora_params(module=self.actor_module_fsdp)
-                # Full merged weights, not LoRA deltas — clear peft_config so
-                # downstream update_weights treats these as plain HF params.
                 peft_config = None
                 self.base_sync_done = True
             else:
+                print(f"[ROLLOUT-DBG] rank={_rank} calling collect_lora_params...", flush=True); _sys.stdout.flush()
                 params = collect_lora_params(
                     module=self.actor_module_fsdp,
                     layered_summon=self.config.rollout.get("layered_summon", False),
                     base_sync_done=self.base_sync_done,
                 )
+                print(
+                    f"[ROLLOUT-DBG] rank={_rank} collect_lora_params done, n_params={len(params)}",
+                    flush=True,
+                )
+                _sys.stdout.flush()
                 if not self.base_sync_done:
                     params = {replace_lora_wrapper(k, peft_config): v for k, v in params.items()}
         else:
             params = self.actor_module_fsdp.state_dict()
-
+        print(f"[ROLLOUT-DBG] rank={_rank} params collected", flush=True); _sys.stdout.flush()
         params = convert_weight_keys(
             params, getattr(self.actor_module_fsdp, "_fsdp_wrapped_module", self.actor_module_fsdp)
         )
@@ -829,7 +854,13 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         # SGLang's CUDA IPC serializer).
         device = get_device_id()
         _items = params.items() if isinstance(params, dict) else params
-        per_tensor_param = (
+        # IMPORTANT: Eagerly materialize instead of using a generator.
+        # DTensor.full_tensor() is an FSDP all-gather collective that requires
+        # all ranks to participate simultaneously. A lazy generator would be
+        # consumed at different rates by each worker's vLLM engine, causing
+        # an all-gather deadlock in multi-GPU setups.
+        print(f"[ROLLOUT-DBG] rank={_rank} starting per_tensor_param materialization", flush=True); _sys.stdout.flush()
+        per_tensor_param = [
             (
                 name,
                 param.to(device, non_blocking=True).full_tensor()
@@ -837,7 +868,12 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
                 else param.to(device, non_blocking=False),
             )
             for name, param in _items
+        ]
+        print(
+            f"[ROLLOUT-DBG] rank={_rank} per_tensor_param done, n={len(per_tensor_param)}",
+            flush=True,
         )
+        _sys.stdout.flush()
 
         # QAT: quantize weights before sending to vLLM
         if self._qat_enabled:
@@ -866,10 +902,10 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             and self.config.rollout.free_cache_engine
             and not self.peft_merge
         ):
-            per_tensor_base_params = (
+            per_tensor_base_params = [
                 (name, param.to(device, non_blocking=True).full_tensor() if isinstance(param, DTensor) else param)
                 for name, param in base_model_params.items()
-            )
+            ]
             await self.rollout.update_weights(per_tensor_base_params, base_sync_done=False)
             del base_model_params, per_tensor_base_params
 
@@ -1429,7 +1465,9 @@ class CriticWorker(Worker, DistProfilerExtension):
         from transformers import AutoConfig
 
         # override model kwargs
-        attn_implementation = override_config.get("attn_implementation", "flash_attention_2")
+        attn_implementation = override_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
         critic_model_config = AutoConfig.from_pretrained(
             local_path,
             attn_implementation=attn_implementation,
@@ -1440,6 +1478,14 @@ class CriticWorker(Worker, DistProfilerExtension):
         # Maybe support Ulysses in VisionAttention in the future and remove this patch
         if self.ulysses_sequence_parallel_size > 1 and hasattr(critic_model_config, "vision_config"):
             critic_model_config.vision_config._attn_implementation = "eager"
+
+        # XPU: force eager attention (same rationale as actor above)
+        if is_xpu_available and critic_model_config._attn_implementation != "eager":
+            print(
+                f"[XPU] Overriding attn_implementation='{critic_model_config._attn_implementation}' → 'eager' "
+                f"for critic model."
+            )
+            critic_model_config._attn_implementation = "eager"
 
         critic_model_config.num_labels = 1
         # patch for kimi-vl

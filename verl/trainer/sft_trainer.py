@@ -35,7 +35,7 @@ from verl.utils import tensordict_utils as tu
 from verl.utils.checkpoint import CheckpointHandler
 from verl.utils.dataset.dataset_utils import SFTTensorCollator
 from verl.utils.dataset.multiturn_sft_dataset import MultiTurnSFTDataset
-from verl.utils.device import auto_set_device, get_device_name
+from verl.utils.device import auto_set_device, get_device_name, is_xpu_available
 from verl.utils.distributed import destroy_global_process_group
 from verl.utils.logger import log_with_rank
 from verl.utils.memory_utils import aggressive_empty_cache
@@ -426,7 +426,9 @@ class SFTTrainer:
                         # average over data parallel group
                         dp_group = self.engine.get_data_parallel_group()
                         if dp_group is not None:
-                            torch.distributed.all_reduce(val_loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+                            from verl.utils.distributed import all_reduce_avg
+
+                            all_reduce_avg(val_loss, group=dp_group)
 
                     if is_logging:
                         metric = {"val/loss": val_loss.detach().item()}

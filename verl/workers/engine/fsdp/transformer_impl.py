@@ -139,6 +139,15 @@ class FSDPEngine(BaseEngine):
         if self._qat_enabled:
             logger.info(f"QAT enabled: mode={self._qat_config.mode}, group_size={self._qat_config.group_size}")
 
+        # Auto-disable torch.compile on XPU — causes L0 driver hang/OOM (Bug 2, §7)
+        self._use_torch_compile = self.engine_config.use_torch_compile
+        if device_name == "xpu" and self._use_torch_compile:
+            logger.warning(
+                "[XPU] Disabling torch.compile — causes L0 driver hang on XPU. "
+                "Set engine.use_torch_compile=False."
+            )
+            self._use_torch_compile = False
+
         if self.engine_config.entropy_from_logits_with_chunking:
             entropy_from_logits = verl_F.entropy_from_logits_with_chunking
         else:
@@ -146,7 +155,7 @@ class FSDPEngine(BaseEngine):
 
         self.compute_entropy_from_logits = (
             torch.compile(entropy_from_logits, dynamic=True)
-            if self.engine_config.use_torch_compile  #  use torch compile by default
+            if self._use_torch_compile
             else entropy_from_logits
         )
 
@@ -615,6 +624,10 @@ class FSDPEngine(BaseEngine):
                 if not forward_only:
                     loss.backward()
 
+            # XPU: sync after each micro-batch to prevent kernel queue buildup hitting driver timeout
+            if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                torch.xpu.synchronize()
+
             output_lst.append(meta_info)
 
         # postprocess and return
@@ -692,11 +705,18 @@ class FSDPEngine(BaseEngine):
             if optimizer and self.optimizer is not None:
                 load_fsdp_optimizer(self.optimizer, device)
             gc.collect()
+            # XPU: sync after loading to GPU to ensure all HtoD transfers complete
+            if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                torch.xpu.synchronize()
         elif device == "cpu":
             if model:
                 offload_fsdp_model_to_cpu(self.module)
             if optimizer and self.optimizer is not None:
                 offload_fsdp_optimizer(self.optimizer)
+            # XPU: sync after offload to ensure all non_blocking DtoH transfers complete
+            # before subsequent CCL operations (prevents kernel timeout from queue buildup)
+            if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                torch.xpu.synchronize()
         else:
             raise ValueError(f"Invalid device type: {device}")
 
@@ -784,8 +804,9 @@ class FSDPEngine(BaseEngine):
             per_tensor_param = params.items()
         else:
             device = get_device_id()  # used when fsdp2 set cpu_offload_policy
-            # TODO: cast fp32 to bf16 to reduce weight sync overhead, need more fine-grained control, e.g MoE gate
-            per_tensor_param = (
+            # IMPORTANT: Eagerly materialize instead of generator to avoid FSDP
+            # collective (full_tensor) deadlock in multi-GPU setups.
+            per_tensor_param = [
                 (
                     name,
                     param.to(device, non_blocking=True).full_tensor().to(torch.bfloat16, non_blocking=True)
@@ -793,7 +814,7 @@ class FSDPEngine(BaseEngine):
                     else param,
                 )
                 for name, param in params.items()
-            )
+            ]
 
         if self._qat_enabled:
             from verl.utils.qat.quantizer import QATQuantizer
@@ -868,7 +889,7 @@ class EngineTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu", "xpu"])
 class FSDPEngineWithLMHead(FSDPEngine):
     def prepare_model_inputs(self, micro_batch: TensorDict):
         use_remove_padding = tu.get_non_tensor_data(data=micro_batch, key="use_remove_padding", default=True)
@@ -1167,7 +1188,7 @@ class FSDPEngineWithLMHead(FSDPEngine):
             return loss, output
 
 
-@EngineRegistry.register(model_type="value_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="value_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu", "xpu"])
 class FSDPEngineWithValueHead(FSDPEngineWithLMHead):
     """
     The only difference between critic and actor is how the raw model output is processed
