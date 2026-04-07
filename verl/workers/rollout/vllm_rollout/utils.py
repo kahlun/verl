@@ -69,6 +69,8 @@ def set_death_signal():
 def get_device_uuid(device_id: int) -> str:
     from vllm.platforms import current_platform
 
+    from verl.utils.device import is_xpu_available
+
     # Convert torch.npu.current_device to its corresponding ASCEND_RT_VISIBLE_DEVICES.
     if is_npu_available:
         if os.getenv("ASCEND_RT_VISIBLE_DEVICES") is not None:
@@ -77,6 +79,10 @@ def get_device_uuid(device_id: int) -> str:
             return "NPU-" + npu_visible_devices[device_id]
         else:
             return f"NPU-{device_id}"
+    elif is_xpu_available:
+        # XPUPlatform.get_device_uuid() is not implemented — use device_id as unique identifier.
+        oneapi_mask = os.getenv("ONEAPI_DEVICE_SELECTOR", "")
+        return f"XPU-{oneapi_mask.replace(',', '_') or device_id}"
     else:
         return current_platform.get_device_uuid(device_id)
 
@@ -176,7 +182,9 @@ class vLLMColocateWorkerExtension:
         # patch weight loader to support MoE model
         patch_vllm_moe_model_weight_loader(self.model_runner.model)
 
-    def update_weights_from_ipc(self, peft_config: dict = None, base_sync_done=False, use_shm: bool = False):
+    def update_weights_from_ipc(
+        self, peft_config: dict = None, base_sync_done=False, use_shm: bool = False, zmq_handle: str = None
+    ):
         """Update the weights of the rollout model."""
         from vllm.platforms import current_platform
 
@@ -209,8 +217,12 @@ class vLLMColocateWorkerExtension:
             patch_vllm_moe_model_weight_loader(self.model_runner.model)
 
         assert self.device is not None
+        # Use the zmq_handle from the sender if provided — this ensures the
+        # receiver connects to the same ZMQ endpoint as the sender even when the
+        # device-id-based UUID differs (e.g. XPU with ONEAPI_DEVICE_SELECTOR unset).
+        effective_zmq_handle = zmq_handle if zmq_handle else self._get_zmq_handle()
         receiver = BucketedWeightReceiver(
-            zmq_handle=self._get_zmq_handle(),
+            zmq_handle=effective_zmq_handle,
             device=self.device,
             use_shm=use_shm,
         )
@@ -292,7 +304,9 @@ class vLLMOmniColocateWorkerExtension(_OmniWorkerBase):
 
         return super().__new__(cls)
 
-    def update_weights_from_ipc(self, peft_config: dict = None, base_sync_done=False, use_shm: bool = False):
+    def update_weights_from_ipc(
+        self, peft_config: dict = None, base_sync_done=False, use_shm: bool = False, zmq_handle: str = None
+    ):
         """Update the weights of the rollout model."""
 
         from verl.workers.rollout.vllm_rollout.bucketed_weight_transfer import BucketedWeightReceiver
@@ -302,8 +316,9 @@ class vLLMOmniColocateWorkerExtension(_OmniWorkerBase):
             self.remove_lora(VLLM_LORA_INT_ID)
 
         assert self.device is not None
+        effective_zmq_handle = zmq_handle if zmq_handle else self._get_zmq_handle()
         receiver = BucketedWeightReceiver(
-            zmq_handle=self._get_zmq_handle(),
+            zmq_handle=effective_zmq_handle,
             device=self.device,
             use_shm=use_shm,
         )
