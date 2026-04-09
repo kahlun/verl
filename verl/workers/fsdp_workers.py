@@ -57,7 +57,6 @@ from verl.utils.device import (
     get_device_name,
     get_nccl_backend,
     get_torch_device,
-    is_xpu_available,
     set_expandable_segments,
 )
 from verl.utils.flops_counter import FlopsCounter
@@ -409,14 +408,6 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         if self.ulysses_sequence_parallel_size > 1 and hasattr(actor_model_config, "vision_config"):
             actor_model_config.vision_config._attn_implementation = "eager"
 
-        # XPU: force eager attention. SDPA works on PyTorch 2.11+ without IPEX, but
-        # eager is the safe default until SDPA is validated across all XPU environments.
-        if is_xpu_available and actor_model_config._attn_implementation != "eager":
-            print(
-                f"[XPU] Overriding attn_implementation='{actor_model_config._attn_implementation}' → 'eager' "
-                f"for actor model. Set get_default_attention_implementation() to change the default."
-            )
-            actor_model_config._attn_implementation = "eager"
 
         # patch for qwen2.5-vl: when using flash_attention_3, set vision tower to use flash_attention_2
         # because the vision tower does not support flash_attention_3
@@ -1479,13 +1470,6 @@ class CriticWorker(Worker, DistProfilerExtension):
         if self.ulysses_sequence_parallel_size > 1 and hasattr(critic_model_config, "vision_config"):
             critic_model_config.vision_config._attn_implementation = "eager"
 
-        # XPU: force eager attention (same rationale as actor above)
-        if is_xpu_available and critic_model_config._attn_implementation != "eager":
-            print(
-                f"[XPU] Overriding attn_implementation='{critic_model_config._attn_implementation}' → 'eager' "
-                f"for critic model."
-            )
-            critic_model_config._attn_implementation = "eager"
 
         critic_model_config.num_labels = 1
         # patch for kimi-vl
