@@ -38,7 +38,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 DEVICE = os.environ.get("VLM_TEST_DEVICE", "xpu" if torch.xpu.is_available() else "cuda")
 DTYPE = torch.bfloat16
-DATA_PATH = "/home/sdp/data/pokemon-gpt4o-captions/train.parquet"
+DATA_PATH = os.environ.get("VLM_DATA_PATH", "/root/data/pokemon/train.parquet")
+
+# On CUDA, disable the cuDNN FA3 backend for SDPA -- its backward initialisation fails
+# on A100 + PyTorch 2.10 + cuDNN 9.1.9 in this container environment.
+if DEVICE == "cuda":
+    torch.backends.cuda.enable_cudnn_sdp(False)
+    # Disable all cuDNN ops (conv backward) -- CUDNN_STATUS_NOT_INITIALIZED on A100/GPU1
+    torch.backends.cudnn.enabled = False
 
 # Models to test: (name, model_type, xpu_attn_patched, max_length, notes)
 VLM_MODELS = [

@@ -1,0 +1,10 @@
+{"step":1,"data":{"train/loss":14370.388671875,"train/grad_norm":567231.9375,"train/lr":1.0000000000000001e-7,"train/mfu":0.004425657433103852,"train/global_tokens":12723,"train/total_tokens(B)":0.000012723}}
+{"step":2,"data":{"train/loss":14043.1484375,"train/grad_norm":572372.25,"train/lr":1.5000000000000002e-7,"train/mfu":0.12883622832822483,"train/global_tokens":12644,"train/total_tokens(B)":0.000025367}}
+{"step":3,"data":{"train/loss":13617.904296875,"train/grad_norm":563532.625,"train/lr":2.0000000000000002e-7,"train/mfu":0.17670883187576658,"train/global_tokens":11630,"train/total_tokens(B)":0.000036997}}
+{"step":4,"data":{"train/loss":14073.55859375,"train/grad_norm":560522.75,"train/lr":2.5000000000000004e-7,"train/mfu":0.1771136955934406,"train/global_tokens":12658,"train/total_tokens(B)":0.000049655}}
+{"step":5,"data":{"train/loss":13892.326171875,"train/grad_norm":547028.6875,"train/lr":3.0000000000000004e-7,"train/mfu":0.1787397940761371,"train/global_tokens":12782,"train/total_tokens(B)":0.000062437}}
+{"step":6,"data":{"train/loss":14141.5009765625,"train/grad_norm":536718.8125,"train/lr":3.5000000000000004e-7,"train/mfu":0.18636851240153984,"train/global_tokens":13377,"train/total_tokens(B)":0.000075814}}
+{"step":7,"data":{"train/loss":13112.52734375,"train/grad_norm":528024.0,"train/lr":4.0000000000000003e-7,"train/mfu":0.1744387641301483,"train/global_tokens":12390,"train/total_tokens(B)":0.000088204}}
+{"step":8,"data":{"train/loss":13317.0595703125,"train/grad_norm":524611.4375,"train/lr":4.5000000000000003e-7,"train/mfu":0.178281930060956,"train/global_tokens":12704,"train/total_tokens(B)":0.000100908}}
+{"step":9,"data":{"train/loss":12441.3125,"train/grad_norm":522087.25,"train/lr":5.000000000000001e-7,"train/mfu":0.1755510383913201,"train/global_tokens":11656,"train/total_tokens(B)":0.000112564}}
+{"step":10,"data":{"train/loss":11194.904296875,"train/grad_norm":487816.03125,"train/lr":5.5e-7,"train/mfu":0.1704390050952428,"train/global_tokens":12159,"train/total_tokens(B)":0.000124723}}

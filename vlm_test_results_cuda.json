@@ -1,0 +1,167 @@
+{
+  "device": "cuda",
+  "device_name": "NVIDIA A100 80GB PCIe",
+  "pytorch": "2.10.0+cu129",
+  "dtype": "torch.bfloat16",
+  "results": [
+    {
+      "model": "Qwen/Qwen2-VL-2B-Instruct",
+      "model_type": "qwen2_vl",
+      "xpu_attn": true,
+      "status": "PASS",
+      "steps": [
+        {
+          "step": 1,
+          "loss": 3.7238,
+          "grad_norm": 133.0,
+          "mem_gb": 22.27,
+          "time_s": 0.88,
+          "nan": false
+        },
+        {
+          "step": 2,
+          "loss": 2.9562,
+          "grad_norm": 42.5,
+          "mem_gb": 22.27,
+          "time_s": 0.4,
+          "nan": false
+        },
+        {
+          "step": 3,
+          "loss": 2.6877,
+          "grad_norm": 37.0,
+          "mem_gb": 22.27,
+          "time_s": 0.37,
+          "nan": false
+        },
+        {
+          "step": 4,
+          "loss": 2.323,
+          "grad_norm": 71.5,
+          "mem_gb": 22.27,
+          "time_s": 0.36,
+          "nan": false
+        },
+        {
+          "step": 5,
+          "loss": 2.1722,
+          "grad_norm": 40.25,
+          "mem_gb": 22.27,
+          "time_s": 0.36,
+          "nan": false
+        }
+      ],
+      "error": null,
+      "params_m": 2209.0,
+      "mem_after_load_gb": 4.42,
+      "peak_mem_gb": 22.27,
+      "any_nan": false
+    },
+    {
+      "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+      "model_type": "qwen2_5_vl",
+      "xpu_attn": true,
+      "status": "PASS",
+      "steps": [
+        {
+          "step": 1,
+          "loss": 2.7508,
+          "grad_norm": 48.75,
+          "mem_gb": 38.28,
+          "time_s": 0.75,
+          "nan": false
+        },
+        {
+          "step": 2,
+          "loss": 2.1088,
+          "grad_norm": 34.25,
+          "mem_gb": 38.3,
+          "time_s": 0.65,
+          "nan": false
+        },
+        {
+          "step": 3,
+          "loss": 3.0185,
+          "grad_norm": 47.0,
+          "mem_gb": 38.3,
+          "time_s": 0.65,
+          "nan": false
+        },
+        {
+          "step": 4,
+          "loss": 2.6193,
+          "grad_norm": 29.875,
+          "mem_gb": 38.3,
+          "time_s": 0.65,
+          "nan": false
+        },
+        {
+          "step": 5,
+          "loss": 2.0471,
+          "grad_norm": 24.5,
+          "mem_gb": 38.3,
+          "time_s": 0.65,
+          "nan": false
+        }
+      ],
+      "error": null,
+      "params_m": 3754.6,
+      "mem_after_load_gb": 7.65,
+      "peak_mem_gb": 38.3,
+      "any_nan": false
+    },
+    {
+      "model": "Qwen/Qwen3-VL-2B-Instruct",
+      "model_type": "qwen3_vl",
+      "xpu_attn": false,
+      "status": "PASS",
+      "steps": [
+        {
+          "step": 1,
+          "loss": 2.2259,
+          "grad_norm": 73.5,
+          "mem_gb": 21.46,
+          "time_s": 4.66,
+          "nan": false
+        },
+        {
+          "step": 2,
+          "loss": 2.8135,
+          "grad_norm": 73.5,
+          "mem_gb": 21.46,
+          "time_s": 4.01,
+          "nan": false
+        },
+        {
+          "step": 3,
+          "loss": 2.9425,
+          "grad_norm": 37.25,
+          "mem_gb": 21.46,
+          "time_s": 1.93,
+          "nan": false
+        },
+        {
+          "step": 4,
+          "loss": 1.8606,
+          "grad_norm": 30.375,
+          "mem_gb": 21.46,
+          "time_s": 1.93,
+          "nan": false
+        },
+        {
+          "step": 5,
+          "loss": 3.0441,
+          "grad_norm": 38.5,
+          "mem_gb": 21.46,
+          "time_s": 4.05,
+          "nan": false
+        }
+      ],
+      "error": null,
+      "params_m": 2127.5,
+      "mem_after_load_gb": 4.28,
+      "peak_mem_gb": 21.46,
+      "any_nan": false
+    }
+  ]
+}
