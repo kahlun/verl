@@ -575,7 +575,7 @@ class OmniSequenceShardCollator:
         return batch
 
 
-@EngineRegistry.register(model_type="language_model", backend=["veomni"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["veomni"], device=["cuda", "npu", "xpu"])
 class VeOmniEngineWithLMHead(VeOmniEngine, FSDPEngineWithLMHead):
     def prepare_model_inputs(self, micro_batch: TensorDict):
         # TODO: Cannot work properly for qwen_vl ulysses
