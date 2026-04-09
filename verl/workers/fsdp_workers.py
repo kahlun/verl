@@ -56,7 +56,6 @@ from verl.utils.device import (
     get_device_name,
     get_nccl_backend,
     get_torch_device,
-    is_xpu_available,
     set_expandable_segments,
 )
 from verl.utils.flops_counter import FlopsCounter
@@ -406,10 +405,6 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         if self.ulysses_sequence_parallel_size > 1 and hasattr(actor_model_config, "vision_config"):
             actor_model_config.vision_config._attn_implementation = "eager"
 
-        # XPU SDPA has a bug where bool attention masks with all-False rows (left-padded queries)
-        # produce NaN outputs due to softmax(all -inf) in bfloat16. Use eager attention to work around.
-        if is_xpu_available:
-            actor_model_config._attn_implementation = "eager"
 
         # patch for qwen2.5-vl: when using flash_attention_3, set vision tower to use flash_attention_2
         # because the vision tower does not support flash_attention_3
@@ -1447,10 +1442,6 @@ class CriticWorker(Worker, DistProfilerExtension):
         if self.ulysses_sequence_parallel_size > 1 and hasattr(critic_model_config, "vision_config"):
             critic_model_config.vision_config._attn_implementation = "eager"
 
-        # XPU SDPA has a bug where bool attention masks with all-False rows (left-padded queries)
-        # produce NaN outputs due to softmax(all -inf) in bfloat16. Use eager attention to work around.
-        if is_xpu_available:
-            critic_model_config._attn_implementation = "eager"
 
         critic_model_config.num_labels = 1
         # patch for kimi-vl
