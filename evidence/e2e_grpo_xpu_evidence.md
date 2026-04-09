@@ -70,3 +70,40 @@ step=20 | loss=8.63e-07 | grad_norm=7.62e-05 | rollout=8.9s  | train=4.9s
 Loss decreasing (1.34e-06 → 8.63e-07), training stable. ✓
 
 Full log: `evidence/t1_1_grpo_1gpu.log`
+
+---
+
+## Test: SFT 2-GPU, Qwen2.5-0.5B-Instruct, GSM8K, 3 steps
+
+**Date:** 2026-04-09
+**Backend:** FSDP, 2× Intel Arc Pro B60, `ZE_AFFINITY_MASK=0,1`, `CCL_ATL_SHM=1`
+
+```
+step=1 | train/loss=0.618 | grad_norm=22.7  | xpu:0 + xpu:1 (FSDP sharded)
+step=2 | train/loss=3.552 | grad_norm=140.2
+step=3 | train/loss=3.588 | grad_norm=62.9  | val/loss=2.620
+```
+
+Checkpoint saved: `global_step_3/model_world_size_2_rank_0.pt` + `rank_1.pt` ✓
+
+Full log: `evidence/t2_2_sft_2gpu.log`
+
+---
+
+## Test: Attention Verification
+
+**Date:** 2026-04-09
+
+```python
+from verl.utils.device import get_default_attention_implementation
+get_default_attention_implementation()  # → "sdpa"
+```
+
+- `is_xpu_available = True` ✓
+- `get_default_attention_implementation() = "sdpa"` (not "eager") ✓
+- Model loaded with `attn_implementation="sdpa"` ✓
+- Forward pass: no NaN, logits shape `[1, 64, 151936]` ✓
+
+**What this means:** verl on XPU uses Intel's SYCL-TLA Flash kernel (built into PyTorch, dispatched via `F.scaled_dot_product_attention`).
+Not the 2017 naive O(S²) matmul ("eager"). Not the CUDA-only `flash_attn` C++ package.
+PyTorch's built-in SDPA — works on any backend (CUDA, XPU, MPS) with no extra package.
