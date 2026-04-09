@@ -56,6 +56,19 @@ is_npu_available = is_torch_npu_available()
 is_xpu_available = is_torch_xpu_available()
 
 
+def get_default_attention_implementation() -> str:
+    """Get default attention implementation for current device.
+
+    Returns:
+        str: "sdpa" for XPU (F.sdpa dispatches to Intel SYCL-TLA Flash kernel),
+             "flash_attention_2" otherwise (CUDA/NPU use Tri Dao's flash_attn).
+    """
+    if is_xpu_available:
+        return "sdpa"
+    else:
+        return "flash_attention_2"
+
+
 def get_resource_name() -> str:
     """Function that return ray resource name based on the device type.
     Returns:
