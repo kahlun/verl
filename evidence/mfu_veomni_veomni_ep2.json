@@ -1,0 +1,29 @@
+{
+  "mode": "veomni_ep2",
+  "world_size": 2,
+  "bs_per_gpu": 4,
+  "global_bs": 8,
+  "seq_len": 512,
+  "model_params_M": 2.6,
+  "avg_step_time_s": 0.2998,
+  "global_tok_s": 13663,
+  "per_gpu_tok_s": 6831,
+  "global_tflops": 0.21,
+  "per_gpu_tflops": 0.11,
+  "mfu_pct": 0.03,
+  "peak_mem_gb": 0.12,
+  "loss_last": 11.9168,
+  "step_times": [
+    0.2997,
+    0.2994,
+    0.3003,
+    0.2993,
+    0.2996,
+    0.2992,
+    0.3008,
+    0.299,
+    0.3007,
+    0.3
+  ],
+  "a100_peak_bf16_tflops": 312.0
+}

@@ -1,0 +1,30 @@
+{
+  "mode": "veomni_sp2",
+  "world_size": 2,
+  "bs_per_gpu": 4,
+  "global_bs": 8,
+  "seq_len": 512,
+  "model_params_M": 494.0,
+  "avg_step_time_s": 0.1915,
+  "global_tok_s": 10695,
+  "per_gpu_tok_s": 5348,
+  "global_tflops": 31.7,
+  "per_gpu_tflops": 15.85,
+  "mfu_pct": 5.08,
+  "peak_mem_gb": 10.56,
+  "loss_last": 8.829,
+  "step_times": [
+    0.1875,
+    0.1877,
+    0.1881,
+    0.1895,
+    0.1905,
+    0.1903,
+    0.1902,
+    0.1901,
+    0.1887,
+    0.2122
+  ],
+  "a100_peak_bf16_tflops": 312.0,
+  "note": "SP splits 1 batch: throughput \u2260 DP\u00d7world; GPU-hours = 2\u00d7 baseline for same tokens"
+}

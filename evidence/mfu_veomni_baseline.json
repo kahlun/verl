@@ -1,0 +1,29 @@
+{
+  "mode": "baseline",
+  "world_size": 1,
+  "bs_per_gpu": 4,
+  "global_bs": 4,
+  "seq_len": 512,
+  "model_params_M": 494.0,
+  "avg_step_time_s": 0.0919,
+  "global_tok_s": 22293,
+  "per_gpu_tok_s": 22293,
+  "global_tflops": 66.08,
+  "per_gpu_tflops": 66.08,
+  "mfu_pct": 21.18,
+  "peak_mem_gb": 10.27,
+  "loss_last": 8.089,
+  "step_times": [
+    0.092,
+    0.0933,
+    0.0917,
+    0.0916,
+    0.0916,
+    0.0916,
+    0.0915,
+    0.0915,
+    0.0918,
+    0.0921
+  ],
+  "a100_peak_bf16_tflops": 312.0
+}
