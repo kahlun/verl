@@ -37,6 +37,7 @@ _DEVICE_FLOPS = {
     "910B": 354e12,
     "Ascend910": 354e12,
     "RTX 3070 Ti": 21.75e12,
+    "Arc(TM) Pro B60": 96e12,  # Intel Battlemage BMG-G21, 160 Xe2-cores @ ~2.35GHz, BF16 XMX
 }
 
 
@@ -214,7 +215,7 @@ def _estimate_qwen3_vl_moe_flops(config, tokens_sum, batch_seqlens, delta_time, 
 
 def _estimate_qwen3_vit_flop(images_seqlens, config):
     """
-    Estimate the FLOPS of the vision encoder for Qwen3-VL
+    Estimate the FLOPS of the vision encoder for Qwen2-VL / Qwen3-VL
     """
 
     if config is None:
@@ -225,15 +226,16 @@ def _estimate_qwen3_vit_flop(images_seqlens, config):
     depth = config.depth
 
     dim = config.hidden_size
-    mlp_hidden_dim = config.intermediate_size
-    out_hidden_size = config.out_hidden_size
+    mlp_hidden_dim = getattr(config, "intermediate_size", dim * 4)
+    out_hidden_size = getattr(config, "out_hidden_size", dim)
 
     spatial_merge_size = config.spatial_merge_size
 
     head_dim = dim // num_heads
 
     # every vision token's patch_embed comes from a conv of (C, T, H, W) -> (dim,)
-    patch_embed_N = dim * config.in_channels * config.temporal_patch_size * config.patch_size * config.patch_size
+    in_channels = getattr(config, "in_channels", 3)
+    patch_embed_N = dim * in_channels * config.temporal_patch_size * config.patch_size * config.patch_size
     # Qwen3 VL vision mlp does not use GLU, thus 2.
     mlp_N = dim * mlp_hidden_dim * 2
     attn_linear_N = dim * (4 * dim)  # qkv and output proj

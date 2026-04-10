@@ -35,6 +35,7 @@ from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.device import get_device_name, is_npu_available, set_expandable_segments
 from verl.utils.distributed import initialize_global_process_group_ray, set_numa_affinity
 from verl.utils.flops_counter import FlopsCounter
+from verl.utils.import_utils import import_external_libs
 from verl.utils.memory_utils import aggressive_empty_cache
 from verl.utils.metric.utils import Metric
 from verl.utils.profiler import DistProfiler, DistProfilerExtension, ProfilerConfig, log_gpu_memory_usage
@@ -116,7 +117,6 @@ class TrainingWorker(Worker, DistProfilerExtension):
         self.engine_config.use_remove_padding = self.model_config.get("use_remove_padding", False)
         self.engine_config.use_fused_kernels = self.model_config.get("use_fused_kernels", False)
 
-        # TODO: add DistProfilerExtension
         self.profiler_config = self.config.profiler_config
         if self.profiler_config is not None:
             self.profiler_tool_config = self.profiler_config.tool_config.get(self.profiler_config.tool, {})
@@ -328,6 +328,7 @@ class TrainingWorker(Worker, DistProfilerExtension):
         return output
 
     @register(dispatch_mode=make_nd_compute_dataproto_dispatch_fn(mesh_name="train"), blocking=False)
+    @DistProfiler.annotate(color="red", role="train_batch")
     def train_batch(self, data: TensorDict) -> TensorDict:
         assert self.loss_fn is not None, "loss function can't be None when calling train_batch"
         assert not self.engine_config.forward_only, "Can't run `train_batch` when forward_only is in the engine config."
@@ -619,6 +620,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             backend = checkpoint_engine_config.backend
             bucket_size = checkpoint_engine_config.update_weights_bucket_megabytes << 20
             engine_kwargs = checkpoint_engine_config.engine_kwargs.get(backend, {})
+            # If custom_backend_module is set, import it so plugins can register
+            # in CheckpointEngineRegistry before the backend is instantiated.
+            import_external_libs(checkpoint_engine_config.custom_backend_module or None)
             self.checkpoint_engine = CheckpointEngineRegistry.new(
                 backend, is_master=(torch.distributed.get_rank() == 0), bucket_size=bucket_size, **engine_kwargs
             )
