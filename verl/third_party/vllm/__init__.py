@@ -16,7 +16,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from packaging import version as vs
 
-from verl.utils.device import is_npu_available
+from verl.utils.device import is_npu_available, is_xpu_available
 from verl.utils.import_utils import is_sglang_available
 
 
@@ -40,6 +40,12 @@ if package_version is None:
         )
 elif is_npu_available:
     # sleep_mode=2 is not supported on vllm-ascend for now, will remove this restriction when this ability is ready.
+    VLLM_SLEEP_LEVEL = 1
+    from vllm import LLM
+    from vllm.distributed import parallel_state
+elif is_xpu_available:
+    # XPU vLLM is a dev build (version ~0.1.dev*) that reports a version before 0.7.0.
+    # Bypass the version gate — the XPU vLLM fork implements the same API as 0.7.0+.
     VLLM_SLEEP_LEVEL = 1
     from vllm import LLM
     from vllm.distributed import parallel_state
