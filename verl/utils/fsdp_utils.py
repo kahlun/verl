@@ -560,6 +560,14 @@ def apply_fsdp2(model, fsdp_kwargs, config):
     with maybe_patch_fsdp_module(model):
         fully_shard(model, **fsdp_kwargs)  # fsdp2 will not reshard_after_forward for root module
 
+    # Auto-apply backend-specific workarounds
+    from verl.utils.device import is_xpu_available
+
+    if is_xpu_available:
+        # oneCCL (xccl backend) doesn't support ReduceOp.AVG in reduce_scatter
+        # Force SUM reduction with manual division instead
+        model.set_force_sum_reduction_for_comms(True)
+
 
 def get_shard_placement_fn(fsdp_size):
     """Choose the dimension that can divide fsdp_size to avoid padding"""
