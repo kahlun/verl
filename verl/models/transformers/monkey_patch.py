@@ -23,6 +23,14 @@ import torch
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
 from transformers.modeling_utils import PreTrainedModel
 
+from verl.utils.device import is_xpu_available
+
+# On XPU, replace the HF flash_attention_forward (which requires the CUDA-only
+# flash_attn package) with our SDPA-based equivalent.  This single override
+# makes _ulysses_flash_attention_forward and the global monkey-patch at the
+# bottom of this file work on XPU without any additional code changes.
+if is_xpu_available:
+    from verl.models.transformers.xpu_attn import xpu_flash_attention_forward as _flash_attention_forward  # noqa: F811
 from verl.utils.import_utils import is_trl_available
 from verl.utils.transformers_compat import is_transformers_version_in_range
 from verl.utils.ulysses import (
@@ -402,6 +410,8 @@ def apply_monkey_patch(
             Qwen2_5_VLAttention.forward = qwen2_vl_attn_forward
             Qwen2VLAttention.forward = qwen2_vl_attn_forward
             print(f"Monkey patch {model.__class__.__name__} attention layer")
+            if is_xpu_available:
+                print("  [XPU] Using per-sequence SDPA fallback for packed VLM attention")
 
         # Step 3: patch input for multimodal sequence parallelism
         if ulysses_sp_size > 1:
@@ -464,6 +474,8 @@ def apply_monkey_patch(
 
             Glm4vTextAttention.forward = glm4v_attn_forward
             print(f"Monkey patch {model.__class__.__name__} attention layer")
+            if is_xpu_available:
+                print("  [XPU] Using per-sequence SDPA fallback for packed VLM attention")
 
         # Step 3: patch input for multimodal sequence parallelism
         if ulysses_sp_size > 1:
@@ -471,11 +483,13 @@ def apply_monkey_patch(
 
     elif model.config.model_type == "kimi_vl":
         if use_remove_padding or ulysses_sp_size > 1:
-            # TODO: Changes need to be made when transformers are adapted.
+            # kimi_vl.py redirects _flash_attention_forward to xpu_flash_attention_forward on XPU
             from verl.models.transformers.kimi_vl import _ulysses_flash_attn_forward
 
             module.DeepseekV3FlashAttention2.forward = _ulysses_flash_attn_forward
             print("Monkey patch FlashAttention2.forward in KimiVL")
+            if is_xpu_available:
+                print("  [XPU] Using xpu_flash_attention_forward for KimiVL attention")
 
         if ulysses_sp_size > 1:
             patch_vlm_for_ulysses_input_slicing(module.DeepseekV3ForCausalLM)

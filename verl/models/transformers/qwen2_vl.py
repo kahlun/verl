@@ -28,7 +28,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
 )
 from transformers.utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10
 
-from verl.utils.device import is_npu_available
+from verl.utils.device import is_npu_available, is_xpu_available
 from verl.utils.transformers_compat import is_transformers_version_in_range, unpack_visual_output
 from verl.utils.ulysses import (
     gather_heads_scatter_seq,
@@ -57,6 +57,16 @@ if is_npu_available:
     _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
     _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
     _flash_use_top_left_mask = flash_attn_supports_top_left_mask()
+
+if is_xpu_available:
+    from verl.models.transformers.xpu_attn import xpu_flash_attention_forward as _flash_attention_forward
+    from verl.models.transformers.xpu_attn import xpu_varlen_sdpa as flash_attn_varlen_func
+
+# XPU/other: Define default values when flash_attn is not available
+if not is_flash_attn_2_available() and not is_npu_available:
+    _flash_supports_window_size = False
+    _flash_supports_deterministic = False
+    _flash_use_top_left_mask = False
 
 _flash_deterministic_enabled = os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
 
@@ -351,7 +361,8 @@ def _get_input_embeds(
     inputs_embeds = model.get_input_embeddings()(input_ids)
     if pixel_values is not None:
         pixel_values = pixel_values.type(model.visual.dtype)
-        image_embeds, _ = unpack_visual_output(model.visual(pixel_values, grid_thw=image_grid_thw))
+        with torch.backends.cudnn.flags(enabled=False):
+            image_embeds, _ = unpack_visual_output(model.visual(pixel_values, grid_thw=image_grid_thw))
         n_image_tokens = (input_ids == model.config.image_token_id).sum().item()
         n_image_features = image_embeds.shape[0]
         if n_image_tokens != n_image_features:
@@ -369,7 +380,8 @@ def _get_input_embeds(
 
     if pixel_values_videos is not None:
         pixel_values_videos = pixel_values_videos.type(model.visual.dtype)
-        video_embeds, _ = unpack_visual_output(model.visual(pixel_values_videos, grid_thw=video_grid_thw))
+        with torch.backends.cudnn.flags(enabled=False):
+            video_embeds, _ = unpack_visual_output(model.visual(pixel_values_videos, grid_thw=video_grid_thw))
         n_video_tokens = (input_ids == model.config.video_token_id).sum().item()
         n_video_features = video_embeds.shape[0]
         if n_video_tokens != n_video_features:
@@ -385,12 +397,15 @@ def _get_input_embeds(
         video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-    if pixel_values is None and pixel_values_videos is None:  # handle mixed text-image data
+    # handle mixed text-image data (skip during inference)
+    if pixel_values is None and pixel_values_videos is None and torch.is_grad_enabled():
         config = model.config.vision_config
         patch_dim = config.in_channels * config.temporal_patch_size * config.patch_size**2
         pixel_values = torch.zeros((16, patch_dim), dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         image_grid_thw = torch.tensor([[1, 4, 4]], dtype=torch.long, device=inputs_embeds.device)
-        image_embeds = model.visual(pixel_values, grid_thw=image_grid_thw)
+        with torch.backends.cudnn.flags(enabled=False):
+            image_embeds = model.visual(pixel_values, grid_thw=image_grid_thw)
+        # non-in-place to avoid leaf variable error with gradient checkpointing
         inputs_embeds = inputs_embeds + 0.0 * image_embeds.mean()
 
     if attention_mask is not None:
