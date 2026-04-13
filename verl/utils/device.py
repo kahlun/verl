@@ -71,13 +71,16 @@ is_xpu_available = is_torch_xpu_available()
 def get_default_attention_implementation() -> str:
     """Get default attention implementation for current device.
 
-    XPU uses kernels-community/flash-attn2 via HF transformers >=4.47
-    (see https://github.com/huggingface/transformers/pull/41956).
-    Requires: pip install kernels
+    XPU uses SDPA (Scaled Dot Product Attention) which dispatches to Intel's
+    SYCL-TLA Flash kernel automatically — 10-22x faster than eager.
+    flash_attention_2 via HF kernels-community/flash-attn2 is available but
+    its varlen backward is not yet supported on XPU.
 
     Returns:
-        str: "flash_attention_2" for all accelerators.
+        str: "sdpa" for XPU, "flash_attention_2" for CUDA/NPU.
     """
+    if is_xpu_available:
+        return "sdpa"
     return "flash_attention_2"
 
 
