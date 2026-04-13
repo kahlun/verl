@@ -69,6 +69,8 @@ def set_death_signal():
 def get_device_uuid(device_id: int) -> str:
     from vllm.platforms import current_platform
 
+    from verl.utils.device import is_xpu_available
+
     # Convert torch.npu.current_device to its corresponding ASCEND_RT_VISIBLE_DEVICES.
     if is_npu_available:
         if os.getenv("ASCEND_RT_VISIBLE_DEVICES") is not None:
@@ -77,6 +79,10 @@ def get_device_uuid(device_id: int) -> str:
             return "NPU-" + npu_visible_devices[device_id]
         else:
             return f"NPU-{device_id}"
+    elif is_xpu_available:
+        # XPUPlatform.get_device_uuid() may not be implemented; use device_id
+        ze_mask = os.getenv("ZE_AFFINITY_MASK", "")
+        return f"XPU-{ze_mask.replace(',', '_') or device_id}"
     else:
         return current_platform.get_device_uuid(device_id)
 

@@ -58,8 +58,13 @@ def set_numa_affinity():
 
 
 def initialize_global_process_group(timeout_second=36000):
+    backend = get_nccl_backend()
+    device_name = get_device_name()
+    # XPU requires composite backend so both CPU and XPU tensors are supported
+    if device_name == "xpu":
+        backend = f"cpu:gloo,xpu:{backend}"
     torch.distributed.init_process_group(
-        get_nccl_backend(),
+        backend,
         timeout=timedelta(seconds=timeout_second),
         init_method=os.environ.get("DIST_INIT_METHOD", None),
     )
@@ -75,6 +80,18 @@ def initialize_global_process_group(timeout_second=36000):
 def destroy_global_process_group():
     if torch.distributed.is_initialized():
         torch.distributed.destroy_process_group()
+
+
+def all_reduce_avg(tensor, group=None):
+    """All-reduce with AVG, using SUM + division on backends that lack ReduceOp.AVG (e.g. xccl/oneCCL)."""
+    from verl.utils.device import is_xpu_available
+
+    if is_xpu_available:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.SUM, group=group)
+        tensor /= torch.distributed.get_world_size(group)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.AVG, group=group)
+    return tensor
 
 
 def initialize_global_process_group_ray(timeout_second=None, backend=None):

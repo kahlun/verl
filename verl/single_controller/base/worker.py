@@ -275,6 +275,7 @@ class Worker(WorkerHelper):
             # environment variable for each actor, unless
             # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set,
             # so we need to set local rank when the flag is set.
+            # Ray's IntelGPUAccelerator registers XPU as "GPU", same as CUDA.
             device_name = "NPU" if is_npu_available else "GPU"
             local_rank = ray.get_runtime_context().get_accelerator_ids()[device_name][0]
             os.environ["LOCAL_RANK"] = local_rank
