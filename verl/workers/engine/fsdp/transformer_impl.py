@@ -38,7 +38,7 @@ from verl.utils.activation_offload import enable_activation_offloading
 from verl.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
 from verl.utils.dataset.dataset_utils import DatasetPadMode
 from verl.utils.debug import log_gpu_memory_usage
-from verl.utils.device import get_device_id, get_device_name
+from verl.utils.device import get_device_id, get_device_name, is_xpu_available
 from verl.utils.fsdp_utils import (
     CPUOffloadPolicy,
     FSDPModule,
@@ -804,8 +804,6 @@ class FSDPEngine(BaseEngine):
             )
             # XPU: eagerly materialize to list to avoid FSDP collective deadlock
             # with oneCCL/xccl backend on multi-GPU setups.
-            from verl.utils.device import is_xpu_available
-
             if is_xpu_available:
                 per_tensor_param = list(per_tensor_param)
 

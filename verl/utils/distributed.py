@@ -21,7 +21,7 @@ from datetime import timedelta
 import ray
 import torch.distributed
 
-from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available, is_xpu_available
 from verl.utils.net_utils import is_ipv6
 
 
@@ -84,8 +84,6 @@ def destroy_global_process_group():
 
 def all_reduce_avg(tensor, group=None):
     """All-reduce with AVG, using SUM + division on backends that lack ReduceOp.AVG (e.g. xccl/oneCCL)."""
-    from verl.utils.device import is_xpu_available
-
     if is_xpu_available:
         torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.SUM, group=group)
         tensor /= torch.distributed.get_world_size(group)
@@ -128,8 +126,6 @@ def stateless_init_process_group(master_address, master_port, rank, world_size, 
 
     from torch.distributed import TCPStore
     from vllm.distributed.utils import StatelessProcessGroup
-
-    from verl.utils.device import is_npu_available
 
     if is_npu_available:
         from vllm_ascend.distributed.device_communicators.pyhccl import PyHcclCommunicator as PyNcclCommunicator

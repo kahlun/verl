@@ -7,25 +7,25 @@
 # vLLM >= 0.17 with XPU support must be built from source:
 #   VLLM_TARGET_DEVICE=xpu pip install --no-build-isolation -v .
 #
-# flash-attn CUDA package is NOT needed — XPU uses HF kernels-community/flash-attn2
-# (auto-downloaded by transformers when attn_implementation="flash_attention_2")
-kernels>=0.13.0
-dpctl
+# flash-attn CUDA package is NOT needed — XPU uses SDPA which dispatches
+# to Intel's SYCL-TLA Flash kernel automatically (10-22x faster than eager).
 accelerate
 codetiming
 datasets
 dill
+dpctl
+einops
 hydra-core
 numpy<2.0.0
+packaging>=20.0
 pandas
 peft>=0.15.2
 pyarrow>=15.0.0
 pybind11
 pylatexenc
-tensordict>=0.8.0,<=0.10.0,!=0.9.0
 ray[default]
-wandb
-torchdata
-einops
-packaging>=20.0
 tensorboard
+tensordict>=0.8.0,<=0.10.0,!=0.9.0
+torchdata
+transformers
+wandb
