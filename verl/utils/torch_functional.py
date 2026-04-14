@@ -933,23 +933,20 @@ def distributed_mean_max_min_std(local_tensor, compute_max=True, compute_min=Tru
     global_mean = local_sum / local_num
 
     if compute_max:
-        local_max = torch.max(local_tensor)
-        # XCCL ReduceOp.MAX is broken (returns SUM); route through CPU/gloo
-        if is_xpu_available:
-            local_max = local_max.cpu()
-        torch.distributed.all_reduce(local_max, op=torch.distributed.ReduceOp.MAX)
-        if is_xpu_available:
-            local_max = local_max.to(get_device_name())
+        local_max = torch.max(local_tensor).reshape(1)
+        # XCCL ReduceOp.MAX is broken (returns SUM, torch-xpu-ops#3020); use all_gather+max
+        from verl.utils.distributed import all_reduce_max
+
+        all_reduce_max(local_max)
     else:
         local_max = None
 
     if compute_min:
-        local_min = torch.min(local_tensor)
-        if is_xpu_available:
-            local_min = local_min.cpu()
-        torch.distributed.all_reduce(local_min, op=torch.distributed.ReduceOp.MIN)
-        if is_xpu_available:
-            local_min = local_min.to(get_device_name())
+        local_min = torch.min(local_tensor).reshape(1)
+        # XCCL ReduceOp.MIN also broken on XCCL; use all_gather+min
+        from verl.utils.distributed import all_reduce_min
+
+        all_reduce_min(local_min)
     else:
         local_min = None
 

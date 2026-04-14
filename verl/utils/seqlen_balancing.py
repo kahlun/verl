@@ -400,10 +400,11 @@ def rearrange_micro_batches(
         # used to support pp
         num_micro_batches = max(min_num_micro_batch, num_micro_batches)
     if dist.is_initialized() and same_micro_num_in_dp and dp_group is not None:
-        # XCCL ReduceOp.MAX is broken (returns SUM); use CPU tensor so gloo handles it
-        _device = "cpu" if is_xpu_available else get_device_name()
-        num_micro_batches = torch.tensor([num_micro_batches], device=_device)
-        dist.all_reduce(num_micro_batches, op=dist.ReduceOp.MAX, group=dp_group)
+        # XCCL ReduceOp.MAX is broken (returns SUM, torch-xpu-ops#3020); use all_gather+max
+        from verl.utils.distributed import all_reduce_max
+
+        num_micro_batches = torch.tensor([num_micro_batches], device=get_device_name())
+        all_reduce_max(num_micro_batches, group=dp_group)
         num_micro_batches = num_micro_batches.cpu().item()
     if num_batches_divided_by is not None:
         num_micro_batches = roundup_divisible(num_micro_batches, num_batches_divided_by)

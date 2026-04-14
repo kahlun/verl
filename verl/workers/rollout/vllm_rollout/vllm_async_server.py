@@ -35,7 +35,7 @@ from vllm.usage.usage_lib import UsageContext
 from vllm.v1.engine.async_llm import AsyncLLM
 
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available, is_xpu_available
+from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available, is_xpu_available, sanitize_xpu_device_selector
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
@@ -108,6 +108,7 @@ class vLLMHttpServer:
             cuda_visible_devices (str): cuda visible devices.
         """
         os.environ[get_visible_devices_keyword()] = cuda_visible_devices
+        sanitize_xpu_device_selector()  # fix Ray's bare-ID ONEAPI_DEVICE_SELECTOR for SYCL
 
         self.config = self._init_config(config)
         self.model_config = self._init_model_config(model_config)

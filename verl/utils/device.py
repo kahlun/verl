@@ -114,8 +114,31 @@ def get_visible_devices_keyword() -> str:
     elif is_npu_available:
         return "ASCEND_RT_VISIBLE_DEVICES"
     elif is_xpu_available:
-        return "ONEAPI_DEVICE_SELECTOR"  # matches Ray's IntelGPUAcceleratorManager
+        return "ZE_AFFINITY_MASK"  # bare IDs work; ONEAPI_DEVICE_SELECTOR needs level_zero: prefix
     return "CUDA_VISIBLE_DEVICES"
+
+
+def sanitize_xpu_device_selector():
+    """Fix ONEAPI_DEVICE_SELECTOR if Ray set it with bare device IDs.
+
+    Ray's IntelGPUAcceleratorManager sets ONEAPI_DEVICE_SELECTOR to bare IDs
+    (e.g. "0"), but SYCL requires "level_zero:0" format.  Convert the value
+    to the correct format and ensure ZE_AFFINITY_MASK is also set.
+    """
+    if not is_xpu_available:
+        return
+    selector = os.environ.get("ONEAPI_DEVICE_SELECTOR", "")
+    if selector and ":" not in selector:
+        # Bare ID(s) like "0" or "0,1" — SYCL can't parse these
+        if not os.environ.get("ZE_AFFINITY_MASK"):
+            os.environ["ZE_AFFINITY_MASK"] = selector
+        os.environ["ONEAPI_DEVICE_SELECTOR"] = f"level_zero:{selector}"
+        logger.info(
+            "Sanitized ONEAPI_DEVICE_SELECTOR: %r -> %r (ZE_AFFINITY_MASK=%s)",
+            selector,
+            os.environ["ONEAPI_DEVICE_SELECTOR"],
+            os.environ.get("ZE_AFFINITY_MASK"),
+        )
 
 
 def get_device_name() -> str:

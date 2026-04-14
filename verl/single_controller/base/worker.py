@@ -26,6 +26,7 @@ from verl.utils.device import (
     get_torch_device,
     get_visible_devices_keyword,
     is_npu_available,
+    sanitize_xpu_device_selector,
 )
 
 from .decorator import Dispatch, Execute, register
@@ -280,6 +281,9 @@ class Worker(WorkerHelper):
             local_rank = ray.get_runtime_context().get_accelerator_ids()[device_name][0]
             os.environ["LOCAL_RANK"] = local_rank
             get_torch_device().set_device(int(local_rank))
+
+        # Fix Ray's bare-ID ONEAPI_DEVICE_SELECTOR for XPU/SYCL compatibility
+        sanitize_xpu_device_selector()
 
     def _configure_with_store(self, store: dict):
         """

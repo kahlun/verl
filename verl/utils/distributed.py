@@ -92,6 +92,30 @@ def all_reduce_avg(tensor, group=None):
     return tensor
 
 
+def all_reduce_max(tensor, group=None):
+    """All-reduce MAX via all_gather + local max. XCCL ReduceOp.MAX returns SUM (torch-xpu-ops#3020)."""
+    if is_xpu_available:
+        ws = torch.distributed.get_world_size(group)
+        gathered = [torch.empty_like(tensor) for _ in range(ws)]
+        torch.distributed.all_gather(gathered, tensor, group=group)
+        tensor.copy_(torch.stack(gathered, dim=0).max(dim=0).values)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.MAX, group=group)
+    return tensor
+
+
+def all_reduce_min(tensor, group=None):
+    """All-reduce MIN via all_gather + local min. XCCL ReduceOp.MIN returns wrong results."""
+    if is_xpu_available:
+        ws = torch.distributed.get_world_size(group)
+        gathered = [torch.empty_like(tensor) for _ in range(ws)]
+        torch.distributed.all_gather(gathered, tensor, group=group)
+        tensor.copy_(torch.stack(gathered, dim=0).min(dim=0).values)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.MIN, group=group)
+    return tensor
+
+
 def initialize_global_process_group_ray(timeout_second=None, backend=None):
     # in current ray environment, LOCAL_RANK is always zero.
 
