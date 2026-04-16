@@ -101,7 +101,8 @@ def test_subprocess_no_crash():
         env=env, capture_output=True, text=True, timeout=30,
     )
     ok = result.returncode == 0 and "XPU devices:" in result.stdout
-    print(f"  Subprocess with ZE_AFFINITY_MASK=0: rc={result.returncode} {result.stdout.strip()} ... {'PASS' if ok else 'FAIL'}")
+    status = "PASS" if ok else "FAIL"
+    print(f"  Subprocess with ZE_AFFINITY_MASK=0: rc={result.returncode} {result.stdout.strip()} ... {status}")
     if not ok and result.stderr:
         print(f"    stderr: {result.stderr[:200]}")
     return ok
@@ -144,7 +145,8 @@ def test_subprocess_sanitized_selector():
         env=env, capture_output=True, text=True, timeout=30,
     )
     ok = result.returncode == 0 and "XPU devices:" in result.stdout
-    print(f"  ONEAPI_DEVICE_SELECTOR=level_zero:0: rc={result.returncode} {result.stdout.strip()} ... {'PASS' if ok else 'FAIL'}")
+    status = "PASS" if ok else "FAIL"
+    print(f"  ONEAPI_DEVICE_SELECTOR=level_zero:0: rc={result.returncode} {result.stdout.strip()} ... {status}")
     return ok
 
 
