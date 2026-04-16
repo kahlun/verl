@@ -562,8 +562,18 @@ def apply_fsdp2(model, fsdp_kwargs, config):
 
     # oneCCL (xccl) doesn't support ReduceOp.AVG in reduce_scatter;
     # force SUM reduction with manual division instead.
+    # set_force_sum_reduction_for_comms was added in PyTorch 2.5 (FSDP2);
+    # guard with hasattr so this doesn't crash on older builds.
     if is_xpu_available:
-        model.set_force_sum_reduction_for_comms(True)
+        if hasattr(model, "set_force_sum_reduction_for_comms"):
+            model.set_force_sum_reduction_for_comms(True)
+        else:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "[XPU] model.set_force_sum_reduction_for_comms not available — "
+                "FSDP reduce_scatter may use ReduceOp.AVG which is broken on xccl. "
+                "Upgrade to PyTorch >= 2.5."
+            )
 
 
 def get_shard_placement_fn(fsdp_size):

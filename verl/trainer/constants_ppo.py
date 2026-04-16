@@ -31,13 +31,10 @@ PPO_RAY_RUNTIME_ENV = {
         # https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/maintenref/envvar/envref_07_0143.html
         "HCCL_HOST_SOCKET_PORT_RANGE": "auto",
         "HCCL_NPU_SOCKET_PORT_RANGE": "auto",
-        # Intel XPU: propagate ONEAPI_DEVICE_SELECTOR to all Ray worker processes.
-        # Ray workers are spawned fresh and do not inherit the shell environment;
-        # without this, vLLM subprocesses get 'level_zero:' (empty after ':')
-        # from Intel setvars.sh and SIGABRT immediately.
-        "ONEAPI_DEVICE_SELECTOR": os.environ.get("ONEAPI_DEVICE_SELECTOR", "level_zero:0,1"),
     },
 }
+
+
 def get_ppo_ray_runtime_env():
     """
     A filter function to return the PPO Ray runtime environment.
@@ -55,13 +52,22 @@ def get_ppo_ray_runtime_env():
         if os.environ.get(key) is not None:
             runtime_env["env_vars"].pop(key, None)
 
-    # Intel XPU: always explicitly propagate ONEAPI_DEVICE_SELECTOR to Ray workers.
-    # Ray workers are spawned as fresh processes and do NOT inherit the parent shell
-    # environment. The filter above would drop keys already in os.environ, but for
-    # ONEAPI_DEVICE_SELECTOR that is exactly the value we need workers to receive.
-    oneapi_selector = os.environ.get("ONEAPI_DEVICE_SELECTOR")
-    if oneapi_selector:
-        runtime_env["env_vars"]["ONEAPI_DEVICE_SELECTOR"] = oneapi_selector
+    # Intel XPU: propagate ONEAPI_DEVICE_SELECTOR to Ray workers only when running
+    # on XPU.  Ray workers are fresh processes that do not inherit the parent shell
+    # environment; without this, vLLM subprocesses may receive a broken
+    # 'level_zero:' value from Intel setvars.sh and SIGABRT immediately.
+    # We re-insert even if the key was already in os.environ (and thus removed by
+    # the filter above) because workers need to receive the *current* value.
+    try:
+        import torch as _torch
+        _xpu_active = hasattr(_torch, "xpu") and _torch.xpu.is_available()
+    except Exception:
+        _xpu_active = False
+
+    if _xpu_active:
+        oneapi_selector = os.environ.get("ONEAPI_DEVICE_SELECTOR")
+        if oneapi_selector:
+            runtime_env["env_vars"]["ONEAPI_DEVICE_SELECTOR"] = oneapi_selector
 
     # Propagate HF_HUB_OFFLINE to prevent vLLM subprocess model inspection hangs.
     hf_offline = os.environ.get("HF_HUB_OFFLINE")

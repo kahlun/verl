@@ -125,11 +125,16 @@ ENV ONEAPI_DEVICE_SELECTOR=level_zero:0,1
 # Ray workers are fresh processes that may not inherit the corrected env from
 # the parent shell — this ensures even deeply nested subprocesses get a valid
 # device selector rather than the broken "level_zero:" value from setvars.sh.
-RUN printf 'import os\n\
-_sel = os.environ.get("ONEAPI_DEVICE_SELECTOR", "")\n\
-if not _sel or _sel.endswith(":"):\n\
-    os.environ["ONEAPI_DEVICE_SELECTOR"] = "level_zero:0,1"\n' \
-    > /usr/local/lib/python3.12/sitecustomize.py
+# The path is resolved dynamically to support any Python prefix / base image.
+RUN python3 -c "\
+import site, pathlib; \
+lib = pathlib.Path(site.getsitepackages()[0]).parent; \
+(lib / 'sitecustomize.py').write_text(\
+'import os\n' \
+'_sel = os.environ.get(\"ONEAPI_DEVICE_SELECTOR\", \"\")\n' \
+'if not _sel or _sel.endswith(\":\"):\n' \
+'    os.environ[\"ONEAPI_DEVICE_SELECTOR\"] = \"level_zero:0,1\"\n' \
+)"
 
 # --- Verify everything ---
 RUN python3 -m pip list | grep -E "torch|vllm|verl|oneccl|triton" && \

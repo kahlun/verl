@@ -400,12 +400,13 @@ class vLLMHttpServer:
             # pydantic ValidationError (e.g. model inspection failure) contains
             # ArgsKwargs objects that cloudpickle/Ray cannot serialize, causing a
             # secondary "cannot pickle ArgsKwargs" error that hides the real cause.
-            # Convert to a plain RuntimeError so Ray can propagate it cleanly.
+            # Convert to a plain RuntimeError so Ray can propagate it cleanly while
+            # preserving the original traceback via "from e".
             raise RuntimeError(
                 f"vLLM create_engine_config failed (ONEAPI_DEVICE_SELECTOR="
                 f"{os.environ.get('ONEAPI_DEVICE_SELECTOR')!r}, "
                 f"ZE_AFFINITY_MASK={os.environ.get('ZE_AFFINITY_MASK')!r}): {e}"
-            ) from None
+            ) from e
         vllm_config.parallel_config.data_parallel_master_port = self._dp_master_port
 
         fn_args = set(dict(inspect.signature(AsyncLLM.from_vllm_config).parameters).keys())

@@ -93,9 +93,23 @@ def all_reduce_avg(tensor, group=None):
 
 
 def all_reduce_max(tensor, group=None):
-    """All-reduce MAX via all_gather + local max. XCCL ReduceOp.MAX returns SUM (torch-xpu-ops#3020)."""
+    """All-reduce MAX via all_gather + local max.
+
+    XPU workaround: XCCL ReduceOp.MAX returns the element-wise SUM instead of
+    MAX (torch-xpu-ops#3020).  This implementation uses all_gather + a local
+    max reduction as a correct substitute.
+
+    Memory cost: O(world_size * tensor.numel()).  At large world sizes this may
+    be significant; remove once torch-xpu-ops#3020 is fixed upstream.
+    """
     if is_xpu_available:
         ws = torch.distributed.get_world_size(group)
+        if ws > 8:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "all_reduce_max: using all_gather workaround (torch-xpu-ops#3020) "
+                "with world_size=%d — memory cost is O(world_size * tensor_size)", ws
+            )
         gathered = [torch.empty_like(tensor) for _ in range(ws)]
         torch.distributed.all_gather(gathered, tensor, group=group)
         tensor.copy_(torch.stack(gathered, dim=0).max(dim=0).values)
@@ -105,9 +119,23 @@ def all_reduce_max(tensor, group=None):
 
 
 def all_reduce_min(tensor, group=None):
-    """All-reduce MIN via all_gather + local min. XCCL ReduceOp.MIN returns wrong results."""
+    """All-reduce MIN via all_gather + local min.
+
+    XPU workaround: XCCL ReduceOp.MIN returns wrong results
+    (torch-xpu-ops#3020).  This implementation uses all_gather + a local
+    min reduction as a correct substitute.
+
+    Memory cost: O(world_size * tensor.numel()).  At large world sizes this may
+    be significant; remove once torch-xpu-ops#3020 is fixed upstream.
+    """
     if is_xpu_available:
         ws = torch.distributed.get_world_size(group)
+        if ws > 8:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "all_reduce_min: using all_gather workaround (torch-xpu-ops#3020) "
+                "with world_size=%d — memory cost is O(world_size * tensor_size)", ws
+            )
         gathered = [torch.empty_like(tensor) for _ in range(ws)]
         torch.distributed.all_gather(gathered, tensor, group=group)
         tensor.copy_(torch.stack(gathered, dim=0).min(dim=0).values)

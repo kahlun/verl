@@ -51,64 +51,9 @@ if [ -d /workspace ]; then
     mkdir -p "$RAY_TMPDIR"
 fi
 
-python3 << 'XPUPATCH'
-# XPU WORKAROUND — two runtime patches for colocated FSDP+vLLM on Intel XPU.
-#
-# Root cause: XPU has no CuMemAllocator equivalent (CUDA uses a shared memory pool
-# so FSDP and vLLM coordinate ownership; on XPU they see raw driver free memory).
-# Upstream fix in progress: https://github.com/vllm-project/vllm/pull/37149
-# (XpuMemAllocator / transparent sleep mode — requires torch-xpu 2.11, still draft)
-#
-# Patch 1 (vllm/v1/worker/utils.py — request_memory):
-#   vLLM checks free_memory >= requested on startup. When FSDP already occupies the
-#   GPU this fails with ValueError even though FSDP will CPU-offload before inference.
-#   Workaround: skip the ValueError on XPU only.
-#
-# Patch 2 (vllm/v1/worker/gpu_worker.py — profiling assert):
-#   vLLM asserts free memory did not grow during profiling. When FSDP offloads to CPU
-#   during vLLM init, free memory increases, tripping the assert.
-#   Workaround: convert the assert to a no-op on XPU only.
-#   (Same assert hit ROCm: https://github.com/vllm-project/vllm/pull/36720;
-#    xinyu-intel noted "Similar on XPU" but no XPU fix was submitted.)
-#
-# Remove both patches once PR #37149 merges and torch-xpu 2.11 is available.
-
-import pathlib, sys
-vllm_pkg = pathlib.Path("/usr/local/lib/python3.12/dist-packages/vllm")
-if not vllm_pkg.exists():
-    sys.exit(0)
-
-# Patch 1: Skip false OOM in request_memory (L0 context overhead inflates "used" memory)
-f = vllm_pkg / "v1/worker/utils.py"
-src = f.read_text()
-if "xpu_skip" not in src:
-    src = src.replace(
-        "    if init_snapshot.free_memory < requested_memory:\n        raise ValueError(",
-        "    if init_snapshot.free_memory < requested_memory:  # xpu_skip\n"
-        "        import torch as _t\n"
-        "        if not (hasattr(_t, 'xpu') and _t.xpu.is_available()):\n"
-        "            raise ValueError(",
-    )
-    f.write_text(src)
-
-# Patch 2: Skip profiling assert (FSDP offloads to CPU during vLLM init, freeing GPU)
-f2 = vllm_pkg / "v1/worker/gpu_worker.py"
-src2 = f2.read_text()
-if "xpu_skip" not in src2:
-    src2 = src2.replace(
-        "        assert self.init_snapshot.free_memory >= free_gpu_memory, (",
-        "        # xpu_skip: FSDP offloads params during vLLM startup, free memory grows\n"
-        "        if self.init_snapshot.free_memory < free_gpu_memory:\n"
-        "            import torch as _t2\n"
-        "            if not (hasattr(_t2, 'xpu') and _t2.xpu.is_available()):\n"
-        "                assert False, (",
-    )
-    f2.write_text(src2)
-
-print("[XPU] Patched vLLM memory checks for XPU")
-
-
-XPUPATCH
+# Apply XPU-specific vLLM patches via the proper Python module (no source modification).
+# See verl/utils/vllm/xpu_patches.py for details and upstream PR references.
+python3 -c "from verl.utils.vllm import xpu_patches; xpu_patches.apply()"
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \

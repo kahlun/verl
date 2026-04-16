@@ -619,9 +619,16 @@ class FSDPEngine(BaseEngine):
                 if not forward_only:
                     loss.backward()
 
-            # XPU: sync after each micro-batch to prevent kernel queue buildup
+            # XPU: sync after each micro-batch to drain the SYCL kernel queue.
+            # Without this, oneCCL all-reduces in the *next* micro-batch's
+            # backward can collide with in-flight kernels from the current one,
+            # causing a deadlock inside the non-re-entrant oneCCL communicator.
+            # Set VERL_XPU_SYNC_MICROBATCH=0 to disable once profiling confirms
+            # the queue depth is not a bottleneck on your hardware.
             if hasattr(torch, "xpu") and torch.xpu.is_available():
-                torch.xpu.synchronize()
+                import os as _os
+                if _os.environ.get("VERL_XPU_SYNC_MICROBATCH", "1") != "0":
+                    torch.xpu.synchronize()
 
             output_lst.append(meta_info)
 
@@ -802,8 +809,14 @@ class FSDPEngine(BaseEngine):
                 )
                 for name, param in params.items()
             )
-            # XPU: eagerly materialize to list to avoid FSDP collective deadlock
-            # with oneCCL/xccl backend on multi-GPU setups.
+            # XPU: eagerly materialize the generator to a list before iterating.
+            # oneCCL/xccl is not re-entrant: if FSDP's param un-sharding all-gather
+            # is still in-flight when the *next* collective (e.g., from the next
+            # iteration of this loop) is issued, the communicator deadlocks.
+            # Materialising the full list forces all un-shardings to complete
+            # synchronously before any iteration begins, at the cost of a one-time
+            # peak-memory spike proportional to the number of parameters un-sharded.
+            # TODO: remove once oneCCL fixes re-entrancy (file a tracking issue).
             if is_xpu_available:
                 per_tensor_param = list(per_tensor_param)
 

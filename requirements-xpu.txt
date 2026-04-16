@@ -16,7 +16,7 @@ dill
 dpctl
 einops
 hydra-core
-numpy<2.0.0
+numpy
 packaging>=20.0
 pandas
 peft>=0.15.2

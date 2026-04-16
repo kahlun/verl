@@ -432,7 +432,14 @@ def is_support_ipc() -> bool:
     # XPU: SYCL IPC handles have a different format than CUDA — rebuild_ipc()
     # assumes CUDA's 7-arg tuple (index 6 = device_id). Until verl's bucketed
     # weight transfer is adapted for XPU handles, fall back to shared memory.
+    # TODO: implement XPU IPC handle support and remove this fallback.
+    #   Tracking: https://github.com/volcengine/verl/issues/  (file an issue)
     if is_xpu_available:
+        logger.warning(
+            "[XPU] IPC weight transfer not supported — falling back to shared memory. "
+            "This is a known limitation; weight transfer throughput will be lower than "
+            "with direct GPU-GPU IPC. See verl/utils/device.py:is_support_ipc for details."
+        )
         return False
 
     # For other devices (CPU), return False
