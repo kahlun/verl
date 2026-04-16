@@ -123,7 +123,8 @@ def test_subprocess_bare_selector_crashes():
         env=env, capture_output=True, text=True, timeout=30,
     )
     ok = result.returncode != 0  # Should crash
-    print(f"  Bare ONEAPI_DEVICE_SELECTOR=0 subprocess: rc={result.returncode} ... {'PASS (confirmed crash)' if ok else 'FAIL (did not crash?!)'}")
+    status = "PASS (confirmed crash)" if ok else "FAIL (did not crash?!)"
+    print(f"  Bare ONEAPI_DEVICE_SELECTOR=0 subprocess: rc={result.returncode} ... {status}")
     return ok
 
 
