@@ -869,4 +869,5 @@ transfer_queue:
 ray_kwargs:
   ray_init:
     num_cpus: null
+    num_gpus: null
   timeline_json_file: null

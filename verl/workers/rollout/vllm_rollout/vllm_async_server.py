@@ -378,9 +378,34 @@ class vLLMHttpServer:
             await self.run_headless(server_args)
 
     async def run_server(self, args: argparse.Namespace):
+        # Intel XPU: sanitize ONEAPI_DEVICE_SELECTOR for vLLM subprocess spawns
+        sanitize_xpu_device_selector()
+
         engine_args = AsyncEngineArgs.from_cli_args(args)
+
+        # XPU: vLLM detects Ray and selects the "ray" executor backend, which
+        # spawns additional Worker processes each with their own L0 context.
+        # On memory-constrained XPU devices (Arc Pro B60 ≈ 22 GB), the combined
+        # L0 context overhead of FSDP workers + EngineCore + Worker processes
+        # exhausts device memory.  With TP=1 (the common XPU case), force the
+        # "uni" executor so the model runs inside the EngineCore process directly,
+        # avoiding an extra Worker process and its L0 context cost.
+        if is_xpu_available and engine_args.tensor_parallel_size <= 1:
+            engine_args.distributed_executor_backend = "uni"
+
         usage_context = UsageContext.OPENAI_API_SERVER
-        vllm_config = engine_args.create_engine_config(usage_context=usage_context)
+        try:
+            vllm_config = engine_args.create_engine_config(usage_context=usage_context)
+        except Exception as e:
+            # pydantic ValidationError (e.g. model inspection failure) contains
+            # ArgsKwargs objects that cloudpickle/Ray cannot serialize, causing a
+            # secondary "cannot pickle ArgsKwargs" error that hides the real cause.
+            # Convert to a plain RuntimeError so Ray can propagate it cleanly.
+            raise RuntimeError(
+                f"vLLM create_engine_config failed (ONEAPI_DEVICE_SELECTOR="
+                f"{os.environ.get('ONEAPI_DEVICE_SELECTOR')!r}, "
+                f"ZE_AFFINITY_MASK={os.environ.get('ZE_AFFINITY_MASK')!r}): {e}"
+            ) from None
         vllm_config.parallel_config.data_parallel_master_port = self._dp_master_port
 
         fn_args = set(dict(inspect.signature(AsyncLLM.from_vllm_config).parameters).keys())

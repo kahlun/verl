@@ -14,6 +14,11 @@ MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 export CCL_ATL_SHM=${CCL_ATL_SHM:-1}
 export CCL_BUFFER_CACHE=${CCL_BUFFER_CACHE:-0}
 
+# SYCL device selector: must be explicit indices (Ray rejects '*').
+# Always override — the Dockerfile ENV may contain 'level_zero:*' which Ray rejects.
+_DEVICES=$(seq 0 $((NUM_GPUS-1)) | paste -sd',')
+export ONEAPI_DEVICE_SELECTOR="level_zero:${_DEVICES}"
+
 torchrun --nproc-per-node=${NUM_GPUS} --standalone \
     -m verl.trainer.sft_trainer \
     data.train_files=$HOME/data/gsm8k/train_sft.parquet \

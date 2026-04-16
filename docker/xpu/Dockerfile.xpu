@@ -110,6 +110,26 @@ RUN python3 -c "from kernels import get_kernel; get_kernel('kernels-community/fl
 ENV CCL_ATL_SHM=1
 ENV CCL_BUFFER_CACHE=0
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+# Ensure Ray's internal gRPC (localhost) is never routed through the corporate proxy.
+# Without this, ray.init() times out when http_proxy is set in the container.
+ENV no_proxy=127.0.0.1,localhost,::1
+ENV NO_PROXY=127.0.0.1,localhost,::1
+# SYCL device selector: setvars.sh may leave this as "level_zero:" (empty
+# after ':') which causes SIGABRT in any subprocess that initialises SYCL.
+# Ray also rejects '*' — must be explicit device indices.
+# Override at docker run time: -e ONEAPI_DEVICE_SELECTOR=level_zero:0,1,2,3
+ENV ONEAPI_DEVICE_SELECTOR=level_zero:0,1
+
+# sitecustomize.py: fix ONEAPI_DEVICE_SELECTOR at Python startup for EVERY
+# Python process (including vLLM's _run_in_subprocess model registry check).
+# Ray workers are fresh processes that may not inherit the corrected env from
+# the parent shell — this ensures even deeply nested subprocesses get a valid
+# device selector rather than the broken "level_zero:" value from setvars.sh.
+RUN printf 'import os\n\
+_sel = os.environ.get("ONEAPI_DEVICE_SELECTOR", "")\n\
+if not _sel or _sel.endswith(":"):\n\
+    os.environ["ONEAPI_DEVICE_SELECTOR"] = "level_zero:0,1"\n' \
+    > /usr/local/lib/python3.12/sitecustomize.py
 
 # --- Verify everything ---
 RUN python3 -m pip list | grep -E "torch|vllm|verl|oneccl|triton" && \

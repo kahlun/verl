@@ -119,17 +119,41 @@ def get_visible_devices_keyword() -> str:
 
 
 def sanitize_xpu_device_selector():
-    """Fix ONEAPI_DEVICE_SELECTOR if Ray set it with bare device IDs.
+    """Fix ONEAPI_DEVICE_SELECTOR to stay consistent with ZE_AFFINITY_MASK.
 
-    Ray's IntelGPUAcceleratorManager sets ONEAPI_DEVICE_SELECTOR to bare IDs
-    (e.g. "0"), but SYCL requires "level_zero:0" format.  Convert the value
-    to the correct format and ensure ZE_AFFINITY_MASK is also set.
+    Two problems this function fixes:
+
+    1. Ray's IntelGPUAcceleratorManager sets ONEAPI_DEVICE_SELECTOR to bare IDs
+       (e.g. "0"), but SYCL requires "level_zero:0" format.
+
+    2. After __init__ sets ZE_AFFINITY_MASK to the subset of devices for this
+       actor (e.g. "0"), a parent-process ONEAPI_DEVICE_SELECTOR with a wider
+       set of devices (e.g. "level_zero:0,1") is inherited unchanged.  SYCL then
+       tries to open device 1 which ZE_AFFINITY_MASK has filtered away, causing
+       a SYCL exception / SIGABRT in any subprocess that imports torch.xpu.
+
+    The canonical fix: whenever ZE_AFFINITY_MASK is set, derive
+    ONEAPI_DEVICE_SELECTOR from it.  ZE_AFFINITY_MASK lists physical device IDs
+    and Level Zero re-numbers them 0..n-1, so the selector is always
+    "level_zero:0,1,...,n-1".
     """
     if not is_xpu_available:
         return
+    ze_mask = os.environ.get("ZE_AFFINITY_MASK", "")
     selector = os.environ.get("ONEAPI_DEVICE_SELECTOR", "")
-    if selector and ":" not in selector:
-        # Bare ID(s) like "0" or "0,1" — SYCL can't parse these
+
+    if ze_mask:
+        # ZE_AFFINITY_MASK is authoritative: re-number devices 0..n-1
+        n_devices = len(ze_mask.split(","))
+        expected = f"level_zero:{','.join(str(i) for i in range(n_devices))}"
+        if selector != expected:
+            os.environ["ONEAPI_DEVICE_SELECTOR"] = expected
+            logger.info(
+                "Synced ONEAPI_DEVICE_SELECTOR to ZE_AFFINITY_MASK=%r: %r -> %r",
+                ze_mask, selector, expected,
+            )
+    elif selector and ":" not in selector:
+        # No ZE_AFFINITY_MASK; bare IDs (e.g. "0" or "0,1") need level_zero: prefix
         if not os.environ.get("ZE_AFFINITY_MASK"):
             os.environ["ZE_AFFINITY_MASK"] = selector
         os.environ["ONEAPI_DEVICE_SELECTOR"] = f"level_zero:{selector}"
@@ -405,7 +429,9 @@ def is_support_ipc() -> bool:
         except Exception as e:
             raise RuntimeError(f"Error checking IPC support: {e}") from e
 
-    # XPU: SYCL IPC not yet available on consumer PCIe cards (Arc B-series)
+    # XPU: SYCL IPC handles have a different format than CUDA — rebuild_ipc()
+    # assumes CUDA's 7-arg tuple (index 6 = device_id). Until verl's bucketed
+    # weight transfer is adapted for XPU handles, fall back to shared memory.
     if is_xpu_available:
         return False
 
