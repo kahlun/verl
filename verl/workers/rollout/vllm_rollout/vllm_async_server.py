@@ -35,7 +35,7 @@ from vllm.usage.usage_lib import UsageContext
 from vllm.v1.engine.async_llm import AsyncLLM
 
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available, is_xpu_available, sanitize_xpu_device_selector
+from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available, is_xpu_available
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
@@ -109,7 +109,10 @@ class vLLMHttpServer:
             cuda_visible_devices (str): cuda visible devices.
         """
         os.environ[get_visible_devices_keyword()] = cuda_visible_devices
-        sanitize_xpu_device_selector()  # fix Ray's bare-ID ONEAPI_DEVICE_SELECTOR for SYCL
+        # XPU: sync ONEAPI_DEVICE_SELECTOR with the ZE_AFFINITY_MASK we just set
+        if is_xpu_available:
+            n = len(cuda_visible_devices.split(","))
+            os.environ["ONEAPI_DEVICE_SELECTOR"] = f"level_zero:{','.join(str(i) for i in range(n))}"
 
         self.config = self._init_config(config)
         self.model_config = self._init_model_config(model_config)
@@ -379,18 +382,12 @@ class vLLMHttpServer:
             await self.run_headless(server_args)
 
     async def run_server(self, args: argparse.Namespace):
-        # Intel XPU: sanitize ONEAPI_DEVICE_SELECTOR for vLLM subprocess spawns
-        sanitize_xpu_device_selector()
-
-        # XPU (vLLM ≥ 0.17): After sanitize_xpu_device_selector() fixes Ray's
-        # bare-ID ONEAPI_DEVICE_SELECTOR, the env var is in level_zero:N form.
-        # When the vLLM v1 engine spawns the EngineCore subprocess, that process
-        # inherits ONEAPI_DEVICE_SELECTOR and the FLA/triton SYCL backend
-        # crashes at module-import time with "No device of requested type
-        # available" (triton.runtime.driver.active.get_current_target() fails
-        # whenever ONEAPI_DEVICE_SELECTOR is set, regardless of the value).
-        # Fix: remove it here — ZE_AFFINITY_MASK is sufficient for device
-        # isolation in both the parent actor and its spawned children.
+        # XPU: vLLM v1 EngineCore spawns a subprocess via multiprocessing.spawn.
+        # That subprocess inherits ONEAPI_DEVICE_SELECTOR which triggers a fatal
+        # SYCL exception in the FLA/triton backend at module-import time
+        # (triton.runtime.driver.active.get_current_target() crashes whenever
+        # ONEAPI_DEVICE_SELECTOR is set to any level_zero:* value).
+        # ZE_AFFINITY_MASK alone is sufficient for device isolation.
         if is_xpu_available:
             os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
 

@@ -26,7 +26,7 @@ from verl.utils.device import (
     get_torch_device,
     get_visible_devices_keyword,
     is_npu_available,
-    sanitize_xpu_device_selector,
+    is_xpu_available,
 )
 
 from .decorator import Dispatch, Execute, register
@@ -282,8 +282,17 @@ class Worker(WorkerHelper):
             os.environ["LOCAL_RANK"] = local_rank
             get_torch_device().set_device(int(local_rank))
 
-        # Fix Ray's bare-ID ONEAPI_DEVICE_SELECTOR for XPU/SYCL compatibility
-        sanitize_xpu_device_selector()
+        # XPU: Keep ONEAPI_DEVICE_SELECTOR consistent with ZE_AFFINITY_MASK.
+        # Ray's IntelGPUAccelerator sets ZE_AFFINITY_MASK for device isolation
+        # (e.g. "1" for the second GPU).  Level Zero re-numbers the masked
+        # devices 0..n-1, so the selector must be "level_zero:0" not
+        # "level_zero:1".  Setting this at the same point we write the
+        # visibility env var avoids needing sanitize calls elsewhere.
+        if is_xpu_available:
+            ze_mask = os.environ.get("ZE_AFFINITY_MASK", "")
+            if ze_mask:
+                n = len(ze_mask.split(","))
+                os.environ["ONEAPI_DEVICE_SELECTOR"] = f"level_zero:{','.join(str(i) for i in range(n))}"
 
     def _configure_with_store(self, store: dict):
         """
