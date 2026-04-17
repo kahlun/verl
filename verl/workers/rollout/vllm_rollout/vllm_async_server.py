@@ -382,6 +382,18 @@ class vLLMHttpServer:
         # Intel XPU: sanitize ONEAPI_DEVICE_SELECTOR for vLLM subprocess spawns
         sanitize_xpu_device_selector()
 
+        # XPU (vLLM ≥ 0.17): After sanitize_xpu_device_selector() fixes Ray's
+        # bare-ID ONEAPI_DEVICE_SELECTOR, the env var is in level_zero:N form.
+        # When the vLLM v1 engine spawns the EngineCore subprocess, that process
+        # inherits ONEAPI_DEVICE_SELECTOR and the FLA/triton SYCL backend
+        # crashes at module-import time with "No device of requested type
+        # available" (triton.runtime.driver.active.get_current_target() fails
+        # whenever ONEAPI_DEVICE_SELECTOR is set, regardless of the value).
+        # Fix: remove it here — ZE_AFFINITY_MASK is sufficient for device
+        # isolation in both the parent actor and its spawned children.
+        if is_xpu_available:
+            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
+
         engine_args = AsyncEngineArgs.from_cli_args(args)
 
         # XPU: vLLM detects Ray and selects the "ray" executor backend, which

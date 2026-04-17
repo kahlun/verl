@@ -27,10 +27,11 @@ export CCL_BUFFER_CACHE=${CCL_BUFFER_CACHE:-0}
 # Disable topology recognition — assume XeLink across devices
 export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0
 
-# SYCL device selector: must be explicit indices (Ray rejects '*').
-# Always override — the Dockerfile ENV may contain 'level_zero:*' which Ray rejects.
+# XPU device selection: use ZE_AFFINITY_MASK (Level Zero) for device restriction.
+# vLLM 0.17+ XPU platform uses ZE_AFFINITY_MASK as device_control_env_var; setting
+# ONEAPI_DEVICE_SELECTOR=level_zero:N,M breaks the FLA/triton SYCL JIT init path.
 _DEVICES=$(seq 0 $((NUM_GPUS-1)) | paste -sd',')
-export ONEAPI_DEVICE_SELECTOR="level_zero:${_DEVICES}"
+export ZE_AFFINITY_MASK="${_DEVICES}"
 
 # XPU fix: Ray pre-starts ~100 idle workers, each opens an L0 context on the GPU.
 # torch.xpu.mem_get_info() counts their combined context overhead (~20 GB) as "used"
