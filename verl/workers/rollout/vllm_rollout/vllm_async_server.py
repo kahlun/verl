@@ -40,6 +40,7 @@ from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
 from verl.utils.vllm.vllm_fp8_utils import apply_vllm_fp8_patches
+from verl.utils.vllm import xpu_patches as _xpu_patches
 from verl.workers.config import HFModelConfig, RolloutConfig
 from verl.workers.rollout.replica import RolloutMode, RolloutReplica, TokenOutput
 from verl.workers.rollout.utils import get_max_position_embeddings, qwen2_5_vl_dedup_image_tokens, run_uvicorn
@@ -392,6 +393,11 @@ class vLLMHttpServer:
         # avoiding an extra Worker process and its L0 context cost.
         if is_xpu_available and engine_args.tensor_parallel_size <= 1:
             engine_args.distributed_executor_backend = "uni"
+
+        # Apply XPU-specific vLLM patches in the actual training process.
+        # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)
+        # so the monkey-patches are active when vLLM initialises its workers.
+        _xpu_patches.apply()
 
         usage_context = UsageContext.OPENAI_API_SERVER
         try:

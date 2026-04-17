@@ -51,9 +51,9 @@ if [ -d /workspace ]; then
     mkdir -p "$RAY_TMPDIR"
 fi
 
-# Apply XPU-specific vLLM patches via the proper Python module (no source modification).
-# See verl/utils/vllm/xpu_patches.py for details and upstream PR references.
-python3 -c "from verl.utils.vllm import xpu_patches; xpu_patches.apply()"
+# XPU vLLM patches are applied automatically inside the training process
+# (vllm_async_server.py calls xpu_patches.apply() before vLLM initialisation).
+# No pre-step needed here.
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
