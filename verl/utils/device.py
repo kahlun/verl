@@ -43,16 +43,60 @@ def is_torch_npu_available(check_device=True) -> bool:
         return False
 
 
+def is_torch_xpu_available(check_device=True) -> bool:
+    """Check if Intel XPU is available for PyTorch operations.
+
+    Args:
+        check_device: If True, check actual device availability.
+            If False, only check for torch.xpu namespace.
+
+    Returns:
+        bool: True if XPU is available, False otherwise.
+    """
+    try:
+        if not hasattr(torch, "xpu"):
+            return False
+        if check_device:
+            return torch.xpu.is_available()
+        return True
+    except (ImportError, AttributeError):
+        return False
+
+
 is_cuda_available = torch.cuda.is_available()
 is_npu_available = is_torch_npu_available()
+is_xpu_available = is_torch_xpu_available()
+
+
+def get_default_attention_implementation() -> str:
+    """Get default attention implementation for current device.
+
+    XPU uses SDPA (Scaled Dot Product Attention) which dispatches to Intel's
+    SYCL-TLA Flash kernel automatically — 10-22x faster than eager.
+    flash_attention_2 via HF kernels-community/flash-attn2 is available but
+    its varlen backward is not yet supported on XPU.
+
+    Returns:
+        str: "sdpa" for XPU, "flash_attention_2" for CUDA/NPU.
+    """
+    if is_xpu_available:
+        return "sdpa"
+    return "flash_attention_2"
 
 
 def get_resource_name() -> str:
     """Function that return ray resource name based on the device type.
     Returns:
-        ray resource name string, either "GPU" or "NPU".
+        ray resource name string: "GPU" (CUDA and XPU — Ray's IntelGPUAccelerator
+        registers XPU as "GPU"), or "NPU" for Ascend.
     """
-    return "GPU" if is_cuda_available else "NPU"
+    if is_cuda_available:
+        return "GPU"
+    elif is_npu_available:
+        return "NPU"
+    elif is_xpu_available:
+        return "GPU"  # Ray's IntelGPUAccelerator registers XPU as "GPU"
+    return "GPU"
 
 
 def get_visible_devices_keyword() -> str:
@@ -65,7 +109,60 @@ def get_visible_devices_keyword() -> str:
         str: 'CUDA_VISIBLE_DEVICES' if CUDA is available,
             'ASCEND_RT_VISIBLE_DEVICES' otherwise.
     """
-    return "CUDA_VISIBLE_DEVICES" if not is_torch_npu_available(check_device=False) else "ASCEND_RT_VISIBLE_DEVICES"
+    if is_cuda_available:
+        return "CUDA_VISIBLE_DEVICES"
+    elif is_npu_available:
+        return "ASCEND_RT_VISIBLE_DEVICES"
+    elif is_xpu_available:
+        return "ZE_AFFINITY_MASK"  # bare IDs work; ONEAPI_DEVICE_SELECTOR needs level_zero: prefix
+    return "CUDA_VISIBLE_DEVICES"
+
+
+def sanitize_xpu_device_selector():
+    """Fix ONEAPI_DEVICE_SELECTOR to stay consistent with ZE_AFFINITY_MASK.
+
+    Two problems this function fixes:
+
+    1. Ray's IntelGPUAcceleratorManager sets ONEAPI_DEVICE_SELECTOR to bare IDs
+       (e.g. "0"), but SYCL requires "level_zero:0" format.
+
+    2. After __init__ sets ZE_AFFINITY_MASK to the subset of devices for this
+       actor (e.g. "0"), a parent-process ONEAPI_DEVICE_SELECTOR with a wider
+       set of devices (e.g. "level_zero:0,1") is inherited unchanged.  SYCL then
+       tries to open device 1 which ZE_AFFINITY_MASK has filtered away, causing
+       a SYCL exception / SIGABRT in any subprocess that imports torch.xpu.
+
+    The canonical fix: whenever ZE_AFFINITY_MASK is set, derive
+    ONEAPI_DEVICE_SELECTOR from it.  ZE_AFFINITY_MASK lists physical device IDs
+    and Level Zero re-numbers them 0..n-1, so the selector is always
+    "level_zero:0,1,...,n-1".
+    """
+    if not is_xpu_available:
+        return
+    ze_mask = os.environ.get("ZE_AFFINITY_MASK", "")
+    selector = os.environ.get("ONEAPI_DEVICE_SELECTOR", "")
+
+    if ze_mask:
+        # ZE_AFFINITY_MASK is authoritative: re-number devices 0..n-1
+        n_devices = len(ze_mask.split(","))
+        expected = f"level_zero:{','.join(str(i) for i in range(n_devices))}"
+        if selector != expected:
+            os.environ["ONEAPI_DEVICE_SELECTOR"] = expected
+            logger.info(
+                "Synced ONEAPI_DEVICE_SELECTOR to ZE_AFFINITY_MASK=%r: %r -> %r",
+                ze_mask, selector, expected,
+            )
+    elif selector and ":" not in selector:
+        # No ZE_AFFINITY_MASK; bare IDs (e.g. "0" or "0,1") need level_zero: prefix
+        if not os.environ.get("ZE_AFFINITY_MASK"):
+            os.environ["ZE_AFFINITY_MASK"] = selector
+        os.environ["ONEAPI_DEVICE_SELECTOR"] = f"level_zero:{selector}"
+        logger.info(
+            "Sanitized ONEAPI_DEVICE_SELECTOR: %r -> %r (ZE_AFFINITY_MASK=%s)",
+            selector,
+            os.environ["ONEAPI_DEVICE_SELECTOR"],
+            os.environ.get("ZE_AFFINITY_MASK"),
+        )
 
 
 def get_device_name() -> str:
@@ -81,6 +178,8 @@ def get_device_name() -> str:
         device = "cuda"
     elif is_npu_available:
         device = "npu"
+    elif is_xpu_available:
+        device = "xpu"
     else:
         device = "cpu"
     return device
@@ -124,6 +223,8 @@ def get_nccl_backend() -> str:
     """
     if is_npu_available:
         return "hccl"
+    elif is_xpu_available:
+        return "xccl"
     else:
         # default to nccl
         return "nccl"
@@ -164,6 +265,14 @@ def auto_set_device(config) -> None:
                 )
 
             config.trainer.device = "npu"
+        elif is_torch_xpu_available():
+            if config.trainer.device not in ["cpu", "xpu"]:
+                logger.warning(
+                    f"Detect setting config.trainer.device to {config.trainer.device} for Intel XPU, "
+                    f"automatically set to `xpu` instead."
+                )
+
+            config.trainer.device = "xpu"
         # Other cases: set device to "cuda" via config file, no need to change.
 
 
@@ -319,6 +428,19 @@ def is_support_ipc() -> bool:
             raise RuntimeError(f"Failed to execute npu-smi command: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Error checking IPC support: {e}") from e
+
+    # XPU: SYCL IPC handles have a different format than CUDA — rebuild_ipc()
+    # assumes CUDA's 7-arg tuple (index 6 = device_id). Until verl's bucketed
+    # weight transfer is adapted for XPU handles, fall back to shared memory.
+    # TODO: implement XPU IPC handle support and remove this fallback.
+    #   Tracking: https://github.com/volcengine/verl/issues/  (file an issue)
+    if is_xpu_available:
+        logger.warning(
+            "[XPU] IPC weight transfer not supported — falling back to shared memory. "
+            "This is a known limitation; weight transfer throughput will be lower than "
+            "with direct GPU-GPU IPC. See verl/utils/device.py:is_support_ipc for details."
+        )
+        return False
 
     # For other devices (CPU), return False
     return False

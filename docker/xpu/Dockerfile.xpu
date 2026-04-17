@@ -1,0 +1,153 @@
+# veRL on Intel XPU (Data Center GPU Max / Arc Pro / Arc)
+#
+# Based on vLLM's Dockerfile.xpu pattern (intel/deep-learning-essentials base).
+#
+# Build:
+#   docker build -t verl-xpu:latest -f docker/xpu/Dockerfile.xpu .
+#
+# Behind a corporate proxy:
+#   docker build --build-arg http_proxy=... --build-arg https_proxy=... ...
+#
+# Run (mount GPU devices + render group):
+#   docker run -it --rm \
+#     --device /dev/dri --group-add render \
+#     --shm-size 16g \
+#     -v $HOME/data:/root/data \
+#     verl-xpu:latest
+#
+# Tested on: 4x Intel Arc Pro B60 (Battlemage, 24 GB VRAM each)
+
+FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTHON_VERSION=3.12
+ARG TORCH_VERSION=2.11.0
+ARG TRITON_XPU_VERSION=3.7.0
+ARG VLLM_VERSION=0.17.1
+ARG PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/xpu"
+
+WORKDIR /workspace
+
+# --- System dependencies ---
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        gcc g++ cmake libnuma-dev wget git curl jq vim build-essential patchelf \
+        python3.12 python3.12-dev python3-pip ca-certificates && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- Intel GPU user-mode drivers (UMD) from GitHub releases ---
+# Avoids apt repo dependency issues; pins exact versions for reproducibility.
+# Match versions used by vLLM's Dockerfile.xpu.
+RUN mkdir /tmp/neo && cd /tmp/neo && \
+    wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.24.8/intel-igc-core-2_2.24.8+20344_amd64.deb && \
+    wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.24.8/intel-igc-opencl-2_2.24.8+20344_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/25.48.36300.8/intel-ocloc_25.48.36300.8-0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/25.48.36300.8/intel-opencl-icd_25.48.36300.8-0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/25.48.36300.8/libigdgmm12_22.8.2_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/25.48.36300.8/libze-intel-gpu1_25.48.36300.8-0_amd64.deb && \
+    wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.26.0/level-zero_1.26.0+u24.04_amd64.deb && \
+    dpkg -i *.deb && \
+    cd / && rm -rf /tmp/neo
+
+# --- oneCCL with Battlemage (BMG) support ---
+# Default oneAPI 2025.2 oneCCL lacks BMG support; install specific version.
+ARG ONECCL_INSTALLER="intel-oneccl-2021.15.7.8_offline.sh"
+RUN wget -q "https://github.com/uxlfoundation/oneCCL/releases/download/2021.15.7/${ONECCL_INSTALLER}" && \
+    bash "${ONECCL_INSTALLER}" -a --silent --eula accept && \
+    rm "${ONECCL_INSTALLER}" && \
+    echo "source /opt/intel/oneapi/setvars.sh --force" >> /root/.bashrc && \
+    echo "source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force" >> /root/.bashrc
+RUN rm -f /opt/intel/oneapi/ccl/latest && \
+    ln -s /opt/intel/oneapi/ccl/2021.15 /opt/intel/oneapi/ccl/latest
+
+SHELL ["bash", "-c"]
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
+
+# --- PyTorch with XPU support ---
+RUN python3 -m pip install --no-cache-dir \
+        torch==${TORCH_VERSION} torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/xpu && \
+    python3 -m pip install --no-cache-dir \
+        triton-xpu==${TRITON_XPU_VERSION} \
+        --index-url https://download.pytorch.org/whl/xpu && \
+    python3 -m pip install --no-cache-dir dpctl
+
+# --- Verify PyTorch XPU ---
+RUN python3 -c "import torch; print('PyTorch:', torch.__version__); \
+    assert hasattr(torch, 'xpu'), 'torch.xpu not found'; \
+    import torch.distributed; print('distributed OK')"
+
+# --- vLLM with XPU support (build from source) ---
+RUN git clone --depth 1 --branch v${VLLM_VERSION} \
+        https://github.com/vllm-project/vllm.git /opt/vllm && \
+    cd /opt/vllm && \
+    source /opt/intel/oneapi/setvars.sh --force && \
+    python3 -m pip install --no-cache-dir -r requirements/xpu.txt && \
+    VLLM_TARGET_DEVICE=xpu python3 -m pip install --no-build-isolation --no-cache-dir -v . && \
+    python3 -m pip cache purge
+
+# --- vLLM XPU post-install patches ---
+# Bug 5: Triton top-k/top-p sampling kernel crashes silently on XPU (batch>=8).
+# The triton kernel triggers a SYCL error in the EngineCoreProc subprocess,
+# which dies without a traceback. Fix: fall back to PyTorch sort path on XPU.
+# Also guard qwen3_next/qwen3_5 model imports that trigger FLA/triton SYCL
+# init at module load (SIGSEGV in Ray workers without a SYCL context).
+RUN VLLM_SAMPLER=$(python3 -c "import vllm.v1.sample.ops.topk_topp_sampler as m; print(m.__file__)") && \
+    sed -i 's/if HAS_TRITON and logits.shape\[0\] >= 8:/if HAS_TRITON and logits.shape[0] >= 8 and not current_platform.is_xpu():/' "$VLLM_SAMPLER" && \
+    echo "[XPU patch] Triton sampling kernel bypassed on XPU in $VLLM_SAMPLER"
+
+# --- Verify vLLM ---
+RUN python3 -c "import vllm; print('vLLM:', vllm.__version__)"
+
+# --- veRL dependencies ---
+COPY requirements-xpu.txt /tmp/requirements-xpu.txt
+RUN python3 -m pip install --no-cache-dir -r /tmp/requirements-xpu.txt && \
+    python3 -m pip install --no-cache-dir transformers
+
+# --- Install veRL ---
+COPY . /workspace/verl
+WORKDIR /workspace/verl
+RUN python3 -m pip install --no-deps --no-cache-dir -v -e .
+
+# --- Pre-download HF flash-attn2 kernel and fix execstack ---
+RUN python3 -c "from kernels import get_kernel; get_kernel('kernels-community/flash-attn2')" 2>/dev/null; \
+    find /root/.cache/huggingface/ -name "*.so" -path "*flash_attn*" \
+        -exec patchelf --clear-execstack {} \; 2>/dev/null; \
+    echo "flash-attn2 kernel patched (execstack cleared)"
+
+# --- oneCCL workarounds (pre-DLE 2026.0 driver) ---
+ENV CCL_ATL_SHM=1
+ENV CCL_BUFFER_CACHE=0
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+# Ensure Ray's internal gRPC (localhost) is never routed through the corporate proxy.
+# Without this, ray.init() times out when http_proxy is set in the container.
+ENV no_proxy=127.0.0.1,localhost,::1
+ENV NO_PROXY=127.0.0.1,localhost,::1
+# SYCL device selector: setvars.sh may leave this as "level_zero:" (empty
+# after ':') which causes SIGABRT in any subprocess that initialises SYCL.
+# Ray also rejects '*' — must be explicit device indices.
+# Override at docker run time: -e ONEAPI_DEVICE_SELECTOR=level_zero:0,1,2,3
+ENV ONEAPI_DEVICE_SELECTOR=level_zero:0,1
+
+# sitecustomize.py: fix ONEAPI_DEVICE_SELECTOR at Python startup for EVERY
+# Python process (including vLLM's _run_in_subprocess model registry check).
+# Ray workers are fresh processes that may not inherit the corrected env from
+# the parent shell — this ensures even deeply nested subprocesses get a valid
+# device selector rather than the broken "level_zero:" value from setvars.sh.
+# The path is resolved dynamically to support any Python prefix / base image.
+RUN python3 -c "\
+import site, pathlib; \
+lib = pathlib.Path(site.getsitepackages()[0]).parent; \
+(lib / 'sitecustomize.py').write_text(\
+'import os\n' \
+'_sel = os.environ.get(\"ONEAPI_DEVICE_SELECTOR\", \"\")\n' \
+'if not _sel or _sel.endswith(\":\"):\n' \
+'    os.environ[\"ONEAPI_DEVICE_SELECTOR\"] = \"level_zero:0,1\"\n' \
+)"
+
+# --- Verify everything ---
+RUN python3 -m pip list | grep -E "torch|vllm|verl|oneccl|triton" && \
+    python3 -c "import verl; print('veRL OK')"
+
+CMD ["bash", "-c", "source /root/.bashrc && exec bash"]

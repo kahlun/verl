@@ -38,7 +38,7 @@ from torch.distributed.device_mesh import DeviceMesh
 
 from verl import DataProto
 from verl.third_party.vllm import VLLM_SLEEP_LEVEL, get_version
-from verl.utils.device import get_device_id, is_support_ipc
+from verl.utils.device import get_device_id, is_support_ipc, is_xpu_available
 from verl.workers.config import HFModelConfig, RolloutConfig
 from verl.workers.rollout.base import BaseRollout
 from verl.workers.rollout.vllm_rollout.bucketed_weight_transfer import BucketedWeightSender
@@ -95,6 +95,10 @@ class ServerAdapter(BaseRollout):
             self.sleep_level = VLLM_SLEEP_LEVEL
 
         self.device_uuid = get_device_uuid(get_device_id())
+        # XPU: torch.xpu.current_device() may not be set yet at init time
+        # (FSDP sets it later). Use RANK as fallback for the device index.
+        if is_xpu_available and get_device_id() == 0 and rank != 0:
+            self.device_uuid = get_device_uuid(rank)
         self.zmq_handle = f"ipc:///tmp/rl-colocate-zmq-{self.device_uuid}.sock"
 
         self.use_shm = not is_support_ipc()

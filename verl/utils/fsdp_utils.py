@@ -32,7 +32,7 @@ from torch.distributed.fsdp._runtime_utils import _lazy_init
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 from transformers.trainer_pt_utils import get_module_class_from_name
 
-from verl.utils.device import get_device_id, get_device_name, get_torch_device
+from verl.utils.device import get_device_id, get_device_name, get_torch_device, is_xpu_available
 from verl.utils.model import check_exclude_modules, check_target_modules
 
 if version.parse(torch.__version__) >= version.parse("2.6"):
@@ -559,6 +559,21 @@ def apply_fsdp2(model, fsdp_kwargs, config):
     #     print(f"wrap module {model.__class__.__name__}")
     with maybe_patch_fsdp_module(model):
         fully_shard(model, **fsdp_kwargs)  # fsdp2 will not reshard_after_forward for root module
+
+    # oneCCL (xccl) doesn't support ReduceOp.AVG in reduce_scatter;
+    # force SUM reduction with manual division instead.
+    # set_force_sum_reduction_for_comms was added in PyTorch 2.5 (FSDP2);
+    # guard with hasattr so this doesn't crash on older builds.
+    if is_xpu_available:
+        if hasattr(model, "set_force_sum_reduction_for_comms"):
+            model.set_force_sum_reduction_for_comms(True)
+        else:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "[XPU] model.set_force_sum_reduction_for_comms not available — "
+                "FSDP reduce_scatter may use ReduceOp.AVG which is broken on xccl. "
+                "Upgrade to PyTorch >= 2.5."
+            )
 
 
 def get_shard_placement_fn(fsdp_size):

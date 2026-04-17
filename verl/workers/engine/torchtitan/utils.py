@@ -124,6 +124,12 @@ def derive_torchtitan_name_and_flavor(hf_config) -> tuple[str, str]:
     vocab_size = hf_config.vocab_size
 
     for flavor_name, model_cfg in model_configs.items():
+        # torchtitan >=0.2.2 uses factory functions; call them to get the Config object
+        if callable(model_cfg):
+            try:
+                model_cfg = model_cfg()
+            except Exception:
+                continue
         if (
             getattr(model_cfg, "dim", None) == hidden_size
             and getattr(model_cfg, "n_layers", None) == num_layers

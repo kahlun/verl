@@ -38,7 +38,7 @@ from verl.utils.activation_offload import enable_activation_offloading
 from verl.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
 from verl.utils.dataset.dataset_utils import DatasetPadMode
 from verl.utils.debug import log_gpu_memory_usage
-from verl.utils.device import get_device_id, get_device_name
+from verl.utils.device import get_device_id, get_device_name, is_xpu_available
 from verl.utils.fsdp_utils import (
     CPUOffloadPolicy,
     FSDPModule,
@@ -139,15 +139,19 @@ class FSDPEngine(BaseEngine):
         if self._qat_enabled:
             logger.info(f"QAT enabled: mode={self._qat_config.mode}, group_size={self._qat_config.group_size}")
 
+        # torch.compile is not yet stable on XPU (L0 driver hangs)
+        self._use_torch_compile = self.engine_config.use_torch_compile
+        if device_name == "xpu" and self._use_torch_compile:
+            logger.warning("[XPU] Disabling torch.compile — not yet stable on XPU.")
+            self._use_torch_compile = False
+
         if self.engine_config.entropy_from_logits_with_chunking:
             entropy_from_logits = verl_F.entropy_from_logits_with_chunking
         else:
             entropy_from_logits = verl_F.entropy_from_logits
 
         self.compute_entropy_from_logits = (
-            torch.compile(entropy_from_logits, dynamic=True)
-            if self.engine_config.use_torch_compile  #  use torch compile by default
-            else entropy_from_logits
+            torch.compile(entropy_from_logits, dynamic=True) if self._use_torch_compile else entropy_from_logits
         )
 
     @property
@@ -615,6 +619,17 @@ class FSDPEngine(BaseEngine):
                 if not forward_only:
                     loss.backward()
 
+            # XPU: sync after each micro-batch to drain the SYCL kernel queue.
+            # Without this, oneCCL all-reduces in the *next* micro-batch's
+            # backward can collide with in-flight kernels from the current one,
+            # causing a deadlock inside the non-re-entrant oneCCL communicator.
+            # Set VERL_XPU_SYNC_MICROBATCH=0 to disable once profiling confirms
+            # the queue depth is not a bottleneck on your hardware.
+            if hasattr(torch, "xpu") and torch.xpu.is_available():
+                import os as _os
+                if _os.environ.get("VERL_XPU_SYNC_MICROBATCH", "1") != "0":
+                    torch.xpu.synchronize()
+
             output_lst.append(meta_info)
 
         # postprocess and return
@@ -794,6 +809,16 @@ class FSDPEngine(BaseEngine):
                 )
                 for name, param in params.items()
             )
+            # XPU: eagerly materialize the generator to a list before iterating.
+            # oneCCL/xccl is not re-entrant: if FSDP's param un-sharding all-gather
+            # is still in-flight when the *next* collective (e.g., from the next
+            # iteration of this loop) is issued, the communicator deadlocks.
+            # Materialising the full list forces all un-shardings to complete
+            # synchronously before any iteration begins, at the cost of a one-time
+            # peak-memory spike proportional to the number of parameters un-sharded.
+            # TODO: remove once oneCCL fixes re-entrancy (file a tracking issue).
+            if is_xpu_available:
+                per_tensor_param = list(per_tensor_param)
 
         if self._qat_enabled:
             from verl.utils.qat.quantizer import QATQuantizer
@@ -868,7 +893,7 @@ class EngineTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu", "xpu"])
 class FSDPEngineWithLMHead(FSDPEngine):
     def prepare_model_inputs(self, micro_batch: TensorDict):
         use_remove_padding = tu.get_non_tensor_data(data=micro_batch, key="use_remove_padding", default=True)
@@ -1167,7 +1192,7 @@ class FSDPEngineWithLMHead(FSDPEngine):
             return loss, output
 
 
-@EngineRegistry.register(model_type="value_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="value_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu", "xpu"])
 class FSDPEngineWithValueHead(FSDPEngineWithLMHead):
     """
     The only difference between critic and actor is how the raw model output is processed

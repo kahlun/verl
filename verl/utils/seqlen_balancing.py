@@ -21,7 +21,7 @@ from torch import distributed as dist
 
 from verl.protocol import DataProto
 from verl.utils import tensordict_utils as tu
-from verl.utils.device import get_device_name
+from verl.utils.device import get_device_name, is_xpu_available
 
 
 def calculate_workload(seqlen_list: torch.Tensor) -> torch.Tensor:
@@ -400,8 +400,11 @@ def rearrange_micro_batches(
         # used to support pp
         num_micro_batches = max(min_num_micro_batch, num_micro_batches)
     if dist.is_initialized() and same_micro_num_in_dp and dp_group is not None:
+        # XCCL ReduceOp.MAX is broken (returns SUM, torch-xpu-ops#3020); use all_gather+max
+        from verl.utils.distributed import all_reduce_max
+
         num_micro_batches = torch.tensor([num_micro_batches], device=get_device_name())
-        dist.all_reduce(num_micro_batches, op=dist.ReduceOp.MAX, group=dp_group)
+        all_reduce_max(num_micro_batches, group=dp_group)
         num_micro_batches = num_micro_batches.cpu().item()
     if num_batches_divided_by is not None:
         num_micro_batches = roundup_divisible(num_micro_batches, num_batches_divided_by)

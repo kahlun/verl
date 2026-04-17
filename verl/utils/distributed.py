@@ -21,7 +21,7 @@ from datetime import timedelta
 import ray
 import torch.distributed
 
-from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available, is_xpu_available
 from verl.utils.net_utils import is_ipv6
 
 
@@ -58,8 +58,13 @@ def set_numa_affinity():
 
 
 def initialize_global_process_group(timeout_second=36000):
+    backend = get_nccl_backend()
+    device_name = get_device_name()
+    # XPU requires composite backend so both CPU and XPU tensors are supported
+    if device_name == "xpu":
+        backend = f"cpu:gloo,xpu:{backend}"
     torch.distributed.init_process_group(
-        get_nccl_backend(),
+        backend,
         timeout=timedelta(seconds=timeout_second),
         init_method=os.environ.get("DIST_INIT_METHOD", None),
     )
@@ -75,6 +80,68 @@ def initialize_global_process_group(timeout_second=36000):
 def destroy_global_process_group():
     if torch.distributed.is_initialized():
         torch.distributed.destroy_process_group()
+
+
+def all_reduce_avg(tensor, group=None):
+    """All-reduce with AVG, using SUM + division on backends that lack ReduceOp.AVG (e.g. xccl/oneCCL)."""
+    if is_xpu_available:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.SUM, group=group)
+        tensor /= torch.distributed.get_world_size(group)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.AVG, group=group)
+    return tensor
+
+
+def all_reduce_max(tensor, group=None):
+    """All-reduce MAX via all_gather + local max.
+
+    XPU workaround: XCCL ReduceOp.MAX returns the element-wise SUM instead of
+    MAX (torch-xpu-ops#3020).  This implementation uses all_gather + a local
+    max reduction as a correct substitute.
+
+    Memory cost: O(world_size * tensor.numel()).  At large world sizes this may
+    be significant; remove once torch-xpu-ops#3020 is fixed upstream.
+    """
+    if is_xpu_available:
+        ws = torch.distributed.get_world_size(group)
+        if ws > 8:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "all_reduce_max: using all_gather workaround (torch-xpu-ops#3020) "
+                "with world_size=%d — memory cost is O(world_size * tensor_size)", ws
+            )
+        gathered = [torch.empty_like(tensor) for _ in range(ws)]
+        torch.distributed.all_gather(gathered, tensor, group=group)
+        tensor.copy_(torch.stack(gathered, dim=0).max(dim=0).values)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.MAX, group=group)
+    return tensor
+
+
+def all_reduce_min(tensor, group=None):
+    """All-reduce MIN via all_gather + local min.
+
+    XPU workaround: XCCL ReduceOp.MIN returns wrong results
+    (torch-xpu-ops#3020).  This implementation uses all_gather + a local
+    min reduction as a correct substitute.
+
+    Memory cost: O(world_size * tensor.numel()).  At large world sizes this may
+    be significant; remove once torch-xpu-ops#3020 is fixed upstream.
+    """
+    if is_xpu_available:
+        ws = torch.distributed.get_world_size(group)
+        if ws > 8:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "all_reduce_min: using all_gather workaround (torch-xpu-ops#3020) "
+                "with world_size=%d — memory cost is O(world_size * tensor_size)", ws
+            )
+        gathered = [torch.empty_like(tensor) for _ in range(ws)]
+        torch.distributed.all_gather(gathered, tensor, group=group)
+        tensor.copy_(torch.stack(gathered, dim=0).min(dim=0).values)
+    else:
+        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.MIN, group=group)
+    return tensor
 
 
 def initialize_global_process_group_ray(timeout_second=None, backend=None):
@@ -111,8 +178,6 @@ def stateless_init_process_group(master_address, master_port, rank, world_size, 
 
     from torch.distributed import TCPStore
     from vllm.distributed.utils import StatelessProcessGroup
-
-    from verl.utils.device import is_npu_available
 
     if is_npu_available:
         from vllm_ascend.distributed.device_communicators.pyhccl import PyHcclCommunicator as PyNcclCommunicator
