@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from verl.utils.device import is_xpu_available
+
 # To support different vLLM versions, we add the model into SUPPORTED_MOE_MODELS separately to avoid triggering
 # unsupported issues.
 SUPPORTED_MOE_MODELS = []
@@ -52,12 +54,16 @@ try:
 except ImportError:
     pass
 
-try:
-    from vllm.model_executor.models.qwen3_next import Qwen3NextForCausalLM
+# XPU: qwen3_next imports FLA ops → triton SYCL driver init at module load time.
+# In a Ray thread without a SYCL context this triggers a null-pointer SIGSEGV
+# that cannot be caught by try/except.
+if not is_xpu_available:
+    try:
+        from vllm.model_executor.models.qwen3_next import Qwen3NextForCausalLM
 
-    SUPPORTED_MOE_MODELS.append(Qwen3NextForCausalLM)
-except ImportError:
-    pass
+        SUPPORTED_MOE_MODELS.append(Qwen3NextForCausalLM)
+    except ImportError:
+        pass
 
 try:
     from vllm.model_executor.models.kimi_vl import KimiVLForConditionalGeneration
@@ -66,12 +72,14 @@ try:
 except ImportError:
     pass
 
-try:
-    from vllm.model_executor.models.qwen3_5 import Qwen3_5MoeForCausalLM
+# XPU: same FLA/triton SYCL crash as qwen3_next (see comment above).
+if not is_xpu_available:
+    try:
+        from vllm.model_executor.models.qwen3_5 import Qwen3_5MoeForCausalLM
 
-    SUPPORTED_MOE_MODELS.append(Qwen3_5MoeForCausalLM)
-except ImportError:
-    pass
+        SUPPORTED_MOE_MODELS.append(Qwen3_5MoeForCausalLM)
+    except ImportError:
+        pass
 
 
 def patch_vllm_moe_model_weight_loader(model):

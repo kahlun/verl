@@ -87,6 +87,16 @@ RUN git clone --depth 1 --branch v${VLLM_VERSION} \
     VLLM_TARGET_DEVICE=xpu python3 -m pip install --no-build-isolation --no-cache-dir -v . && \
     python3 -m pip cache purge
 
+# --- vLLM XPU post-install patches ---
+# Bug 5: Triton top-k/top-p sampling kernel crashes silently on XPU (batch>=8).
+# The triton kernel triggers a SYCL error in the EngineCoreProc subprocess,
+# which dies without a traceback. Fix: fall back to PyTorch sort path on XPU.
+# Also guard qwen3_next/qwen3_5 model imports that trigger FLA/triton SYCL
+# init at module load (SIGSEGV in Ray workers without a SYCL context).
+RUN VLLM_SAMPLER=$(python3 -c "import vllm.v1.sample.ops.topk_topp_sampler as m; print(m.__file__)") && \
+    sed -i 's/if HAS_TRITON and logits.shape\[0\] >= 8:/if HAS_TRITON and logits.shape[0] >= 8 and not current_platform.is_xpu():/' "$VLLM_SAMPLER" && \
+    echo "[XPU patch] Triton sampling kernel bypassed on XPU in $VLLM_SAMPLER"
+
 # --- Verify vLLM ---
 RUN python3 -c "import vllm; print('vLLM:', vllm.__version__)"
 
