@@ -110,12 +110,15 @@ def all_reduce_max(tensor, group=None):
                 "all_reduce_max: using all_gather workaround (torch-xpu-ops#3020) "
                 "with world_size=%d — memory cost is O(world_size * tensor_size)", ws
             )
-        gathered = [torch.empty_like(tensor) for _ in range(ws)]
-        torch.distributed.all_gather(gathered, tensor, group=group)
-        tensor.copy_(torch.stack(gathered, dim=0).max(dim=0).values)
-    else:
-        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.MAX, group=group)
-    return tensor
+        # [XPU] XCCL ReduceOp.MAX is broken (torch-xpu-ops#3020) and the
+        # all_gather-on-GPU path has XCCL/compute-stream ordering issues that
+        # cause stale reads even with .cpu() calls.  Use all_gather_object
+        # which communicates entirely through the CPU/pickle path, bypassing
+        # XCCL's SYCL stream and guaranteeing correct synchronous semantics.
+        local_val = tensor.item()  # sync D2H: tensor was created from Python int
+        gathered_vals = [None] * ws
+        torch.distributed.all_gather_object(gathered_vals, local_val, group=group)
+        tensor.fill_(max(gathered_vals))
 
 
 def all_reduce_min(tensor, group=None):
@@ -136,9 +139,12 @@ def all_reduce_min(tensor, group=None):
                 "all_reduce_min: using all_gather workaround (torch-xpu-ops#3020) "
                 "with world_size=%d — memory cost is O(world_size * tensor_size)", ws
             )
-        gathered = [torch.empty_like(tensor) for _ in range(ws)]
-        torch.distributed.all_gather(gathered, tensor, group=group)
-        tensor.copy_(torch.stack(gathered, dim=0).min(dim=0).values)
+        # [XPU] Same issue as all_reduce_max — use all_gather_object to bypass
+        # XCCL stream ordering.
+        local_val = tensor.item()
+        gathered_vals = [None] * ws
+        torch.distributed.all_gather_object(gathered_vals, local_val, group=group)
+        tensor.fill_(min(gathered_vals))
     else:
         torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.MIN, group=group)
     return tensor

@@ -19,7 +19,9 @@ export CCL_BUFFER_CACHE=${CCL_BUFFER_CACHE:-0}
 _DEVICES=$(seq 0 $((NUM_GPUS-1)) | paste -sd',')
 export ONEAPI_DEVICE_SELECTOR="level_zero:${_DEVICES}"
 
-torchrun --nproc-per-node=${NUM_GPUS} --standalone \
+# Find python3 that has torch (falls back to the one that provides torchrun)
+PYTHON3=$(python3 -c "import torch; import sys; print(sys.executable)" 2>/dev/null || command -v python3)
+$PYTHON3 -m torch.distributed.run --nproc-per-node=${NUM_GPUS} --standalone \
     -m verl.trainer.sft_trainer \
     data.train_files=$HOME/data/gsm8k/train_sft.parquet \
     data.val_files=$HOME/data/gsm8k/test_sft.parquet \
@@ -35,4 +37,5 @@ torchrun --nproc-per-node=${NUM_GPUS} --standalone \
     trainer.total_epochs=1 \
     trainer.total_training_steps=5 \
     data.micro_batch_size_per_gpu=1 \
-    trainer.save_freq=-1 $@
+    trainer.save_freq=-1 \
+    trainer.n_gpus_per_node=${NUM_GPUS} $@

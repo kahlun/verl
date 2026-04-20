@@ -228,9 +228,14 @@ class FSDPEngine(BaseEngine):
 
         torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
-        init_context = get_init_weight_context_manager(
-            use_meta_tensor=not self.model_config.hf_config.tie_word_embeddings, mesh=self.device_mesh
-        )
+        if device_name == "xpu":
+            # [XPU] sync_module_states=True broadcast from CPU→XPU hangs on driver <26;
+            # force all ranks to load from disk on CPU so no broadcast is needed.
+            init_context = lambda: torch.device("cpu")
+        else:
+            init_context = get_init_weight_context_manager(
+                use_meta_tensor=not self.model_config.hf_config.tie_word_embeddings, mesh=self.device_mesh
+            )
 
         with init_context(), warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -368,14 +373,17 @@ class FSDPEngine(BaseEngine):
                 self._is_offload_param = False
                 self._is_offload_optimizer = False
 
+            # [XPU] CPU→XPU broadcast (sync_module_states=True) hangs on driver <26.
+            # All XPU ranks load from disk independently; no broadcast needed.
+            _xpu = device_name == "xpu"
             module = FSDP(
                 module,
-                param_init_fn=init_fn,
+                param_init_fn=None if _xpu else init_fn,
                 auto_wrap_policy=auto_wrap_policy,
                 device_id=get_device_id(),
                 sharding_strategy=sharding_strategy,
                 mixed_precision=mixed_precision,
-                sync_module_states=True,
+                sync_module_states=not _xpu,
                 device_mesh=self.device_mesh,
                 forward_prefetch=self.engine_config.forward_prefetch,
                 use_orig_params=self.engine_config.use_orig_params,
