@@ -26,6 +26,9 @@ export CCL_ATL_SHM=${CCL_ATL_SHM:-1}
 export CCL_BUFFER_CACHE=${CCL_BUFFER_CACHE:-0}
 # Disable topology recognition — assume XeLink across devices
 export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0
+# Disable topo algo — ZE_AFFINITY_MASK renumbers all worker devices to 0,
+# causing oneCCL to think all ranks are on the same device (oversubscription).
+export CCL_TOPO_ALGO=0
 
 # XPU device selection: use ZE_AFFINITY_MASK (Level Zero) for device restriction.
 # vLLM 0.17+ XPU platform uses ZE_AFFINITY_MASK as device_control_env_var; setting

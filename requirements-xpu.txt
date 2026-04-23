@@ -28,4 +28,5 @@ tensorboard
 tensordict>=0.8.0,<=0.10.0,!=0.9.0
 torchdata
 transformers
+trl<0.18
 wandb
