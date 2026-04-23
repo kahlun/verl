@@ -1,0 +1,131 @@
+# verl on Intel XPU (Data Center GPU Max / Arc Pro / Arc)
+#
+# Based on vLLM's Dockerfile.xpu pattern (intel/deep-learning-essentials base).
+#
+# Build:
+#   docker build -t verl-xpu:latest -f docker/xpu/Dockerfile.xpu .
+#
+# Behind a corporate proxy:
+#   docker build --build-arg http_proxy=... --build-arg https_proxy=... ...
+#
+# Run (mount GPU devices + render group):
+#   docker run -it --rm \
+#     --device /dev/dri --group-add render \
+#     --shm-size 16g \
+#     -v $HOME/data:/root/data \
+#     verl-xpu:latest
+#
+# Tested on: 4x Intel Arc Pro B60 (Battlemage, 24 GB VRAM each)
+
+FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTHON_VERSION=3.12
+ARG TORCH_VERSION=2.11.0
+ARG TRITON_XPU_VERSION=3.7.0
+ARG VLLM_VERSION=0.17.1
+ARG PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/xpu"
+
+WORKDIR /workspace
+
+# --- System dependencies ---
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        gcc g++ cmake libnuma-dev wget git curl build-essential \
+        python3.12 python3.12-dev python3-pip ca-certificates && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- Intel GPU user-mode drivers (UMD) from GitHub releases ---
+# Avoids apt repo dependency issues; pins exact versions for reproducibility.
+# Pinned to compute-runtime 26.09 — fixes P2P IPC, torch.compile, and XCCL
+# MAX/MIN/AVG bugs present in 25.44/25.48.
+RUN mkdir /tmp/neo && cd /tmp/neo && \
+    wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.30.1/intel-igc-core-2_2.30.1+20950_amd64.deb && \
+    wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.30.1/intel-igc-opencl-2_2.30.1+20950_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/intel-ocloc_26.09.37435.1-0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/intel-opencl-icd_26.09.37435.1-0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/libigdgmm12_22.9.0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/libze-intel-gpu1_26.09.37435.1-0_amd64.deb && \
+    wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.28.0/level-zero_1.28.0+u24.04_amd64.deb && \
+    dpkg -i *.deb && \
+    cd / && rm -rf /tmp/neo
+
+# --- oneCCL with Battlemage (BMG) support ---
+# Default oneAPI 2025.2 oneCCL lacks BMG support; install specific version.
+ARG ONECCL_INSTALLER="intel-oneccl-2021.15.7.8_offline.sh"
+RUN wget -q "https://github.com/uxlfoundation/oneCCL/releases/download/2021.15.7/${ONECCL_INSTALLER}" && \
+    bash "${ONECCL_INSTALLER}" -a --silent --eula accept && \
+    rm "${ONECCL_INSTALLER}" && \
+    echo "source /opt/intel/oneapi/setvars.sh --force" >> /root/.bashrc && \
+    echo "source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force" >> /root/.bashrc
+RUN rm -f /opt/intel/oneapi/ccl/latest && \
+    ln -s /opt/intel/oneapi/ccl/2021.15 /opt/intel/oneapi/ccl/latest
+
+SHELL ["bash", "-c"]
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
+
+# --- PyTorch with XPU support ---
+RUN python3 -m pip install --no-cache-dir \
+        torch==${TORCH_VERSION} torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/xpu && \
+    python3 -m pip install --no-cache-dir \
+        triton-xpu==${TRITON_XPU_VERSION} \
+        --index-url https://download.pytorch.org/whl/xpu && \
+    python3 -m pip install --no-cache-dir dpctl
+
+# --- vLLM with XPU support (build from source) ---
+RUN git clone --depth 1 --branch v${VLLM_VERSION} \
+        https://github.com/vllm-project/vllm.git /opt/vllm && \
+    cd /opt/vllm && \
+    source /opt/intel/oneapi/setvars.sh --force && \
+    python3 -m pip install --no-cache-dir -r requirements/xpu.txt && \
+    VLLM_TARGET_DEVICE=xpu python3 -m pip install --no-build-isolation --no-cache-dir -v . && \
+    python3 -m pip cache purge
+
+# --- verl dependencies ---
+COPY requirements-xpu.txt /tmp/requirements-xpu.txt
+RUN python3 -m pip install --no-cache-dir -r /tmp/requirements-xpu.txt && \
+    python3 -m pip install --no-cache-dir transformers
+
+# --- Install verl ---
+COPY . /workspace/verl
+WORKDIR /workspace/verl
+RUN python3 -m pip install --no-deps --no-cache-dir -v -e .
+
+# --- oneCCL workarounds (pre-DLE 2026.0 driver) ---
+ENV CCL_ATL_SHM=1
+ENV CCL_BUFFER_CACHE=0
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+# Ensure Ray's internal gRPC (localhost) is never routed through the corporate proxy.
+# Without this, ray.init() times out when http_proxy is set in the container.
+ENV no_proxy=127.0.0.1,localhost,::1
+ENV NO_PROXY=127.0.0.1,localhost,::1
+# SYCL device selector: setvars.sh may leave this as "level_zero:" (empty
+# after ':') which causes SIGABRT in any subprocess that initialises SYCL.
+# Ray also rejects '*' — must be explicit device indices.
+# Override at docker run time: -e ONEAPI_DEVICE_SELECTOR=level_zero:0,1,2,3
+ENV ONEAPI_DEVICE_SELECTOR=level_zero:0,1
+
+# sitecustomize.py: fix ONEAPI_DEVICE_SELECTOR at Python startup for EVERY
+# Python process (including vLLM's _run_in_subprocess model registry check).
+# Ray workers are fresh processes that may not inherit the corrected env from
+# the parent shell — this ensures even deeply nested subprocesses get a valid
+# device selector rather than the broken "level_zero:" value from setvars.sh.
+# The path is resolved dynamically to support any Python prefix / base image.
+RUN python3 -c "\
+import site, pathlib; \
+lib = pathlib.Path(site.getsitepackages()[0]).parent; \
+p = lib / 'sitecustomize.py'; \
+snippet = (\
+'# verl-xpu: fix ONEAPI_DEVICE_SELECTOR at startup\\n'\
+'import os as _os\\n'\
+'_sel = _os.environ.get(\"ONEAPI_DEVICE_SELECTOR\", \"\")\\n'\
+'if not _sel or _sel.endswith(\":\"):\\n'\
+'    _os.environ[\"ONEAPI_DEVICE_SELECTOR\"] = \"level_zero:0,1\"\\n'\
+); \
+existing = p.read_text() if p.exists() else ''; \
+p.write_text(existing + ('\\n' if existing and not existing.endswith('\\n') else '') + snippet)\
+"
+
+CMD ["bash", "-c", "source /root/.bashrc && exec bash"]
