@@ -18,12 +18,18 @@ export CCL_ATL_SHM=${CCL_ATL_SHM:-1}
 export CCL_BUFFER_CACHE=${CCL_BUFFER_CACHE:-0}
 # Disable topology recognition — assume XeLink across devices
 export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0
+# Disable topo algo — ZE_AFFINITY_MASK renumbers all worker devices to 0,
+# causing oneCCL to think all ranks are on the same device (oversubscription).
+export CCL_TOPO_ALGO=0
 
 # XPU device selection: use ZE_AFFINITY_MASK (Level Zero) for device restriction.
 # vLLM 0.17+ XPU platform uses ZE_AFFINITY_MASK as device_control_env_var; setting
 # ONEAPI_DEVICE_SELECTOR=level_zero:N,M breaks the FLA/triton SYCL JIT init path.
 _DEVICES=$(seq 0 $((NUM_GPUS-1)) | paste -sd',')
 export ZE_AFFINITY_MASK="${_DEVICES}"
+
+# XPU fix: Ray pre-starts ~100 idle workers, each opens an L0 context on the GPU.
+export RAY_NUM_PRESTART_PYTHON_WORKERS=0
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=gae \
@@ -35,6 +41,7 @@ python3 -m verl.trainer.main_ppo \
     data.shuffle=False \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=False \
+    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.ppo_mini_batch_size=8 \
@@ -48,9 +55,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.4 \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
+    actor_rollout_ref.rollout.enforce_eager=True \
+    actor_rollout_ref.rollout.free_cache_engine=False \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
     critic.optim.lr=1e-5 \
     critic.model.use_remove_padding=False \
     critic.model.path="${MODEL_PATH}" \
+    +critic.model.override_config.attn_implementation=sdpa \
     critic.model.enable_gradient_checkpointing=True \
     critic.ppo_micro_batch_size_per_gpu=1 \
     critic.fsdp.param_offload=True \
@@ -64,4 +76,5 @@ python3 -m verl.trainer.main_ppo \
     trainer.save_freq=-1 \
     trainer.test_freq=-1 \
     trainer.total_epochs=1 \
-    trainer.total_training_steps=1 $@
+    trainer.total_training_steps=1 \
+    +ray_kwargs.ray_init.num_gpus=${NUM_GPUS} $@
