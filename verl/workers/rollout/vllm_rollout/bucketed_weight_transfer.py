@@ -205,8 +205,10 @@ class BucketedWeightSender:
             del self.shm
             self.shm = None
         gc.collect()
-        get_torch_device().ipc_collect()
-        get_torch_device().empty_cache()
+        _dev = get_torch_device()
+        if hasattr(_dev, "ipc_collect"):
+            _dev.ipc_collect()
+        _dev.empty_cache()
 
 
 class BucketedWeightReceiver:
@@ -304,5 +306,7 @@ class BucketedWeightReceiver:
             del self.shm
             self.shm = None
         gc.collect()
-        get_torch_device().ipc_collect()
-        get_torch_device().empty_cache()
+        _dev = get_torch_device()
+        if hasattr(_dev, "ipc_collect"):
+            _dev.ipc_collect()
+        _dev.empty_cache()
