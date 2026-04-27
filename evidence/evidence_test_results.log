@@ -1,0 +1,34 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0 -- /usr/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/verl
+configfile: pyproject.toml
+plugins: hydra-core-1.3.2, asyncio-1.3.0, anyio-4.12.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 17 items
+
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_model_registry_accepts_attn_backend[llama3] PASSED [  5%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_model_registry_accepts_attn_backend[qwen3] PASSED [ 11%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_model_registry_accepts_attn_backend[deepseek_v3] PASSED [ 17%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_model_registry_accepts_attn_backend[llama4] PASSED [ 23%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_default_is_sdpa[llama3] PASSED [ 29%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_default_is_sdpa[qwen3] PASSED [ 35%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_default_is_sdpa[deepseek_v3] PASSED [ 41%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_default_is_sdpa[llama4] PASSED [ 47%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_flex_attn_propagated[llama3] PASSED [ 52%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_flex_attn_propagated[qwen3] PASSED [ 58%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_flex_attn_propagated[deepseek_v3] PASSED [ 64%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_flex_attn_propagated[llama4] PASSED [ 70%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_sdpa_attn_default[llama3] PASSED [ 76%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_sdpa_attn_default[qwen3] PASSED [ 82%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_sdpa_attn_default[deepseek_v3] PASSED [ 88%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_sdpa_attn_default[llama4] PASSED [ 94%]
+../../workspace/verl/tests/unit/torchtitan/test_attn_backend_sync.py::TestAttnBackendSync::test_verl_code_passes_attn_backend PASSED [100%]
+
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.12/dist-packages/torch/jit/_script.py:362: 14 warnings
+  /usr/local/lib/python3.12/dist-packages/torch/jit/_script.py:362: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 17 passed, 14 warnings in 3.14s ========================

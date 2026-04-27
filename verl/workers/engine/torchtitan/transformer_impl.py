@@ -105,14 +105,11 @@ class TorchTitanEngine(BaseEngine):
         # Derive torchtitan model name and flavor from HF config
         torchtitan_name, torchtitan_flavor = derive_torchtitan_name_and_flavor(self.model_config.hf_config)
 
-        # Get ModelSpec from model registry
-        model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
-        model_spec = model_module.model_registry(torchtitan_flavor)
-
-        # Override attn_backend on the model config if needed
+        # Get ModelSpec from model registry, passing attn_type so torchtitan
+        # builds the model with the correct attention backend from the start.
         attn_type = self.engine_config.attn_type
-        if hasattr(model_spec.model, "layer") and hasattr(model_spec.model.layer, "attention"):
-            model_spec.model.layer.attention.attn_backend = attn_type
+        model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
+        model_spec = model_module.model_registry(torchtitan_flavor, attn_backend=attn_type)
 
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,
@@ -596,7 +593,7 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
                 position_ids = position_ids.values().unsqueeze(0)
 
             labels = torch.roll(input_ids, shifts=-1, dims=1)
-            attn_type = self.trainer.model_config.layer.attention.attn_backend
+            attn_type = self.engine_config.attn_type
             attention_mask = get_attention_masks(
                 input_batch=input_ids,
                 positions=position_ids,
