@@ -120,20 +120,22 @@ class TorchTitanEngine(BaseEngine):
             model_spec = model_module.model_registry(torchtitan_flavor, attn_backend=attn_type)
         else:
             # Older torchtitan: attn backend is baked into the flavor name and
-            # cannot be overridden at registry time. If the user requested
-            # flex or varlen we cannot honor it — the mask builder (utils.py)
-            # also only supports flex/varlen, so continuing would produce
-            # mismatched model + mask and corrupt training silently. Raise.
-            if attn_type in ("flex", "varlen"):
-                raise RuntimeError(
-                    f"torchtitan's model_registry() does not accept 'attn_backend' "
-                    f"(older snapshot detected). Cannot build model with "
-                    f"attn_type='{attn_type}' as requested. "
-                    f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
-                    f"pre-baked flavor that encodes the backend "
-                    f"(e.g. '{torchtitan_flavor}_flex_attn' or '{torchtitan_flavor}_varlen_attn')."
-                )
-            model_spec = model_module.model_registry(torchtitan_flavor)
+            # cannot be overridden at registry time.
+            # get_attention_masks() (called when use_remove_padding=True, the
+            # default) only supports flex and varlen — sdpa would raise TypeError
+            # there too. So any attn_type other than the flavor's own baked
+            # backend is unsafe. Raise unconditionally: the user must either
+            # upgrade torchtitan (commit 7cec166+) or explicitly select a
+            # pre-baked flavor that already encodes the desired backend.
+            raise RuntimeError(
+                f"torchtitan's model_registry() does not accept 'attn_backend' "
+                f"(older snapshot detected). Cannot safely build with "
+                f"attn_type='{attn_type}': the requested backend cannot be applied "
+                f"to the model, and the mask builder also requires flex or varlen. "
+                f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
+                f"pre-baked flavor that encodes the backend "
+                f"(e.g. '{torchtitan_flavor}_flex_attn' or '{torchtitan_flavor}_varlen_attn')."
+            )
 
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,

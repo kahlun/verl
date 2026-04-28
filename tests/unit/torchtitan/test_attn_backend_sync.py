@@ -131,39 +131,35 @@ class TestAttnBackendSync:
             )
 
     def test_legacy_api_fallback_raises(self):
-        """On older torchtitan without attn_backend param, verl raises RuntimeError
-        when attn_type is flex or varlen.
+        """On older torchtitan without attn_backend param, verl always raises RuntimeError.
 
-        Simulates the Feb-2026 torchtitan snapshot. Continuing silently would
-        produce a mismatch: model built with sdpa but mask builder expecting
-        flex/varlen, corrupting training. A clear RuntimeError is safer.
+        Simulates the Feb-2026 torchtitan snapshot. Any attn_type is unsafe:
+        - flex/varlen: model built with wrong backend
+        - sdpa: model backend may match the flavor, but get_attention_masks()
+          (called when use_remove_padding=True, the default) only supports
+          flex and varlen — sdpa would raise TypeError there anyway.
+        Raising early with a clear message is safer than either case.
         """
         def legacy_model_registry(flavor: str):
             return MagicMock(name="legacy_model_spec")
 
-        # flex/varlen must raise — model and mask would be inconsistent
-        for bad_attn_type in ("flex", "varlen"):
-            sig = inspect.signature(legacy_model_registry)
-            assert "attn_backend" not in sig.parameters
+        sig = inspect.signature(legacy_model_registry)
+        assert "attn_backend" not in sig.parameters
+
+        for attn_type in ("flex", "varlen", "sdpa"):
             with pytest.raises(RuntimeError, match="attn_backend"):
                 if "attn_backend" in sig.parameters:
-                    legacy_model_registry("debugmodel", attn_backend=bad_attn_type)
+                    legacy_model_registry("debugmodel", attn_backend=attn_type)
                 else:
-                    if bad_attn_type in ("flex", "varlen"):
-                        raise RuntimeError(
-                            f"torchtitan's model_registry() does not accept 'attn_backend' "
-                            f"(older snapshot detected). Cannot build model with "
-                            f"attn_type='{bad_attn_type}' as requested. "
-                            f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
-                            f"pre-baked flavor that encodes the backend "
-                            f"(e.g. 'debugmodel_flex_attn' or 'debugmodel_varlen_attn')."
-                        )
-                    legacy_model_registry("debugmodel")
-
-        # sdpa with legacy API is fine — model + mask both use sdpa path
-        sig = inspect.signature(legacy_model_registry)
-        result = legacy_model_registry("debugmodel")  # no raise expected
-        assert result is not None
+                    raise RuntimeError(
+                        f"torchtitan's model_registry() does not accept 'attn_backend' "
+                        f"(older snapshot detected). Cannot safely build with "
+                        f"attn_type='{attn_type}': the requested backend cannot be applied "
+                        f"to the model, and the mask builder also requires flex or varlen. "
+                        f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
+                        f"pre-baked flavor that encodes the backend "
+                        f"(e.g. 'debugmodel_flex_attn' or 'debugmodel_varlen_attn')."
+                    )
 
     def test_verl_code_uses_inspect_guard(self):
         """Verify verl's transformer_impl.py uses inspect guard for API compatibility."""
@@ -190,13 +186,15 @@ class TestAttnBackendSync:
             "when the parameter is available."
         )
 
-        # Legacy path must raise for flex/varlen, not silently continue
-        assert 'attn_type in ("flex", "varlen")' in source, (
-            "transformer_impl.py legacy path must raise for flex/varlen "
-            "to prevent model+mask backend mismatch."
-        )
+        # Legacy path must always raise — both model backend and mask builder are unsafe
         assert "raise RuntimeError" in source, (
-            "transformer_impl.py legacy path must raise RuntimeError, not warn-and-continue."
+            "transformer_impl.py legacy path must raise RuntimeError unconditionally: "
+            "get_attention_masks() only supports flex/varlen so sdpa is also unsafe."
+        )
+        # Must NOT contain an incomplete guard that only raises for flex/varlen
+        assert 'attn_type in ("flex", "varlen")' not in source, (
+            "transformer_impl.py must not conditionally allow sdpa on legacy torchtitan. "
+            "get_attention_masks() does not support sdpa either."
         )
 
         # Must NOT contain the broken direct assignment (singular .layer)
