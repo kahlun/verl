@@ -17,6 +17,7 @@ The concrete Engine implementation using PyTorch TorchTitan parallelism (FSDP2 +
 
 import gc
 import importlib
+import inspect
 import logging
 import os
 import re
@@ -105,14 +106,36 @@ class TorchTitanEngine(BaseEngine):
         # Derive torchtitan model name and flavor from HF config
         torchtitan_name, torchtitan_flavor = derive_torchtitan_name_and_flavor(self.model_config.hf_config)
 
-        # Get ModelSpec from model registry
-        model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
-        model_spec = model_module.model_registry(torchtitan_flavor)
-
-        # Override attn_backend on the model config if needed
+        # Get ModelSpec from model registry.
+        # torchtitan's model_registry() API has evolved:
+        #   - Feb 2026 (commit 9810191): model_registry(flavor) — no attn_backend param,
+        #     configs were baked per-flavor (e.g. "debugmodel_flex_attn")
+        #   - Apr 2026 (commit 7cec166+, current): model_registry(flavor, attn_backend=)
+        #     attn_backend is resolved at registry time into typed inner_attention configs
+        # We detect which API is present so both snapshots work correctly.
         attn_type = self.engine_config.attn_type
-        if hasattr(model_spec.model, "layer") and hasattr(model_spec.model.layer, "attention"):
-            model_spec.model.layer.attention.attn_backend = attn_type
+        model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
+        _registry_sig = inspect.signature(model_module.model_registry)
+        if "attn_backend" in _registry_sig.parameters:
+            model_spec = model_module.model_registry(torchtitan_flavor, attn_backend=attn_type)
+        else:
+            # Older torchtitan: attn backend is baked into the flavor name and
+            # cannot be overridden at registry time.
+            # get_attention_masks() (called when use_remove_padding=True, the
+            # default) only supports flex and varlen — sdpa would raise TypeError
+            # there too. So any attn_type other than the flavor's own baked
+            # backend is unsafe. Raise unconditionally: the user must either
+            # upgrade torchtitan (commit 7cec166+) or explicitly select a
+            # pre-baked flavor that already encodes the desired backend.
+            raise RuntimeError(
+                f"torchtitan's model_registry() does not accept 'attn_backend' "
+                f"(older snapshot detected). Cannot safely build with "
+                f"attn_type='{attn_type}': the requested backend cannot be applied "
+                f"to the model, and the mask builder also requires flex or varlen. "
+                f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
+                f"pre-baked flavor that encodes the backend "
+                f"(e.g. '{torchtitan_flavor}_flex_attn' or '{torchtitan_flavor}_varlen_attn')."
+            )
 
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,
@@ -596,7 +619,7 @@ class TorchTitanEngineWithLMHead(TorchTitanEngine):
                 position_ids = position_ids.values().unsqueeze(0)
 
             labels = torch.roll(input_ids, shifts=-1, dims=1)
-            attn_type = self.trainer.model_config.layer.attention.attn_backend
+            attn_type = self.engine_config.attn_type
             attention_mask = get_attention_masks(
                 input_batch=input_ids,
                 positions=position_ids,
