@@ -17,6 +17,7 @@ The concrete Engine implementation using PyTorch TorchTitan parallelism (FSDP2 +
 
 import gc
 import importlib
+import inspect
 import logging
 import os
 import re
@@ -114,19 +115,24 @@ class TorchTitanEngine(BaseEngine):
         # We detect which API is present so both snapshots work correctly.
         attn_type = self.engine_config.attn_type
         model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
-        import inspect as _inspect
-        _registry_sig = _inspect.signature(model_module.model_registry)
+        _registry_sig = inspect.signature(model_module.model_registry)
         if "attn_backend" in _registry_sig.parameters:
             model_spec = model_module.model_registry(torchtitan_flavor, attn_backend=attn_type)
         else:
-            # Older torchtitan: attn backend is baked into the flavor name.
-            # attn_type from engine_config will not be applied; warn the user.
-            logger.warning(
-                f"torchtitan's model_registry() does not accept 'attn_backend'. "
-                f"The requested attn_type='{attn_type}' cannot be applied. "
-                f"To use a specific attention backend, pass the pre-baked flavor "
-                f"(e.g. '{torchtitan_flavor}_flex') or upgrade torchtitan."
-            )
+            # Older torchtitan: attn backend is baked into the flavor name and
+            # cannot be overridden at registry time. If the user requested
+            # flex or varlen we cannot honor it — the mask builder (utils.py)
+            # also only supports flex/varlen, so continuing would produce
+            # mismatched model + mask and corrupt training silently. Raise.
+            if attn_type in ("flex", "varlen"):
+                raise RuntimeError(
+                    f"torchtitan's model_registry() does not accept 'attn_backend' "
+                    f"(older snapshot detected). Cannot build model with "
+                    f"attn_type='{attn_type}' as requested. "
+                    f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
+                    f"pre-baked flavor that encodes the backend "
+                    f"(e.g. '{torchtitan_flavor}_flex_attn' or '{torchtitan_flavor}_varlen_attn')."
+                )
             model_spec = model_module.model_registry(torchtitan_flavor)
 
         optimizer = OptimizersContainer.Config(

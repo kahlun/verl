@@ -25,7 +25,7 @@ The bug (before fix):
 
 import importlib
 import inspect
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -44,7 +44,7 @@ def _get_model_modules():
     return results
 
 
-@pytest.fixture(params=_get_model_modules(), ids=lambda x: x[0])
+@pytest.fixture(params=_get_model_modules(), ids=lambda x: x[0] if isinstance(x, tuple) else str(x))
 def model_module(request):
     return request.param
 
@@ -130,48 +130,40 @@ class TestAttnBackendSync:
                 f"got {type(inner).__name__}"
             )
 
-    def test_legacy_api_fallback_warns(self):
-        """On older torchtitan without attn_backend param, verl emits a warning.
+    def test_legacy_api_fallback_raises(self):
+        """On older torchtitan without attn_backend param, verl raises RuntimeError
+        when attn_type is flex or varlen.
 
-        Simulates the Feb-2026 torchtitan snapshot where model_registry(flavor)
-        had no attn_backend parameter. Verifies the inspect-guard logic falls
-        back gracefully and logs a warning rather than crashing or silently
-        applying the wrong backend.
+        Simulates the Feb-2026 torchtitan snapshot. Continuing silently would
+        produce a mismatch: model built with sdpa but mask builder expecting
+        flex/varlen, corrupting training. A clear RuntimeError is safer.
         """
-        import logging
-
-        # Build a fake model_registry that has NO attn_backend param (Feb-2026 API)
         def legacy_model_registry(flavor: str):
             return MagicMock(name="legacy_model_spec")
 
-        # Exercise the inspect-guard logic directly (same logic as transformer_impl.py)
-        called_without_attn_backend = []
-        warned = []
+        # flex/varlen must raise — model and mask would be inconsistent
+        for bad_attn_type in ("flex", "varlen"):
+            sig = inspect.signature(legacy_model_registry)
+            assert "attn_backend" not in sig.parameters
+            with pytest.raises(RuntimeError, match="attn_backend"):
+                if "attn_backend" in sig.parameters:
+                    legacy_model_registry("debugmodel", attn_backend=bad_attn_type)
+                else:
+                    if bad_attn_type in ("flex", "varlen"):
+                        raise RuntimeError(
+                            f"torchtitan's model_registry() does not accept 'attn_backend' "
+                            f"(older snapshot detected). Cannot build model with "
+                            f"attn_type='{bad_attn_type}' as requested. "
+                            f"Either upgrade torchtitan (commit 7cec166 or later), or use a "
+                            f"pre-baked flavor that encodes the backend "
+                            f"(e.g. 'debugmodel_flex_attn' or 'debugmodel_varlen_attn')."
+                        )
+                    legacy_model_registry("debugmodel")
 
-        mock_logger = MagicMock()
-        mock_logger.warning.side_effect = lambda msg, *a, **kw: warned.append(msg)
-
-        attn_type = "flex"
+        # sdpa with legacy API is fine — model + mask both use sdpa path
         sig = inspect.signature(legacy_model_registry)
-        if "attn_backend" in sig.parameters:
-            result = legacy_model_registry("debugmodel", attn_backend=attn_type)
-        else:
-            mock_logger.warning(
-                f"torchtitan's model_registry() does not accept 'attn_backend'. "
-                f"The requested attn_type='{attn_type}' cannot be applied. "
-                f"To use a specific attention backend, pass the pre-baked flavor "
-                f"(e.g. 'debugmodel_flex') or upgrade torchtitan."
-            )
-            result = legacy_model_registry("debugmodel")
-            called_without_attn_backend.append(True)
-
-        assert called_without_attn_backend, (
-            "Legacy path should call model_registry without attn_backend"
-        )
-        assert warned, "Legacy path should emit a warning about attn_type"
-        assert "attn_backend" in warned[0] and "flex" in warned[0], (
-            f"Warning should mention 'attn_backend' and the requested type, got: {warned[0]}"
-        )
+        result = legacy_model_registry("debugmodel")  # no raise expected
+        assert result is not None
 
     def test_verl_code_uses_inspect_guard(self):
         """Verify verl's transformer_impl.py uses inspect guard for API compatibility."""
@@ -198,6 +190,15 @@ class TestAttnBackendSync:
             "when the parameter is available."
         )
 
+        # Legacy path must raise for flex/varlen, not silently continue
+        assert 'attn_type in ("flex", "varlen")' in source, (
+            "transformer_impl.py legacy path must raise for flex/varlen "
+            "to prevent model+mask backend mismatch."
+        )
+        assert "raise RuntimeError" in source, (
+            "transformer_impl.py legacy path must raise RuntimeError, not warn-and-continue."
+        )
+
         # Must NOT contain the broken direct assignment (singular .layer)
         assert "model_spec.model.layer.attention.attn_backend" not in source, (
             "transformer_impl.py still contains broken assignment to "
@@ -209,4 +210,10 @@ class TestAttnBackendSync:
             "transformer_impl.py must not read attn_type from "
             "self.trainer.model_config.layer.attention.attn_backend. "
             "Should use self.engine_config.attn_type."
+        )
+
+        # Warning/error message must use correct legacy flavor suffix naming
+        assert "_flex_attn" in source and "_varlen_attn" in source, (
+            "Error message must cite correct legacy flavor suffixes '_flex_attn' "
+            "and '_varlen_attn', not '_flex' alone."
         )
