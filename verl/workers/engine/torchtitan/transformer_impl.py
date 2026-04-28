@@ -105,11 +105,29 @@ class TorchTitanEngine(BaseEngine):
         # Derive torchtitan model name and flavor from HF config
         torchtitan_name, torchtitan_flavor = derive_torchtitan_name_and_flavor(self.model_config.hf_config)
 
-        # Get ModelSpec from model registry, passing attn_type so torchtitan
-        # builds the model with the correct attention backend from the start.
+        # Get ModelSpec from model registry.
+        # torchtitan's model_registry() API has evolved:
+        #   - Feb 2026 (commit 9810191): model_registry(flavor) — no attn_backend param,
+        #     configs were baked per-flavor (e.g. "debugmodel_flex_attn")
+        #   - Apr 2026 (commit 7cec166+, current): model_registry(flavor, attn_backend=)
+        #     attn_backend is resolved at registry time into typed inner_attention configs
+        # We detect which API is present so both snapshots work correctly.
         attn_type = self.engine_config.attn_type
         model_module = importlib.import_module(f"torchtitan.models.{torchtitan_name}")
-        model_spec = model_module.model_registry(torchtitan_flavor, attn_backend=attn_type)
+        import inspect as _inspect
+        _registry_sig = _inspect.signature(model_module.model_registry)
+        if "attn_backend" in _registry_sig.parameters:
+            model_spec = model_module.model_registry(torchtitan_flavor, attn_backend=attn_type)
+        else:
+            # Older torchtitan: attn backend is baked into the flavor name.
+            # attn_type from engine_config will not be applied; warn the user.
+            logger.warning(
+                f"torchtitan's model_registry() does not accept 'attn_backend'. "
+                f"The requested attn_type='{attn_type}' cannot be applied. "
+                f"To use a specific attention backend, pass the pre-baked flavor "
+                f"(e.g. '{torchtitan_flavor}_flex') or upgrade torchtitan."
+            )
+            model_spec = model_module.model_registry(torchtitan_flavor)
 
         optimizer = OptimizersContainer.Config(
             name=self.optimizer_config.name,

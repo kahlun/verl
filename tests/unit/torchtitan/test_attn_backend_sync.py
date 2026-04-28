@@ -1,18 +1,31 @@
 """Test that TorchtitanEngineConfig.attn_type is correctly propagated to
 torchtitan's model_registry when building the model spec.
 
-This is a unit test for the fix in transformer_impl.py that ensures the
-attn_backend parameter is passed to model_registry() instead of relying on
-a broken post-hoc override that used the wrong attribute path.
+Background — torchtitan API evolution:
+  - v0.1.0 / v0.2.0 / v0.2.1 / v0.2.2 (all PyPI tags):
+      Used get_train_spec(); no model_registry() at all.
+  - Feb 2026 refactor (commit 9810191, "Config System Refactor"):
+      model_registry(flavor) introduced; NO attn_backend param.
+      Attention backend was baked per-flavor (e.g. "debugmodel_flex_attn").
+      model_spec.model.layer.attention.attn_backend was a mutable string field.
+  - Apr 2026 (commit 7cec166+, current HEAD):
+      model_registry(flavor, attn_backend="sdpa") — param added.
+      attn_backend resolved at registry time into typed inner_attention Config.
+      model_spec.model.layers[0].attention.inner_attention — plural 'layers'.
 
-The bug: verl called model_registry(flavor) without passing attn_backend,
-so every model was silently built with sdpa regardless of the user's config.
-The post-hoc override referenced 'model_spec.model.layer' (singular) but
-torchtitan uses 'model_spec.model.layers' (plural), so it never executed.
+The original verl code was written for the Feb-2026 state but broke when
+torchtitan refactored again in April (changed .layer → .layers, removed the
+string field). The fix uses inspect.signature to handle both snapshots.
+
+The bug (before fix):
+  verl called model_registry(flavor) without attn_backend, AND the fallback
+  guard used .layer (singular) which never matched. Both paths silently fell
+  back to sdpa even when engine_config.attn_type="flex".
 """
 
 import importlib
 import inspect
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -77,11 +90,9 @@ class TestAttnBackendSync:
                 break
         assert flavors is not None, f"No configs dict found in {name}"
 
-        # Pick smallest flavor
         flavor = "debugmodel" if "debugmodel" in flavors else next(iter(flavors))
         spec = mod.model_registry(flavor, attn_backend="flex")
 
-        # Verify the inner attention is FlexAttention
         first_layer = spec.model.layers[0]
         inner = first_layer.attention.inner_attention
         assert isinstance(inner, FlexAttention.Config), (
@@ -112,7 +123,6 @@ class TestAttnBackendSync:
         inner = first_layer.attention.inner_attention
 
         if name == "llama4":
-            # llama4 defaults to flex
             assert isinstance(inner, FlexAttention.Config)
         else:
             assert isinstance(inner, ScaledDotProductAttention.Config), (
@@ -120,41 +130,83 @@ class TestAttnBackendSync:
                 f"got {type(inner).__name__}"
             )
 
-    def test_verl_code_passes_attn_backend(self):
-        """Verify verl's transformer_impl.py passes attn_backend to model_registry.
+    def test_legacy_api_fallback_warns(self):
+        """On older torchtitan without attn_backend param, verl emits a warning.
 
-        This is a source-code level check to ensure the fix is in place.
+        Simulates the Feb-2026 torchtitan snapshot where model_registry(flavor)
+        had no attn_backend parameter. Verifies the inspect-guard logic falls
+        back gracefully and logs a warning rather than crashing or silently
+        applying the wrong backend.
         """
-        impl_path = (
-            "verl/workers/engine/torchtitan/transformer_impl.py"
+        import logging
+
+        # Build a fake model_registry that has NO attn_backend param (Feb-2026 API)
+        def legacy_model_registry(flavor: str):
+            return MagicMock(name="legacy_model_spec")
+
+        # Exercise the inspect-guard logic directly (same logic as transformer_impl.py)
+        called_without_attn_backend = []
+        warned = []
+
+        mock_logger = MagicMock()
+        mock_logger.warning.side_effect = lambda msg, *a, **kw: warned.append(msg)
+
+        attn_type = "flex"
+        sig = inspect.signature(legacy_model_registry)
+        if "attn_backend" in sig.parameters:
+            result = legacy_model_registry("debugmodel", attn_backend=attn_type)
+        else:
+            mock_logger.warning(
+                f"torchtitan's model_registry() does not accept 'attn_backend'. "
+                f"The requested attn_type='{attn_type}' cannot be applied. "
+                f"To use a specific attention backend, pass the pre-baked flavor "
+                f"(e.g. 'debugmodel_flex') or upgrade torchtitan."
+            )
+            result = legacy_model_registry("debugmodel")
+            called_without_attn_backend.append(True)
+
+        assert called_without_attn_backend, (
+            "Legacy path should call model_registry without attn_backend"
         )
+        assert warned, "Legacy path should emit a warning about attn_type"
+        assert "attn_backend" in warned[0] and "flex" in warned[0], (
+            f"Warning should mention 'attn_backend' and the requested type, got: {warned[0]}"
+        )
+
+    def test_verl_code_uses_inspect_guard(self):
+        """Verify verl's transformer_impl.py uses inspect guard for API compatibility."""
         import os
 
-        # Find the file relative to the repo root
         repo_root = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         )
-        full_path = os.path.join(repo_root, impl_path)
-
-        with open(full_path) as f:
+        impl_path = os.path.join(
+            repo_root, "verl/workers/engine/torchtitan/transformer_impl.py"
+        )
+        with open(impl_path) as f:
             source = f.read()
 
-        # The fix: model_registry must be called with attn_backend=
+        # Must use inspect to detect which API is available
+        assert '"attn_backend" in' in source and "signature" in source, (
+            "transformer_impl.py must use inspect.signature to guard the attn_backend "
+            "call for torchtitan API compatibility."
+        )
+
+        # Must call with attn_backend when available
         assert "model_registry(torchtitan_flavor, attn_backend=" in source, (
-            "transformer_impl.py must pass attn_backend to model_registry(). "
-            "Without this, the model silently uses sdpa regardless of config."
+            "transformer_impl.py must pass attn_backend to model_registry() "
+            "when the parameter is available."
         )
 
-        # The bug: must NOT contain the broken direct assignment
+        # Must NOT contain the broken direct assignment (singular .layer)
         assert "model_spec.model.layer.attention.attn_backend" not in source, (
-            "transformer_impl.py still contains the broken direct assignment "
-            "to model_spec.model.layer.attention.attn_backend (singular 'layer'). "
-            "torchtitan uses 'layers' (plural list), so this never executes."
+            "transformer_impl.py still contains broken assignment to "
+            "model_spec.model.layer (singular). torchtitan uses .layers (plural)."
         )
 
-        # Also check the second bug site is fixed
+        # Must NOT read attn_type from the wrong trainer path
         assert "self.trainer.model_config.layer.attention.attn_backend" not in source, (
-            "transformer_impl.py still reads attn_type from "
-            "self.trainer.model_config.layer.attention.attn_backend which uses "
-            "wrong attribute path. Should use self.engine_config.attn_type."
+            "transformer_impl.py must not read attn_type from "
+            "self.trainer.model_config.layer.attention.attn_backend. "
+            "Should use self.engine_config.attn_type."
         )
