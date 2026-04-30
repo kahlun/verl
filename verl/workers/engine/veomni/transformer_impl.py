@@ -221,6 +221,22 @@ class VeOmniEngine(FSDPEngine):
             enable_reentrant=self.engine_config.enable_reentrant,
             enable_forward_prefetch=self.engine_config.forward_prefetch,
         )
+        # oneCCL (xccl) doesn't support ReduceOp.AVG in reduce_scatter;
+        # force SUM reduction with manual division instead (same as FSDP engine).
+        # Must be set on ALL FSDP submodules, not just root, since VeOmni
+        # wraps each layer with fully_shard independently.
+        from verl.utils.device import is_torch_xpu_available
+        if is_torch_xpu_available():
+            from torch.distributed.fsdp._fully_shard import FSDPModule
+            for submod in module.modules():
+                if isinstance(submod, FSDPModule):
+                    if not hasattr(submod, "set_force_sum_reduction_for_comms"):
+                        raise RuntimeError(
+                            f"FSDPModule on rank {self.rank} is missing set_force_sum_reduction_for_comms() method. "
+                            "This method is required for correct gradient synchronization with oneCCL (xccl) on Intel XPU. "
+                            "Please check that PyTorch version >= 2.5 with FSDP2 is correctly installed."
+                        )
+                    submod.set_force_sum_reduction_for_comms(True)
         log_gpu_memory_usage("After parallelize model", logger=logger)
 
         if not self.engine_config.forward_only:
@@ -613,7 +629,7 @@ def _prepare_veomni_flash_attention_kwargs(position_ids: torch.Tensor) -> dict[s
     }
 
 
-@EngineRegistry.register(model_type="language_model", backend=["veomni"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["veomni"], device=["cuda", "npu", "xpu"])
 class VeOmniEngineWithLMHead(VeOmniEngine, FSDPEngineWithLMHead):
     def prepare_model_inputs(self, micro_batch: TensorDict):
         model_inputs, output_args = super().prepare_model_inputs(micro_batch)
