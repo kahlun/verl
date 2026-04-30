@@ -182,10 +182,19 @@ class HFModelConfig(BaseConfig):
         )
 
         # construct hf_config
-        attn_implementation = self.override_config.get("attn_implementation", "flash_attention_2")
+        from verl.utils.device import get_default_attention_implementation, resolve_xpu_attn_implementation
+
+        attn_implementation = self.override_config.get(
+            "attn_implementation", get_default_attention_implementation()
+        )
+        logger.info(f"[attn] HFModelConfig attn_implementation = {attn_implementation}")
         self.hf_config = AutoConfig.from_pretrained(
             self.local_hf_config_path, trust_remote_code=self.trust_remote_code, attn_implementation=attn_implementation
         )
+        # XPU sliding-window guard: FA2 does not support sliding-window attention on XPU
+        attn_implementation = resolve_xpu_attn_implementation(attn_implementation, self.hf_config)
+        if attn_implementation != self.hf_config._attn_implementation:
+            self.hf_config._attn_implementation = attn_implementation
 
         override_config_kwargs = {}
 
