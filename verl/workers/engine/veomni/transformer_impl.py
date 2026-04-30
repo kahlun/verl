@@ -229,7 +229,13 @@ class VeOmniEngine(FSDPEngine):
         if is_torch_xpu_available():
             from torch.distributed.fsdp._fully_shard import FSDPModule
             for submod in module.modules():
-                if isinstance(submod, FSDPModule) and hasattr(submod, "set_force_sum_reduction_for_comms"):
+                if isinstance(submod, FSDPModule):
+                    if not hasattr(submod, "set_force_sum_reduction_for_comms"):
+                        raise RuntimeError(
+                            f"FSDPModule on rank {self.rank} is missing set_force_sum_reduction_for_comms() method. "
+                            "This method is required for correct gradient synchronization with oneCCL (xccl) on Intel XPU. "
+                            "Please check that PyTorch version >= 2.5 with FSDP2 is correctly installed."
+                        )
                     submod.set_force_sum_reduction_for_comms(True)
         log_gpu_memory_usage("After parallelize model", logger=logger)
 
