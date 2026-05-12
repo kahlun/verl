@@ -127,7 +127,18 @@ class NsightSystemsProfiler(DistProfiler):
             config = ProfilerConfig(ranks=[])
         if not tool_config:
             assert not config.enable, "tool_config must be provided when profiler is enabled"
-        self.discrete: bool = tool_config.discrete
+        self.discrete: bool = tool_config.discrete if tool_config else False
+        self.enable = config.enable
+        if not config.enable:
+            self.this_step: bool = False
+            self.this_rank: bool = False
+            return
+        self.this_step: bool = False
+        self.this_rank: bool = False
+        if config.all_ranks:
+            self.this_rank = True
+        elif config.ranks:
+            self.this_rank = rank in config.ranks
 
     def start(self, **kwargs):
         if self.enable and self.this_rank:
