@@ -20,6 +20,9 @@ class PlatformBase(abc.ABC):
     Every concrete platform (CUDA, NPU, CPU, XPU, …) must implement the
     methods below so that the rest of the verl codebase can remain
     device-agnostic.
+
+    For profiling methods (``nvtx_range``, ``profiler_start``, ``profiler_stop``),
+    platforms that do not support profiling should implement them as no-ops.
     """
 
     # ------------------------------------------------------------------
@@ -121,7 +124,10 @@ class PlatformBase(abc.ABC):
     @abc.abstractmethod
     @contextmanager
     def nvtx_range(self, msg: str):
-        """Context manager that wraps a block with an NVTX / profiler range."""
+        """Context manager that wraps a block with an NVTX / profiler range.
+
+        Platforms without profiling support should yield immediately (no-op).
+        """
         ...
 
     @abc.abstractmethod
