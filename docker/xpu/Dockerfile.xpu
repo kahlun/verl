@@ -9,22 +9,35 @@
 #   docker build --build-arg http_proxy=... --build-arg https_proxy=... ...
 #
 # Run (mount GPU devices + render group):
+#   RENDER_GID=$(getent group render | cut -d: -f3)
 #   docker run -it --rm \
-#     --device /dev/dri --group-add render \
+#     --device /dev/dri --group-add ${RENDER_GID} \
 #     --shm-size 16g \
 #     -v $HOME/data:/root/data \
 #     verl-xpu:latest
 #
+# Quick XPU sanity check (requires --device /dev/dri):
+#   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-xpu:latest \
+#     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
+#
 # Tested on: 4x Intel Arc Pro B60 (Battlemage, 24 GB VRAM each)
+#
+# --- Torch version alignment ---
+# vLLM 0.17.1+xpu requires torch==2.10.0+xpu (from vllm/requirements/xpu.txt).
+# All three layers (base torch, vLLM, verl deps) must use the SAME version.
+# Bump TORCH_VERSION / VLLM_VERSION together when upgrading.
 
 FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
-ARG TORCH_VERSION=2.11.0
 ARG TRITON_XPU_VERSION=3.7.0
 ARG VLLM_VERSION=0.17.1
-ARG PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/xpu"
+# torch version is owned by vllm/requirements/xpu.txt — do not pin here.
+# Upgrading vLLM automatically picks up its tested torch version.
+# XPU wheel index PRIMARY, PyPI is extra — uv/pip picks +xpu over plain wheels.
+ARG PIP_INDEX_URL="https://download.pytorch.org/whl/xpu"
+ARG PIP_EXTRA_INDEX_URL="https://pypi.org/simple"
 
 WORKDIR /workspace
 
@@ -34,6 +47,18 @@ RUN apt-get update -y && \
         gcc g++ cmake libnuma-dev wget git curl build-essential \
         python3.12 python3.12-dev python3-pip ca-certificates && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- uv: fast, deterministic resolver (same tool as vLLM's Dockerfile.xpu) ---
+# uv resolves the full environment in one pass, so torch cannot be overwritten
+# by a later install the way pip's incremental resolver allows.
+# UV_INDEX_STRATEGY=unsafe-best-match: prefer the XPU wheel index over PyPI
+# when a package exists on both (torch, triton-xpu, etc.).
+ENV PATH="/root/.local/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # --- Intel GPU user-mode drivers (UMD) from GitHub releases ---
 # Avoids apt repo dependency issues; pins exact versions for reproducibility.
@@ -62,36 +87,37 @@ RUN rm -f /opt/intel/oneapi/ccl/latest && \
     ln -s /opt/intel/oneapi/ccl/2021.15 /opt/intel/oneapi/ccl/latest
 
 SHELL ["bash", "-c"]
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
+# uv resolver: XPU index is PRIMARY so torch+xpu is always preferred
+ENV UV_HTTP_TIMEOUT=500
+ENV UV_INDEX_URL=${PIP_INDEX_URL}
+ENV UV_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
+ENV UV_INDEX_STRATEGY="unsafe-best-match"
+ENV UV_LINK_MODE="copy"
+ENV VLLM_TARGET_DEVICE=xpu
 
-# --- PyTorch with XPU support ---
-RUN python3 -m pip install --no-cache-dir \
-        torch==${TORCH_VERSION} torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/xpu && \
-    python3 -m pip install --no-cache-dir \
-        triton-xpu==${TRITON_XPU_VERSION} \
-        --index-url https://download.pytorch.org/whl/xpu && \
-    python3 -m pip install --no-cache-dir dpctl
-
-# --- vLLM with XPU support (build from source) ---
+# --- Layer 1: vLLM + torch XPU (uv resolves everything in one pass) ---
+# uv reads requirements/xpu.txt which pins torch==2.10.0+xpu.
+# With unsafe-best-match + XPU extra index, uv picks the +xpu wheel for torch.
+# --no-build-isolation exposes the installed torch to the vLLM C++ build.
 RUN git clone --depth 1 --branch v${VLLM_VERSION} \
         https://github.com/vllm-project/vllm.git /opt/vllm && \
     cd /opt/vllm && \
     source /opt/intel/oneapi/setvars.sh --force && \
-    python3 -m pip install --no-cache-dir -r requirements/xpu.txt && \
-    VLLM_TARGET_DEVICE=xpu python3 -m pip install --no-build-isolation --no-cache-dir -v . && \
-    python3 -m pip cache purge
+    source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force && \
+    uv pip install -r requirements/xpu.txt && \
+    uv pip install --no-build-isolation . && \
+    uv pip uninstall oneccl oneccl-devel || true
 
-# --- verl dependencies ---
+# --- Layer 2: verl Python dependencies ---
+# Copied before source for Docker layer caching — dep layer reused when only
+# source files change.
 COPY requirements-xpu.txt /tmp/requirements-xpu.txt
-RUN python3 -m pip install --no-cache-dir -r /tmp/requirements-xpu.txt && \
-    python3 -m pip install --no-cache-dir transformers
+RUN uv pip install -r /tmp/requirements-xpu.txt
 
-# --- Install verl ---
+# --- Layer 3: verl source ---
 COPY . /workspace/verl
 WORKDIR /workspace/verl
-RUN python3 -m pip install --no-deps --no-cache-dir -v -e .
+RUN uv pip install --no-deps -e .
 
 # --- oneCCL workarounds (pre-DLE 2026.0 driver) ---
 ENV CCL_ATL_SHM=1
