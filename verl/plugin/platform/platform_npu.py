@@ -78,7 +78,11 @@ class PlatformNPU(PlatformBase):
 
     def get_device_capability(self, device_index: int = 0) -> tuple[Optional[int], Optional[int]]:
         if hasattr(torch.npu, "get_device_capability"):
-            return torch.npu.get_device_capability(device_index)
+            result = torch.npu.get_device_capability(device_index)
+            # torch.npu.get_device_capability may return None instead of a tuple
+            if result is None:
+                return (None, None)
+            return result
         return (None, None)
 
     # ------------------------------------------------------------------
