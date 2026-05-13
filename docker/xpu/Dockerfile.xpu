@@ -94,6 +94,8 @@ ENV UV_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
 ENV UV_INDEX_STRATEGY="unsafe-best-match"
 ENV UV_LINK_MODE="copy"
 ENV VLLM_TARGET_DEVICE=xpu
+ENV CCL_ROOT=/opt/intel/oneapi/ccl/2021.15
+ENV LD_LIBRARY_PATH=/opt/intel/oneapi/ccl/2021.15/lib:/opt/intel/oneapi/ccl/2021.15/lib/ccl:${LD_LIBRARY_PATH}
 
 # --- Layer 1: vLLM + torch XPU (uv resolves everything in one pass) ---
 # uv reads requirements/xpu.txt which pins torch==2.10.0+xpu.
@@ -106,13 +108,21 @@ RUN git clone --depth 1 --branch v${VLLM_VERSION} \
     source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force && \
     uv pip install -r requirements/xpu.txt && \
     uv pip install --no-build-isolation . && \
-    uv pip uninstall oneccl oneccl-devel || true
+    python3 -c "import vllm" && \
+    (uv pip uninstall oneccl oneccl-devel || true) && \
+    (uv pip uninstall triton triton-xpu || true) && \
+    python3 -c "import site, pathlib, shutil; root = pathlib.Path(site.getsitepackages()[0]) / 'triton'; shutil.rmtree(root, ignore_errors=True)" && \
+    uv pip install triton-xpu==${TRITON_XPU_VERSION}
 
 # --- Layer 2: verl Python dependencies ---
 # Copied before source for Docker layer caching — dep layer reused when only
 # source files change.
 COPY requirements-xpu.txt /tmp/requirements-xpu.txt
-RUN uv pip install -r /tmp/requirements-xpu.txt
+RUN uv pip install -r /tmp/requirements-xpu.txt && \
+    (uv pip uninstall oneccl oneccl-devel || true) && \
+    (uv pip uninstall triton triton-xpu || true) && \
+    python3 -c "import site, pathlib, shutil; root = pathlib.Path(site.getsitepackages()[0]) / 'triton'; shutil.rmtree(root, ignore_errors=True)" && \
+    uv pip install triton-xpu==${TRITON_XPU_VERSION}
 
 # --- Layer 3: verl source ---
 COPY . /workspace/verl
@@ -122,6 +132,7 @@ RUN uv pip install --no-deps -e .
 # --- oneCCL workarounds (pre-DLE 2026.0 driver) ---
 ENV CCL_ATL_SHM=1
 ENV CCL_BUFFER_CACHE=0
+ENV CCL_ZE_IPC_EXCHANGE=sockets
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 # Ensure Ray's internal gRPC (localhost) is never routed through the corporate proxy.
 # Without this, ray.init() times out when http_proxy is set in the container.
