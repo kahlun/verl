@@ -177,15 +177,20 @@ def offload_fsdp_model_to_cpu(model: FSDP, empty_cache: bool = True):
         if handle._offload_params:
             continue
         flat_param = handle.flat_param
-        assert (
-            flat_param.data.data_ptr() == flat_param._local_shard.data_ptr()
-            and id(flat_param.data) != id(flat_param._local_shard)
-            and flat_param.data.size() == flat_param._local_shard.size()
-        )
+        # XPU: after a forward pass the SYCL runtime may remap flat_param.data
+        # to a different storage than _local_shard (Level Zero buffer aliasing).
+        # The assertion is a CUDA-specific sanity check; skip it on XPU.
+        if not is_xpu_available:
+            assert (
+                flat_param.data.data_ptr() == flat_param._local_shard.data_ptr()
+                and id(flat_param.data) != id(flat_param._local_shard)
+                and flat_param.data.size() == flat_param._local_shard.size()
+            )
         handle.flat_param_to(torch.device("cpu"), non_blocking=True)
         # the following still keeps id(._local_shard) != id(.data)
         flat_param._local_shard = flat_param.data
-        assert id(flat_param._local_shard) != id(flat_param.data)
+        if not is_xpu_available:
+            assert id(flat_param._local_shard) != id(flat_param.data)
     if empty_cache:
         get_torch_device().empty_cache()
 
