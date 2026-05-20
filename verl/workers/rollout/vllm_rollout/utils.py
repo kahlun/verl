@@ -62,6 +62,17 @@ def get_device_uuid(device_id: int) -> str:
             return "NPU-" + npu_visible_devices[device_id]
         else:
             return f"NPU-{device_id}"
+    elif is_xpu_available:
+        # Map logical device_id through ZE_AFFINITY_MASK to physical device index.
+        # Must be unique per device — using the full mask string caused all workers
+        # to share the same ZMQ socket path, deadlocking weight transfer.
+        ze_mask = os.getenv("ZE_AFFINITY_MASK", "")
+        if ze_mask:
+            devices = ze_mask.split(",")
+            phys_id = devices[device_id] if device_id < len(devices) else device_id
+        else:
+            phys_id = device_id
+        return f"XPU-{phys_id}"
     else:
         try:
             return current_platform.get_device_uuid(device_id)
