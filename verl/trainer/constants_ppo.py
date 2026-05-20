@@ -17,7 +17,7 @@ import os
 
 from ray._private.runtime_env.constants import RAY_JOB_CONFIG_JSON_ENV_VAR
 
-from verl.utils.device import get_device_capability
+from verl.utils.device import get_device_capability, is_xpu_available
 
 _major, _ = get_device_capability()
 # WAR: GB200 nodes without IMEX channel support raise ncclUnhandledCudaError 801 during
@@ -61,4 +61,16 @@ def get_ppo_ray_runtime_env():
     for key in list(runtime_env["env_vars"].keys()):
         if os.environ.get(key) is not None:
             runtime_env["env_vars"].pop(key, None)
+
+    # Intel XPU: propagate ONEAPI_DEVICE_SELECTOR to Ray workers only when running
+    # on XPU.  Ray workers are fresh processes that do not inherit the parent shell
+    # environment; without this, vLLM subprocesses may receive a broken
+    # 'level_zero:' value from Intel setvars.sh and SIGABRT immediately.
+    # We re-insert even if the key was already in os.environ (and thus removed by
+    # the filter above) because workers need to receive the *current* value.
+    if is_xpu_available:
+        oneapi_selector = os.environ.get("ONEAPI_DEVICE_SELECTOR")
+        if oneapi_selector:
+            runtime_env["env_vars"]["ONEAPI_DEVICE_SELECTOR"] = oneapi_selector
+
     return runtime_env

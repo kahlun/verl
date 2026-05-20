@@ -160,3 +160,4 @@ def set_platform(platform: PlatformBase) -> None:
 # ---------------------------------------------------------------------------
 from .platform_cuda import PlatformCUDA  # noqa: E402, F401
 from .platform_npu import PlatformNPU  # noqa: E402, F401
+from .platform_xpu import PlatformXPU  # noqa: E402, F401
