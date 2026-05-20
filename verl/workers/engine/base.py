@@ -314,10 +314,24 @@ class EngineRegistry:
         assert model_type in cls._engines, f"Unknown model_type: {model_type}"
         assert backend in cls._engines[model_type], f"Unknown backend: {backend}"
         device = get_device_name()
-        assert device in cls._engines[model_type][backend], (
-            f"Unknown device: {device} for model_type: {model_type} and backend: {backend}"
-        )
-        return cls._engines[model_type][backend][device]
+        device_engines = cls._engines[model_type][backend]
+        if device not in device_engines:
+            # Hardware plugin path: device registered via VERL_USE_EXTERNAL_MODULES
+            # but no device-specific engine class exists.  Fall back to the "cuda"
+            # engine — FSDPEngine is pure PyTorch and works on any device.
+            if "cuda" not in device_engines:
+                raise KeyError(
+                    f"No engine registered for device '{device}' (model_type={model_type}, "
+                    f"backend={backend}) and no 'cuda' fallback available. "
+                    f"Registered devices: {list(device_engines.keys())}"
+                )
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "EngineRegistry: no engine for device '%s', falling back to 'cuda' engine", device
+            )
+            device = "cuda"
+        return device_engines[device]
 
     @classmethod
     def new(cls, model_type, backend, *args, **kwargs):
