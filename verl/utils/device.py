@@ -57,8 +57,21 @@ def is_torch_npu_available(check_device=True) -> bool:
         return False
 
 
+def is_torch_xpu_available(check_device=True) -> bool:
+    """Check if Intel XPU is available for PyTorch operations."""
+    try:
+        if not hasattr(torch, "xpu"):
+            return False
+        if check_device:
+            return torch.xpu.is_available()
+        return True
+    except (ImportError, AttributeError):
+        return False
+
+
 is_cuda_available = torch.cuda.is_available()
 is_npu_available = is_torch_npu_available()
+is_xpu_available = is_torch_xpu_available()
 
 
 def get_resource_name() -> str:
@@ -66,7 +79,9 @@ def get_resource_name() -> str:
     Returns:
         ray resource name string, either "GPU" or "NPU".
     """
-    return "GPU" if is_cuda_available else "NPU"
+    if is_npu_available:
+        return "NPU"
+    return "GPU"  # CUDA and XPU — Ray's IntelGPUAccelerator registers XPU as "GPU"
 
 
 # ---------------------------------------------------------------------------
