@@ -31,10 +31,13 @@ export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0
 export CCL_TOPO_ALGO=0
 
 # XPU device selection: use ZE_AFFINITY_MASK (Level Zero) for device restriction.
-# vLLM 0.17+ XPU platform uses ZE_AFFINITY_MASK as device_control_env_var; setting
-# ONEAPI_DEVICE_SELECTOR=level_zero:N,M breaks the FLA/triton SYCL JIT init path.
+# vLLM 0.17+ XPU platform uses ZE_AFFINITY_MASK as device_control_env_var.
+# Unset ONEAPI_DEVICE_SELECTOR: conda 'lun' activate script sets it to
+# "level_zero:0,1" which prevents oneDNN from finding its OpenCL device,
+# causing SDPA to crash with "could not create a primitive".
 _DEVICES=$(seq 0 $((NUM_GPUS-1)) | paste -sd',')
 export ZE_AFFINITY_MASK="${_DEVICES}"
+unset ONEAPI_DEVICE_SELECTOR
 
 # XPU fix: Ray pre-starts ~100 idle workers, each opens an L0 context on the GPU.
 # torch.xpu.mem_get_info() counts their combined context overhead (~20 GB) as "used"
@@ -56,7 +59,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.model.use_remove_padding=False \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.attn_implementation=eager \
     actor_rollout_ref.actor.ppo_mini_batch_size=8 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.use_kl_loss=True \
