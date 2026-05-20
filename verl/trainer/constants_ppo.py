@@ -55,15 +55,16 @@ def get_ppo_ray_runtime_env():
         if os.environ.get(key) is not None:
             runtime_env["env_vars"].pop(key, None)
 
-    # Intel XPU: propagate ONEAPI_DEVICE_SELECTOR to Ray workers only when running
-    # on XPU.  Ray workers are fresh processes that do not inherit the parent shell
-    # environment; without this, vLLM subprocesses may receive a broken
-    # 'level_zero:' value from Intel setvars.sh and SIGABRT immediately.
-    # We re-insert even if the key was already in os.environ (and thus removed by
-    # the filter above) because workers need to receive the *current* value.
+    # Intel XPU: propagate ZE_AFFINITY_MASK to Ray workers (Level Zero device
+    # restriction). Ray workers are fresh processes; without explicit propagation
+    # they see all physical devices regardless of what the driver process was given.
+    # Do NOT propagate ONEAPI_DEVICE_SELECTOR — setting it to "level_zero:..." blocks
+    # oneDNN from finding its OpenCL device and crashes SDPA (oneDNN primitive init).
     if is_xpu_available:
-        oneapi_selector = os.environ.get("ONEAPI_DEVICE_SELECTOR")
-        if oneapi_selector:
-            runtime_env["env_vars"]["ONEAPI_DEVICE_SELECTOR"] = oneapi_selector
+        ze_mask = os.environ.get("ZE_AFFINITY_MASK")
+        if ze_mask:
+            runtime_env["env_vars"]["ZE_AFFINITY_MASK"] = ze_mask
+        # Explicitly clear ONEAPI_DEVICE_SELECTOR in workers so oneDNN can use OpenCL.
+        runtime_env["env_vars"].pop("ONEAPI_DEVICE_SELECTOR", None)
 
     return runtime_env
