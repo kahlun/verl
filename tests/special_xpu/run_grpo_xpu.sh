@@ -68,6 +68,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.actor.fsdp_config.custom_engine_path=verl_xpu.fsdp_engine_xpu \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.ref.use_torch_compile=False \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
@@ -80,6 +81,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.n=2 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    actor_rollout_ref.ref.fsdp_config.custom_engine_path=verl_xpu.fsdp_engine_xpu \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
     trainer.logger=console \

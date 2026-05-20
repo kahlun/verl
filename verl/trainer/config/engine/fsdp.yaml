@@ -59,6 +59,12 @@ forward_only: false
 # fsdp or fsdp2
 strategy: fsdp
 
+# Optional module path for a hardware-plugin engine registration file.
+# Import before EngineRegistry.new() so plugin packages can register
+# device-specific engine classes (e.g. @EngineRegistry.register(device="xpu")).
+# Example: "verl_xpu.fsdp_engine_xpu"
+custom_engine_path: null
+
 # Mixed precision training param dtype
 dtype: bfloat16 # ["bfloat16", "float16"]
 

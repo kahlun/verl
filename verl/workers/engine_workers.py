@@ -124,6 +124,9 @@ class TrainingWorker(Worker, DistProfilerExtension):
         )
 
         self.model_config.model_type = self.config.model_type
+        # If custom_engine_path is set, import it so plugin packages can register
+        # device-specific engine classes in EngineRegistry before instantiation.
+        import_external_libs(self.engine_config.custom_engine_path or None)
         self.engine: BaseEngine = EngineRegistry.new(
             model_type=self.config.model_type,
             backend=self.engine_config.strategy,

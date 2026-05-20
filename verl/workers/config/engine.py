@@ -116,6 +116,12 @@ class EngineConfig(BaseConfig):
     full_determinism: bool = False
     router_replay: EngineRouterReplayConfig = field(default_factory=EngineRouterReplayConfig)
 
+    # Optional module path for a hardware-plugin engine registration file.
+    # The module is imported before EngineRegistry.new() so that plugin
+    # packages can call @EngineRegistry.register(device="xpu") without
+    # modifying verl core.  Example: "verl_xpu.fsdp_engine_xpu".
+    custom_engine_path: Optional[str] = None
+
     def __post_init__(self):
         pass
         # TODO: turn on this check after we reorg config
