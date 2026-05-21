@@ -46,6 +46,8 @@ unset ONEAPI_DEVICE_SELECTOR
 #   1. Reduce Ray prestarted workers to avoid L0 context memory pressure
 #   2. Patch vLLM's request_memory to skip the check on XPU
 export RAY_NUM_PRESTART_PYTHON_WORKERS=0
+# Load the XPU plugin so Ray workers get PlatformXPU and xccl backend.
+export VERL_USE_EXTERNAL_MODULES=${VERL_USE_EXTERNAL_MODULES:-verl_xpu}
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -59,7 +61,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.model.use_remove_padding=False \
-    +actor_rollout_ref.model.override_config.attn_implementation=eager \
+    +actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2 \
     actor_rollout_ref.actor.ppo_mini_batch_size=8 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.use_kl_loss=True \

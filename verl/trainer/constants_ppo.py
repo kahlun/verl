@@ -73,5 +73,9 @@ def get_ppo_ray_runtime_env():
             runtime_env["env_vars"]["ZE_AFFINITY_MASK"] = ze_mask
         # Explicitly clear ONEAPI_DEVICE_SELECTOR in workers so oneDNN can use OpenCL.
         runtime_env["env_vars"].pop("ONEAPI_DEVICE_SELECTOR", None)
+        # Propagate VERL_USE_EXTERNAL_MODULES so Ray workers load the XPU platform plugin.
+        ext_modules = os.environ.get("VERL_USE_EXTERNAL_MODULES")
+        if ext_modules:
+            runtime_env["env_vars"]["VERL_USE_EXTERNAL_MODULES"] = ext_modules
 
     return runtime_env
