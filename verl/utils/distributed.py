@@ -21,7 +21,7 @@ from datetime import timedelta
 import ray
 import torch.distributed
 
-from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available
+from verl.utils.device import get_device_name, get_nccl_backend, get_resource_name, get_torch_device, is_npu_available
 from verl.utils.net_utils import is_ipv6
 
 
@@ -40,7 +40,7 @@ def set_numa_affinity():
 
         pynvml.nvmlInit()
         initialized = True
-        device_name = "NPU" if is_npu_available else "GPU"
+        device_name = get_resource_name()
         # Avoid ray.init in SFT trainer.
         if ray.is_initialized():
             local_rank = int(ray.get_runtime_context().get_accelerator_ids()[device_name][0])
@@ -112,6 +112,7 @@ def stateless_init_process_group(master_address, master_port, rank, world_size, 
     from torch.distributed import TCPStore
     from vllm.distributed.utils import StatelessProcessGroup
 
+    from verl.plugin.platform import get_platform
     from verl.utils.device import is_npu_available
 
     if is_npu_available:

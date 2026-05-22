@@ -30,8 +30,12 @@ class PlatformCUDA(PlatformBase):
     def device_module(self) -> ModuleType:
         return torch.cuda
 
-    def is_available(self) -> bool:
-        return torch.cuda.is_available()
+    def is_available(self, use_smi_check=False) -> bool:
+        if not torch.cuda.is_available():
+            return False
+        if use_smi_check:
+            return self.check_smi_command("nvidia-smi")
+        return True
 
     def current_device(self) -> int:
         return torch.cuda.current_device()
@@ -83,6 +87,42 @@ class PlatformCUDA(PlatformBase):
 
     def visible_devices_envvar(self) -> str:
         return "CUDA_VISIBLE_DEVICES"
+
+    # ------------------------------------------------------------------
+    # Ray integration
+    # ------------------------------------------------------------------
+
+    def ray_resource_name(self) -> str:
+        return "GPU"
+
+    def ray_resource_options(self, num_gpus: float) -> dict[str, Any]:
+        return {"num_gpus": num_gpus}
+
+    def ray_noset_envvars(self) -> list[str]:
+        return ["RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES"]
+
+    # ------------------------------------------------------------------
+    # IPC support
+    # ------------------------------------------------------------------
+
+    def is_ipc_supported(self) -> bool:
+        return True
+
+    # ------------------------------------------------------------------
+    # Rollout engine integration
+    # ------------------------------------------------------------------
+
+    def rollout_env_vars(self) -> dict[str, str]:
+        return {"NCCL_CUMEM_ENABLE": "0"}
+
+    # ------------------------------------------------------------------
+    # Collective communication
+    # ------------------------------------------------------------------
+
+    def get_collective_module(self) -> Any:
+        from cupy.cuda import nccl
+
+        return nccl
 
     # ------------------------------------------------------------------
     # Profiling helpers

@@ -26,6 +26,7 @@ from ray.util.placement_group import PlacementGroup
 from verl.single_controller.ray import SubRayResourcePool
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.net_utils import is_valid_ipv6_address
+from verl.plugin.platform import get_platform
 from verl.utils.profiler import DistProfiler
 from verl.workers.config import HFModelConfig, RolloutConfig
 from verl.workers.rollout.replica import RolloutMode, RolloutReplica, TokenOutput
@@ -578,7 +579,8 @@ class TRTLLMReplica(RolloutReplica):
             if not self.is_reward_model
             else f"trtllm_server_reward_{self.replica_rank}{self.name_suffix}"
         )
-        _server_env_vars = {"RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES": "1"}
+        _server_env_vars = {var: "1" for var in get_platform().ray_noset_envvars()}
+        _server_env_vars.update(get_platform().rollout_env_vars())
         # Propagate profiling env vars to the Ray actor so that RayExecutor
         # (instantiated inside TRTLLMHttpServer) picks them up for inner workers.
         for _prof_var in (

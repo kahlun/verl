@@ -9,6 +9,8 @@ pick it up.
 """
 
 import abc
+import shutil
+import subprocess
 from contextlib import contextmanager
 from types import ModuleType
 from typing import Any, Optional
@@ -29,6 +31,23 @@ class PlatformBase(abc.ABC):
     # Core device management
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def check_smi_command(cmd: str) -> bool:
+        """Run an SMI command (e.g. nvidia-smi, mx-smi) and return True if it exits successfully.
+
+        Useful for CUDA-compatible hardware that needs to be distinguished
+        from NVIDIA during auto-detection.
+        """
+        if shutil.which(cmd) is None:
+            return False
+        try:
+            result = subprocess.run(
+                [cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            return False
+
     @property
     @abc.abstractmethod
     def device_name(self) -> str:
@@ -42,8 +61,10 @@ class PlatformBase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def is_available(self) -> bool:
-        """Return ``True`` if the accelerator is available on this host."""
+    def is_available(self, use_smi_check) -> bool:
+        """Return ``True`` if the accelerator is available on this host.
+        `use_smi_check` is used to support the hardware which has `torch.cuda` but not `GPU`.
+        """
         ...
 
     @abc.abstractmethod
@@ -139,6 +160,60 @@ class PlatformBase(abc.ABC):
     def profiler_stop(self) -> None:
         """Stop the device profiler (no-op on unsupported platforms)."""
         ...
+
+    # ------------------------------------------------------------------
+    # Ray integration
+    # ------------------------------------------------------------------
+
+    @abc.abstractmethod
+    def ray_resource_name(self) -> str:
+        """Return the Ray accelerator resource name (e.g. ``'GPU'``, ``'NPU'``)."""
+        ...
+
+    @abc.abstractmethod
+    def ray_noset_envvars(self) -> list[str]:
+        """Return ``RAY_EXPERIMENTAL_NOSET_*`` env var names for this platform."""
+        ...
+
+    def ray_resource_options(self, num_gpus: float) -> dict[str, Any]:
+        """Return Ray actor resource options for allocating accelerators.
+
+        CUDA uses ``{"num_gpus": N}`` while custom resources like NPU use
+        ``{"resources": {"NPU": N}}``.  Subclasses may override for
+        platform-specific behavior.
+        """
+        resource_name = self.ray_resource_name()
+        if resource_name == "GPU":
+            return {"num_gpus": num_gpus}
+        return {"resources": {resource_name: num_gpus}}
+
+    # ------------------------------------------------------------------
+    # IPC support
+    # ------------------------------------------------------------------
+
+    @abc.abstractmethod
+    def is_ipc_supported(self) -> bool:
+        """Return ``True`` if the platform supports IPC for tensor sharing."""
+        ...
+
+    # ------------------------------------------------------------------
+    # Rollout engine integration
+    # ------------------------------------------------------------------
+
+    def rollout_env_vars(self) -> dict[str, str]:
+        """Return platform-specific env vars to inject when launching rollout engines."""
+        return {}
+
+    # ------------------------------------------------------------------
+    # Collective communication
+    # ------------------------------------------------------------------
+
+    def get_collective_module(self) -> Any:
+        """Return the collective communication module (e.g. ``cupy.cuda.nccl``).
+
+        Returns ``None`` if not available. Subclasses should override.
+        """
+        return None
 
     # ------------------------------------------------------------------
     # Low-level runtime API

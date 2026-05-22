@@ -15,6 +15,21 @@ from .platform_manager import PlatformRegistry
 logger = logging.getLogger(__name__)
 
 
+def _ensure_torch_npu() -> bool:
+    """Try to import torch_npu so that torch.npu becomes available.
+
+    Returns True if torch.npu is usable after the attempt.
+    """
+    if hasattr(torch, "npu"):
+        return True
+    try:
+        import torch_npu  # noqa: F401
+
+        return hasattr(torch, "npu")
+    except ImportError:
+        return False
+
+
 @PlatformRegistry.register(platform="npu")
 class PlatformNPU(PlatformBase):
     """Platform backend for Huawei Ascend NPU."""
@@ -29,9 +44,13 @@ class PlatformNPU(PlatformBase):
 
     @property
     def device_module(self) -> ModuleType:
+        if not _ensure_torch_npu():
+            raise RuntimeError("torch_npu is not installed or torch.npu is not available")
         return torch.npu
 
-    def is_available(self) -> bool:
+    def is_available(self, use_smi_check=False) -> bool:
+        if not _ensure_torch_npu():
+            return False
         return torch.npu.is_available()
 
     def current_device(self) -> int:
@@ -94,6 +113,36 @@ class PlatformNPU(PlatformBase):
 
     def visible_devices_envvar(self) -> str:
         return "ASCEND_RT_VISIBLE_DEVICES"
+
+    # ------------------------------------------------------------------
+    # Ray integration
+    # ------------------------------------------------------------------
+
+    def ray_resource_name(self) -> str:
+        return "NPU"
+
+    def ray_resource_options(self, num_gpus: float) -> dict[str, Any]:
+        return {"resources": {"NPU": num_gpus}}
+
+    def ray_noset_envvars(self) -> list[str]:
+        return ["RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES"]
+
+    # ------------------------------------------------------------------
+    # IPC support
+    # ------------------------------------------------------------------
+
+    def is_ipc_supported(self) -> bool:
+        import subprocess
+
+        from verl.utils.device import check_ipc_version_support, get_npu_versions
+
+        try:
+            software_version, cann_version = get_npu_versions()
+            return check_ipc_version_support(software_version, cann_version)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to execute npu-smi command: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Error checking IPC support: {e}") from e
 
     # ------------------------------------------------------------------
     # Profiling helpers

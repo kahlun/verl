@@ -64,10 +64,9 @@ is_npu_available = is_torch_npu_available()
 def get_resource_name() -> str:
     """Function that return ray resource name based on the device type.
     Returns:
-        ray resource name string, either "GPU" or "NPU".
+        ray resource name string, e.g. "GPU", "NPU".
     """
-    return "GPU" if is_cuda_available else "NPU"
-
+    return get_platform().ray_resource_name()
 
 # ---------------------------------------------------------------------------
 # Device info helpers
@@ -317,30 +316,12 @@ def check_ipc_version_support(software_version: str, cann_version: str) -> bool:
 def is_support_ipc() -> bool:
     """Check if the device supports IPC (Inter-Process Communication).
 
-    For GPU devices, always returns True.
-    For NPU devices, checks the software version and CANN toolkit version
-    to determine if IPC is supported.
+    Delegates to the platform abstraction layer.
 
     Returns:
         bool: True if IPC is supported, False otherwise.
     """
-    # If CUDA is available, it's a GPU device
-    if is_cuda_available:
-        return True
-
-    # For NPU devices, check the software version and CANN toolkit version
-    if is_npu_available:
-        try:
-            software_version, cann_version = get_npu_versions()
-            return check_ipc_version_support(software_version, cann_version)
-
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to execute npu-smi command: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Error checking IPC support: {e}") from e
-
-    # For other devices (CPU), return False
-    return False
+    return get_platform().is_ipc_supported()
 
 
 def is_device_available() -> bool:

@@ -66,6 +66,15 @@ def _make_mock_platform(name="mock_xpu"):
         def visible_devices_envvar(self):
             return "MOCK_VISIBLE_DEVICES"
 
+        def ray_resource_name(self):
+            return "MOCK"
+
+        def ray_noset_envvars(self):
+            return ["RAY_EXPERIMENTAL_NOSET_MOCK_VISIBLE_DEVICES"]
+
+        def is_ipc_supported(self):
+            return False
+
         @contextmanager
         def nvtx_range(self, msg):
             yield

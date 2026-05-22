@@ -79,7 +79,7 @@ def _detect_platform_name() -> str:
     """Probe the environment and return the best platform name."""
 
     registered = PlatformRegistry.registered_names()
-
+    logger.info("The platform that has been regitsted: %s", registered)
     # 1. Explicit user override via environment variable
     env_name = os.environ.get("VERL_PLATFORM", "").strip().lower()
     if env_name:
@@ -99,14 +99,14 @@ def _detect_platform_name() -> str:
         if platform_cls is None:
             continue
         try:
-            if platform_cls().is_available():
+            if platform_cls().is_available(use_smi_check=True):
                 return name
         except Exception:
             continue
 
     # 3. No accelerator found – fall back to CPU with a warning
     logger.warning(
-        "No supported accelerator detected. Registered platforms: %s. Falling back to 'cuda' (CPU-only mode).",
+        "No supported accelerator detected. Registered platforms: %s. Falling back to 'cuda'.",
         registered,
     )
     return "cuda"
