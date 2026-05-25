@@ -52,9 +52,15 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
 # patch to avoid issue https://github.com/sgl-project/sglang/issues/6723
 def _set_envs_and_config(server_args: ServerArgs):
+    from verl.plugin.platform.platform_manager import get_platform
+
     # Set global environments
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     os.environ["NCCL_CUMEM_ENABLE"] = "0"
+    # Apply platform-specific rollout env vars (e.g. NCCL_NVLS_ENABLE=0 on XPU).
+    for k, v in get_platform().rollout_env_vars().items():
+        os.environ[k] = v
+    # server_args.enable_nccl_nvls always takes final precedence.
     os.environ["NCCL_NVLS_ENABLE"] = str(int(server_args.enable_nccl_nvls))
     os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
     os.environ["CUDA_DEVICE_MAX_CONNECTIONS"] = "4"

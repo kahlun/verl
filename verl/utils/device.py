@@ -75,10 +75,7 @@ is_xpu_available = is_torch_xpu_available()
 
 
 def get_resource_name() -> str:
-    """Function that return ray resource name based on the device type.
-    Returns:
-        ray resource name string, e.g. "GPU", "NPU".
-    """
+    """Return Ray accelerator resource name for the active platform."""
     return get_platform().ray_resource_name()
 
 
@@ -339,11 +336,9 @@ def check_ipc_version_support(software_version: str, cann_version: str) -> bool:
 def is_support_ipc() -> bool:
     """Check if the device supports IPC (Inter-Process Communication).
 
-    Delegates to the platform abstraction layer.
-
-    Returns:
-        bool: True if IPC is supported, False otherwise.
+    Delegates to the active platform via is_ipc_supported().
     """
+
     return get_platform().is_ipc_supported()
 
 

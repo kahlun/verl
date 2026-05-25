@@ -66,7 +66,7 @@ class PlatformBase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def is_available(self, use_smi_check) -> bool:
+    def is_available(self, use_smi_check=False) -> bool:
         """Return ``True`` if the accelerator is available on this host.
         `use_smi_check` is used to support the hardware which has `torch.cuda` but not `GPU`.
         """
