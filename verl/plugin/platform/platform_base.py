@@ -9,6 +9,7 @@ pick it up.
 """
 
 import abc
+import os
 import shutil
 import subprocess
 from contextlib import contextmanager
@@ -53,16 +54,10 @@ class PlatformBase(abc.ABC):
         ...
 
     @property
-    def vendor(self) -> str:
-        """Return the hardware vendor name (e.g. ``'nvidia'``, ``'metax'``, ``'huawei'``).
-
-        For CUDA-compatible chips from different vendors, this allows distinguishing
-        between NVIDIA GPUs and CUDA-compatible accelerators from other manufacturers.
-
-        Default implementation returns ``'nvidia'`` for CUDA devices, ``'huawei'`` for NPU,
-        and the device name for others. Subclasses should override for vendor-specific detection.
-        """
-        return "nvidia"
+    @abc.abstractmethod
+    def vendor_name(self) -> str:
+        """Return the hardware vendor name (e.g. ``'nvidia'``, ``'metax'``, ``'huawei'``, ``'intel'``)."""
+        ...
 
     @property
     @abc.abstractmethod
@@ -170,6 +165,22 @@ class PlatformBase(abc.ABC):
     def profiler_stop(self) -> None:
         """Stop the device profiler (no-op on unsupported platforms)."""
         ...
+
+    # ------------------------------------------------------------------
+    # vllm integration
+    # ------------------------------------------------------------------
+    def get_device_uuid(self, device_id):
+        if os.getenv(self.visible_devices_envvar()) is not None:
+            visible_devices = os.environ[self.visible_devices_envvar()].split(",")
+            assert device_id < len(visible_devices), f"device_id {device_id} must less than {visible_devices}"
+            return self.ray_resource_name() + visible_devices[device_id]
+        else:
+            return f"{self.ray_resource_name()}-{device_id}"
+
+    @abc.abstractmethod
+    def apply_model_patches(self, model_type: str) -> None:
+        """Apply platform-specific model patches (e.g. replace ops unsupported on this device)."""
+        ...  # default no-op
 
     # ------------------------------------------------------------------
     # Ray integration

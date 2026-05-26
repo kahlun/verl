@@ -30,7 +30,7 @@ def _ensure_torch_npu() -> bool:
         return False
 
 
-@PlatformRegistry.register(platform="npu")
+@PlatformRegistry.register(platform="huawei")
 class PlatformNPU(PlatformBase):
     """Platform backend for Huawei Ascend NPU."""
 
@@ -43,7 +43,7 @@ class PlatformNPU(PlatformBase):
         return "npu"
 
     @property
-    def vendor(self) -> str:
+    def vendor_name(self) -> str:
         return "huawei"
 
     @property

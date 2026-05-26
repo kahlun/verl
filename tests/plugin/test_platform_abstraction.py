@@ -150,7 +150,7 @@ class TestPlatformSingleton:
         assert p1 is p2
 
     def test_set_platform_external_injection(self):
-        """Simulates VERL_USE_EXTERNAL_MODULES plugin calling set_platform()."""
+        """Simulates an entry_points plugin calling set_platform()."""
         custom = _make_mock_platform("mock_xpu")()
         set_platform(custom)
         assert get_platform() is custom

@@ -6,15 +6,17 @@ cached for the rest of the process lifetime.
 
 New hardware backends are added via :meth:`PlatformRegistry.register`::
 
-    @PlatformRegistry.register(platform="cuda", vendor="metax")
+    @PlatformRegistry.register(platform="metax")
     class PlatformMetaX(PlatformBase):
         ...
 
-External plugins loaded by ``VERL_USE_EXTERNAL_MODULES`` can register their
-own platform classes without modifying the verl source tree.
+External plugins loaded by ``VERL_USE_EXTERNAL_MODULES`` or discovered via
+setuptools entry_points can register their own platform classes without
+modifying the verl source tree.
 """
 
 import logging
+import os
 
 from .platform_base import PlatformBase
 
@@ -24,31 +26,29 @@ _current_platform: PlatformBase | None = None
 
 
 class PlatformRegistry:
-    """Registry that maps (device_name, vendor) pairs to concrete ``PlatformBase`` subclasses.
+    """Registry that maps platform names to concrete ``PlatformBase`` subclasses.
 
     Built-in platforms (``cuda``, ``npu``) are registered at import time.
     External plugins can register additional platforms via the
     :meth:`register` decorator.
 
-    Registration key is ``(platform, vendor)``. When ``vendor`` is None the
-    class acts as the default for that platform name. During lookup, a
-    vendor-specific match is preferred; if not found, the default (vendor=None)
-    entry is used.
+    Each platform name (e.g. ``cuda``, ``npu``, ``metax``, ``xpu``, ``mlu``)
+    is already vendor-specific, so no separate vendor key is needed.
     """
 
-    _platforms: dict[tuple[str, str | None], type[PlatformBase]] = {}
+    _platforms: dict[str, type[PlatformBase]] = {}
 
     @classmethod
-    def register(cls, platform: str, vendor: str | None = None):
+    def register(cls, platform: str):
         """Class decorator that registers a ``PlatformBase`` subclass.
 
         Usage::
 
-            @PlatformRegistry.register(platform="cuda")
+            @PlatformRegistry.register(platform="nvidia")
             class PlatformCUDA(PlatformBase):
                 ...
 
-            @PlatformRegistry.register(platform="cuda", vendor="metax")
+            @PlatformRegistry.register(platform="metax")
             class PlatformMetaX(PlatformBase):
                 ...
         """
@@ -56,82 +56,47 @@ class PlatformRegistry:
         def decorator(platform_cls: type[PlatformBase]) -> type[PlatformBase]:
             assert issubclass(platform_cls, PlatformBase), f"{platform_cls.__name__} must be a subclass of PlatformBase"
             name = platform.strip().lower()
-            vendor_key = vendor.strip().lower() if vendor else None
-            key = (name, vendor_key)
-            if key in cls._platforms:
+            if name in cls._platforms:
                 logger.info(
-                    "PlatformRegistry: overriding (%s, vendor=%s) (%s -> %s)",
+                    "PlatformRegistry: overriding %s (%s -> %s)",
                     name,
-                    vendor_key,
-                    cls._platforms[key].__name__,
+                    cls._platforms[name].__name__,
                     platform_cls.__name__,
                 )
-            cls._platforms[key] = platform_cls
+            cls._platforms[name] = platform_cls
             return platform_cls
 
         return decorator
 
     @classmethod
-    def get(cls, name: str, vendor: str | None = None) -> type[PlatformBase] | None:
-        """Look up a registered platform class by name and optional vendor.
-
-        Tries ``(name, vendor)`` first, then falls back to ``(name, None)``.
-        """
-        name = name.strip().lower()
-        vendor_key = vendor.strip().lower() if vendor else None
-
-        # Vendor-specific match
-        if vendor_key:
-            result = cls._platforms.get((name, vendor_key))
-            if result is not None:
-                return result
-
-        # Default (vendor=None) fallback
-        return cls._platforms.get((name, None))
+    def get(cls, name: str) -> type[PlatformBase] | None:
+        """Look up a registered platform class by name."""
+        return cls._platforms.get(name.strip().lower())
 
     @classmethod
     def registered_names(cls) -> tuple[str, ...]:
-        """Return a tuple of all registered platform device names (deduplicated)."""
-        seen = dict.fromkeys(name for name, _ in cls._platforms.keys())
-        return tuple(seen)
-
-    @classmethod
-    def registered_entries(cls) -> tuple[tuple[str, str | None], ...]:
-        """Return all registered (platform, vendor) pairs."""
+        """Return a tuple of all registered platform names."""
         return tuple(cls._platforms.keys())
 
 
-def _detect_platform_name() -> tuple[str, str | None]:
-    """Probe the environment and return the best (platform_name, vendor) pair.
+def _detect_platform_name() -> str:
+    """Probe the environment and return the best platform name.
 
     Detection order:
-    1. Try vendor-specific entries first (more specific match wins)
-    2. Fall back to default (vendor=None) entries
-    3. If nothing is available, fall back to ('cuda', None)
+    1. ``VERL_PLATFORM`` environment variable (explicit override)
+    2. Probe registered platforms via ``is_available(use_smi_check=True)``
+    3. Fall back to ``'nvidia'``
     """
 
-    entries = PlatformRegistry.registered_entries()
-    logger.info("Registered platform entries: %s", entries)
+    env_platform = os.environ.get("VERL_PLATFORM", "").strip().lower()
+    if env_platform:
+        logger.info("Platform override from VERL_PLATFORM: %s", env_platform)
+        return env_platform
 
-    # Try vendor-specific entries first (vendor is not None)
-    for name, vendor in entries:
-        if vendor is None:
-            continue
-        platform_cls = PlatformRegistry.get(name, vendor)
-        if platform_cls is None:
-            continue
-        try:
-            instance = platform_cls()
-            if instance.is_available(use_smi_check=True):
-                logger.info("Auto-detected platform: %s (vendor=%s)", name, vendor)
-                return name, vendor
-        except Exception:
-            continue
+    names = PlatformRegistry.registered_names()
+    logger.info("Registered platforms: %s", names)
 
-    # Try default entries (vendor=None)
-    for name, vendor in entries:
-        if vendor is not None:
-            continue
+    for name in names:
         platform_cls = PlatformRegistry.get(name)
         if platform_cls is None:
             continue
@@ -139,32 +104,29 @@ def _detect_platform_name() -> tuple[str, str | None]:
             instance = platform_cls()
             if instance.is_available(use_smi_check=True):
                 logger.info("Auto-detected platform: %s", name)
-                return name, None
+                return name
         except Exception:
             continue
 
-    # No accelerator found
     logger.warning(
-        "No supported accelerator detected. Registered: %s. Falling back to 'cuda'.",
-        entries,
+        "No supported accelerator detected. Registered: %s. Falling back to 'nvidia'.",
+        names,
     )
-    return "cuda", None
+    return "nvidia"
 
 
-def _create_platform(name: str, vendor: str | None = None) -> PlatformBase:
-    """Instantiate the concrete platform for *name* and optional *vendor*."""
-    platform_cls = PlatformRegistry.get(name, vendor)
+def _create_platform(name: str) -> PlatformBase:
+    """Instantiate the concrete platform for *name*."""
+    platform_cls = PlatformRegistry.get(name)
     if platform_cls is None:
         raise ValueError(
-            f"Unknown platform '{name}' (vendor={vendor}). "
-            f"Registered: {PlatformRegistry.registered_entries()}. "
+            f"Unknown platform '{name}'. "
+            f"Registered: {PlatformRegistry.registered_names()}. "
             "Use @PlatformRegistry.register() to add a new platform."
         )
     platform = platform_cls()
     if not platform.is_available():
-        logger.warning(
-            "Platform '%s' (vendor=%s, %s) is registered but not available.", name, vendor, platform_cls.__name__
-        )
+        logger.warning("Platform '%s' (%s) is registered but not available.", name, platform_cls.__name__)
     return platform
 
 
@@ -172,11 +134,9 @@ def get_platform() -> PlatformBase:
     """Return the current platform singleton (auto-detected on first call)."""
     global _current_platform
     if _current_platform is None:
-        name, vendor = _detect_platform_name()
-        _current_platform = _create_platform(name, vendor)
-        logger.info(
-            "verl platform initialised: %s (vendor=%s)", _current_platform.device_name, _current_platform.vendor
-        )
+        name = _detect_platform_name()
+        _current_platform = _create_platform(name)
+        logger.info("verl platform initialised: %s", _current_platform.device_name)
     return _current_platform
 
 
