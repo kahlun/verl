@@ -469,7 +469,7 @@ class AutomodelTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["automodel"], device=["cuda"])
+@EngineRegistry.register(model_type="language_model", backend=["automodel"], device=["cuda", "xpu"])
 class AutomodelEngineWithLMHead(AutomodelEngine):
     """Automodel engine for language model with LM head training."""
 

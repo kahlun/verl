@@ -570,7 +570,7 @@ class EngineTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["torchtitan"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["torchtitan"], device=["cuda", "npu", "xpu"])
 class TorchTitanEngineWithLMHead(TorchTitanEngine):
     """TorchTitan engine implementation for language models with LM head."""
 

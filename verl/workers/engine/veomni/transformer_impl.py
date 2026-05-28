@@ -841,7 +841,7 @@ def _prepare_veomni_flash_attention_kwargs(position_ids: torch.Tensor) -> dict[s
     }
 
 
-@EngineRegistry.register(model_type="language_model", backend=["veomni"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["veomni"], device=["cuda", "npu", "xpu"])
 class VeOmniEngineWithLMHead(VeOmniEngine, FSDPEngineWithLMHead):
     def prepare_model_inputs(self, micro_batch: TensorDict):
         model_inputs, output_args = super().prepare_model_inputs(micro_batch)
@@ -1005,7 +1005,7 @@ class VeOmniEngineWithLMHead(VeOmniEngine, FSDPEngineWithLMHead):
             rr.set_microbatch_targets(per_layer, replay_mask=replay_mask)
 
 
-@EngineRegistry.register(model_type="value_model", backend=["veomni"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="value_model", backend=["veomni"], device=["cuda", "npu", "xpu"])
 class VeOmniEngineWithValueHead(VeOmniEngine, FSDPEngineWithValueHead):
     """Value model engine using VeOmni's FSDP2 + sequence parallelism.
 

@@ -22,7 +22,7 @@ import torch
 from megatron.core import parallel_state as mpu
 from megatron.core.packed_seq_params import PackedSeqParams
 
-from verl.utils.device import is_npu_available
+from verl.utils.device import is_npu_available, is_xpu_available
 from verl.utils.model import CausalLMOutputForPPO
 
 logger = logging.getLogger(__file__)
@@ -664,6 +664,8 @@ def preprocess_bshd_engine(
     if is_npu_available:
         # Ascend npu_fusion_attention's attn_mask must be BNSS / B1SS / 11SS / SS; [B, S] is invalid.
         attention_mask = _build_npu_attn_mask(attention_mask)
+    elif is_xpu_available:
+        pass  # XPU uses standard SDPA with [B, S] boolean mask — no transformation needed
 
     return input_ids_bshd, attention_mask, position_ids
 
@@ -682,6 +684,8 @@ def postprocess_bshd_engine(
     if is_npu_available:
         attention_mask = attention_mask.diagonal(dim1=-2, dim2=-1).squeeze(1)
         attention_mask = ~attention_mask.bool()
+    elif is_xpu_available:
+        pass  # XPU mask stays in [B, S] boolean form — no inverse transform needed
 
     assert output.shape[:2] == attention_mask.shape, (
         f"output.shape: {output.shape}, attention_mask.shape: {attention_mask.shape}"
@@ -749,6 +753,8 @@ def build_vlm_attn_mask_thd(input_ids: torch.Tensor, pad_token_id: int = None):
 
     if is_npu_available:
         return input_ids_rmpad, None
+    elif is_xpu_available:
+        pass  # XPU uses standard attention_mask path below
 
     seqlens_in_batch = input_ids.offsets().diff()
     attention_mask = torch.zeros_like(input_ids_rmpad, dtype=torch.bool)
@@ -777,6 +783,8 @@ def build_vlm_attn_mask_bshd(input_ids: torch.Tensor, batch_size: int, pad_token
 
     if is_npu_available:
         return input_ids_bshd, None
+    elif is_xpu_available:
+        pass  # XPU uses standard attention_mask path below
 
     attention_mask = torch.zeros_like(input_ids_bshd, dtype=torch.bool)
     for i, seqlen in enumerate(seqlens_in_batch):
