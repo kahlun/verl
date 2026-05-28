@@ -35,7 +35,15 @@ import typing
 import torch
 import torch.distributed as dist
 
-_nvtx_range = torch.cuda.nvtx.range if torch.cuda.is_available() else contextlib.nullcontext
+from verl.utils.device import is_cuda_available, is_xpu_available
+
+if is_cuda_available and not is_xpu_available:
+    try:
+        _nvtx_range = torch.cuda.nvtx.range
+    except (ImportError, AttributeError):
+        _nvtx_range = contextlib.nullcontext
+else:
+    _nvtx_range = contextlib.nullcontext
 
 
 class LinearCrossEntropy(torch.autograd.Function):
