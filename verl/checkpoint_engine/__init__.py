@@ -64,3 +64,10 @@ try:
     __all__ += ["MooncakeCheckpointEngine"]
 except ImportError:
     MooncakeCheckpointEngine = None
+
+try:
+    from .xccl_checkpoint_engine import XCCLCheckpointEngine
+
+    __all__ += ["XCCLCheckpointEngine"]
+except ImportError:
+    XCCLCheckpointEngine = None
