@@ -27,7 +27,7 @@ from verl.utils.device import get_device_name
 
 if get_device_name() == "cuda":
     from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
-elif get_device_name() == "npu":
+elif get_device_name() in ("npu", "xpu"):
     from verl.utils.attention_utils import index_first_axis, pad_input, rearrange, unpad_input
 
 from verl.utils.model import compute_position_id_with_mask, create_random_mask
