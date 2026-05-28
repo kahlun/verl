@@ -137,7 +137,8 @@ class RayResourcePool(ResourcePool):
         # print(f"pg_name_prefix = {pg_name_prefix}")
         if device_name == "npu":
             device_name = "NPU"
-        elif device_name == "cuda":
+        elif device_name in ("cuda", "xpu"):
+            # Ray's IntelGPUAcceleratorManager registers XPU as the standard GPU resource
             device_name = "GPU"
 
         bundle = {"CPU": self.max_colocate_count}
@@ -298,7 +299,7 @@ def split_resource_pool(
         start_bundle_idx_list = np.cumsum([0] + split_size_list[:-1])
 
     # ensure resource_pool.pgs has been initialized
-    device = "npu" if is_torch_npu_available(check_device=False) else "cuda"
+    device = get_device_name()
     placement_groups = resource_pool.get_placement_groups(device_name=device)
     split_resource_pools = [
         SubRayResourcePool(

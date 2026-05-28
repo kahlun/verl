@@ -26,6 +26,7 @@ from verl.utils.device import (
     get_torch_device,
     get_visible_devices_keyword,
     is_npu_available,
+    is_xpu_available,
 )
 
 from .decorator import Dispatch, Execute, register
@@ -270,13 +271,29 @@ class Worker(WorkerHelper):
             os.environ["CUDA_VISIBLE_DEVICES"] = cuda_val
             rocr_val = None
 
+        if is_xpu_available:
+            # Normalize ONEAPI_DEVICE_SELECTOR: Ray propagates it to XPU workers.
+            # Guard against a conflicting pre-set CUDA_VISIBLE_DEVICES (same logic as the
+            # ROCR block above).
+            oneapi_val = os.environ.get("ONEAPI_DEVICE_SELECTOR", None)
+            if oneapi_val and cuda_val:
+                raise ValueError("Please don't set ONEAPI_DEVICE_SELECTOR when CUDA_VISIBLE_DEVICES is set.")
+
         if is_ray_noset_visible_devices:
             # NOTE: Ray will automatically set the *_VISIBLE_DEVICES
             # environment variable for each actor, unless
             # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set,
             # so we need to set local rank when the flag is set.
-            device_name = "NPU" if is_npu_available else "GPU"
-            local_rank = ray.get_runtime_context().get_accelerator_ids()[device_name][0]
+            if is_xpu_available:
+                # XPU: ray.get_runtime_context().get_accelerator_ids()["GPU"] returns empty
+                # when workers are launched by torchrun (not Ray). Use LOCAL_RANK from env
+                # which torchrun sets correctly. This is intentional, not a bug.
+                rank = int(os.environ.get("RANK", "0"))
+                local_world_size = int(os.environ.get("RAY_LOCAL_WORLD_SIZE", "1"))
+                local_rank = str(rank % local_world_size)
+            else:
+                device_name = "NPU" if is_npu_available else "GPU"
+                local_rank = ray.get_runtime_context().get_accelerator_ids()[device_name][0]
             os.environ["LOCAL_RANK"] = local_rank
             get_torch_device().set_device(int(local_rank))
 

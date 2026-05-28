@@ -21,13 +21,17 @@ from datetime import timedelta
 import ray
 import torch.distributed
 
-from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available
+from verl.utils.device import get_device_name, get_nccl_backend, get_torch_device, is_npu_available, is_xpu_available
 from verl.utils.net_utils import is_ipv6
 
 
 def set_numa_affinity():
     if is_npu_available:
         # TODO (FightingZhen) libnuma.so is not available in e2e_ascend CI image, remove this code after image update.
+        return
+    if is_xpu_available:
+        # NUMA affinity on XPU is managed by ZE_AFFINITY_MASK set by the launcher (Ray/torchrun).
+        # pynvml is NVIDIA-only and must not be called on XPU.
         return
 
     initialized = False
@@ -112,10 +116,17 @@ def stateless_init_process_group(master_address, master_port, rank, world_size, 
     from torch.distributed import TCPStore
     from vllm.distributed.utils import StatelessProcessGroup
 
-    from verl.utils.device import is_npu_available
+    from verl.utils.device import is_npu_available, is_xpu_available
 
     if is_npu_available:
         from vllm_ascend.distributed.device_communicators.pyhccl import PyHcclCommunicator as PyNcclCommunicator
+    elif is_xpu_available:
+        # No PyXcclCommunicator exists in vLLM yet. Raise early rather than letting
+        # PyNcclCommunicator fail deep inside CUDA-only vLLM code.
+        raise NotImplementedError(
+            "stateless_init_process_group is not yet supported on XPU. "
+            "A PyXcclCommunicator will be required once vLLM ships XPU communicator support."
+        )
     else:
         from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
 
