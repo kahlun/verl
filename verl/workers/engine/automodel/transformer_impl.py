@@ -43,7 +43,7 @@ from verl.trainer.config import CheckpointConfig
 from verl.utils import tensordict_utils as tu
 from verl.utils.dataset.dataset_utils import DatasetPadMode
 from verl.utils.debug import log_gpu_memory_usage
-from verl.utils.device import get_device_id, get_device_name
+from verl.utils.device import get_device_id, get_device_name, get_torch_device
 from verl.utils.model import convert_weight_keys, extract_multi_modal_inputs
 from verl.utils.torch_functional import logprobs_from_logits
 from verl.workers.config import AutomodelEngineConfig, AutomodelOptimizerConfig, HFModelConfig
@@ -151,7 +151,7 @@ class AutomodelEngine(BaseEngine):
         )
 
         log_gpu_memory_usage("After offload model/optimizer/grad during init", logger=logger)
-        torch.cuda.empty_cache()
+        get_torch_device().empty_cache()
 
     def _build_optimizer(self, module):
         """Build optimizer via Automodel's build_optimizer."""

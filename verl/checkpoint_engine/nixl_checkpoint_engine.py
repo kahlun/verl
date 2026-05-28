@@ -38,6 +38,7 @@ from verl.checkpoint_engine.base import (
     merge_weight_chunks,
     split_weight_chunks,
 )
+from verl.utils.device import get_torch_device
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 
 logger = logging.getLogger(__name__)
@@ -393,7 +394,7 @@ class NIXLCheckpointEngine(CheckpointEngine):
         async for tensor_meta, chunk in split_weight_chunks(weights, self.bucket_size):
             # fill the tensor bucket
             if offset + tensor_meta.chunk_size > self.bucket_size:
-                torch.cuda.synchronize()
+                get_torch_device().synchronize()
 
                 # wait previous bucket to be received
                 if readable_op is not None:
@@ -422,7 +423,7 @@ class NIXLCheckpointEngine(CheckpointEngine):
             offset += tensor_meta.chunk_size
 
         # send last bucket meta to next agent
-        torch.cuda.synchronize()
+        get_torch_device().synchronize()
         if readable_op is not None:
             await readable_op.wait_for_complete()
 
@@ -494,7 +495,7 @@ class NIXLCheckpointEngine(CheckpointEngine):
             total_params += len(next_metadata["bucket_meta"])
 
             # 5. swap send and recv buf
-            torch.cuda.synchronize()  # sync non-blocking copy
+            get_torch_device().synchronize()  # sync non-blocking copy
             metadata = next_metadata
             send_buf, recv_buf = recv_buf, send_buf
             send_descs, recv_descs = recv_descs, send_descs

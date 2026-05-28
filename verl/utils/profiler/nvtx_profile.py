@@ -17,7 +17,13 @@ import functools
 from contextlib import contextmanager
 from typing import Callable, Optional
 
-import nvtx
+try:
+    import nvtx
+    _NVTX_AVAILABLE = True
+except ImportError:
+    nvtx = None
+    _NVTX_AVAILABLE = False
+
 import torch
 
 from .config import NsightToolConfig
@@ -42,6 +48,8 @@ def mark_start_range(
         category (str, optional):
             The category of the range. Defaults to None.
     """
+    if not _NVTX_AVAILABLE:
+        return None
     return nvtx.start_range(message=message, color=color, domain=domain, category=category)
 
 
@@ -52,6 +60,8 @@ def mark_end_range(range_id: str) -> None:
         range_id (str):
             The id of the mark range to end.
     """
+    if not _NVTX_AVAILABLE or range_id is None:
+        return
     return nvtx.end_range(range_id)
 
 
@@ -75,6 +85,8 @@ def mark_annotate(
     """
 
     def decorator(func):
+        if not _NVTX_AVAILABLE:
+            return func
         profile_message = message or func.__name__
         return nvtx.annotate(profile_message, color=color, domain=domain, category=category)(func)
 

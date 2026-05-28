@@ -558,14 +558,21 @@ def apply_patch_megatron_recomputation_backward():
             else inp
             for inp in detached_inputs
         )
-        cur_stream = torch.cuda.current_stream()
+        if torch.cuda.is_available():
+            cur_stream = torch.cuda.current_stream()
+        elif torch.xpu.is_available():
+            cur_stream = torch.xpu.current_stream()
+        else:
+            cur_stream = None
         # Release original input and grad tensors
         for t in detached_inputs:
             if isinstance(t, torch.Tensor) and t.requires_grad:
-                t.record_stream(cur_stream)
+                if cur_stream is not None:
+                    t.record_stream(cur_stream)
                 t.untyped_storage().resize_(0)
                 if t.grad is not None:
-                    t.grad.record_stream(cur_stream)
+                    if cur_stream is not None:
+                        t.grad.record_stream(cur_stream)
                     t.grad.untyped_storage().resize_(0)
         # ctx.saved_tensors = None
         return (None, None) + grads

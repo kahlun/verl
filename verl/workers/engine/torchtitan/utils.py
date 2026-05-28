@@ -22,6 +22,8 @@ from typing import Any
 import torch
 import torch.distributed
 import torch.nn as nn
+
+from verl.utils.device import get_torch_device
 from torch.distributed._composable.fsdp import FSDPModule
 from torch.distributed.tensor import DTensor
 from torch.nn.attention.flex_attention import _mask_mod_signature, and_masks
@@ -354,4 +356,4 @@ def iter_per_tensor_params_ep(
             yield name_template.format(expert_id), all_experts[expert_id].to(torch.bfloat16).clone()
 
         del local_weights, local_stacked, gathered_list, all_experts
-        torch.cuda.empty_cache()
+        get_torch_device().empty_cache()
