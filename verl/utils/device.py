@@ -43,8 +43,30 @@ def is_torch_npu_available(check_device=True) -> bool:
         return False
 
 
+def is_torch_xpu_available(check_device=True) -> bool:
+    """Check if Intel XPU is available for PyTorch operations.
+
+    Args:
+        check_device: only check torch.xpu module or strictly check if XPU device is available
+
+    Returns:
+        bool: True if XPU is available, False otherwise.
+    """
+    try:
+        if not hasattr(torch, "xpu"):
+            return False
+
+        if check_device:
+            return torch.xpu.is_available()
+        else:
+            return True
+    except Exception:
+        return False
+
+
 is_cuda_available = torch.cuda.is_available()
 is_npu_available = is_torch_npu_available()
+is_xpu_available = is_torch_xpu_available()
 
 
 def get_resource_name() -> str:
@@ -52,7 +74,9 @@ def get_resource_name() -> str:
     Returns:
         ray resource name string, either "GPU" or "NPU".
     """
-    return "GPU" if is_cuda_available else "NPU"
+    if is_npu_available:
+        return "NPU"
+    return "GPU"  # CUDA and XPU both register as standard GPU resource in Ray
 
 
 def get_visible_devices_keyword() -> str:
@@ -65,22 +89,28 @@ def get_visible_devices_keyword() -> str:
         str: 'CUDA_VISIBLE_DEVICES' if CUDA is available,
             'ASCEND_RT_VISIBLE_DEVICES' otherwise.
     """
-    return "CUDA_VISIBLE_DEVICES" if not is_torch_npu_available(check_device=False) else "ASCEND_RT_VISIBLE_DEVICES"
+    if is_torch_npu_available(check_device=False):
+        return "ASCEND_RT_VISIBLE_DEVICES"
+    elif is_torch_xpu_available(check_device=False):
+        return "ONEAPI_DEVICE_SELECTOR"
+    return "CUDA_VISIBLE_DEVICES"
 
 
 def get_device_name() -> str:
     """Get the device type string based on available accelerators.
 
     Detects the available accelerator and returns the corresponding PyTorch
-    device type string. Currently supports CUDA, Ascend NPU, and CPU.
+    device type string. Currently supports CUDA, Ascend NPU, Intel XPU, and CPU.
 
     Returns:
-        str: Device type string ('cuda', 'npu', or 'cpu').
+        str: Device type string ('cuda', 'npu', 'xpu', or 'cpu').
     """
     if is_cuda_available:
         device = "cuda"
     elif is_npu_available:
         device = "npu"
+    elif is_xpu_available:
+        device = "xpu"
     else:
         device = "cpu"
     return device
@@ -120,10 +150,12 @@ def get_nccl_backend() -> str:
     detected accelerator (HCCL for Ascend NPU, NCCL for CUDA).
 
     Returns:
-        str: Backend name ('hccl' for NPU, 'nccl' for CUDA/default).
+        str: Backend name ('hccl' for NPU, 'cpu:gloo,xpu:xccl' for XPU, 'nccl' for CUDA/default).
     """
     if is_npu_available:
         return "hccl"
+    elif is_xpu_available:
+        return "cpu:gloo,xpu:xccl"
     else:
         # default to nccl
         return "nccl"
@@ -152,6 +184,8 @@ def set_expandable_segments(enable: bool) -> None:
                 "Current version of torch-npu does not support `_set_allocator_settings`, "
                 "please upgrade torch-npu to 2.9.0 or later"
             )
+    elif is_xpu_available:
+        pass  # XPU uses Level Zero memory management; expandable_segments not applicable
 
 
 def auto_set_device(config) -> None:
@@ -172,6 +206,14 @@ def auto_set_device(config) -> None:
                 )
 
             config.trainer.device = "npu"
+        elif is_torch_xpu_available():
+            if config.trainer.device not in ["cpu", "xpu"]:
+                logger.warning(
+                    f"Detect setting config.trainer.device to {config.trainer.device} for Intel XPU, "
+                    f"from default value in config file, automatically set to `xpu` instead."
+                )
+
+            config.trainer.device = "xpu"
         # Other cases: set device to "cuda" via config file, no need to change.
 
 
@@ -357,6 +399,12 @@ def is_support_ipc() -> bool:
             raise RuntimeError(f"Failed to execute npu-smi command: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Error checking IPC support: {e}") from e
+
+    # XPU IPC: torch.xpu.ipc_collect() exists in PyTorch 2.11+ but the underlying
+    # SYCL IPC handle format differs from CUDA (single handle vs 8-element tuple).
+    # Guard with hasattr in case an older PyTorch build lacks the symbol.
+    if is_xpu_available:
+        return hasattr(torch.xpu, "ipc_collect")
 
     # For other devices (CPU), return False
     return False

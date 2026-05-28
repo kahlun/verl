@@ -19,7 +19,7 @@ import os
 from packaging.version import parse as parse_version
 
 from .protocol import DataProto
-from .utils.device import is_npu_available
+from .utils.device import is_npu_available, is_xpu_available
 from .utils.import_utils import import_external_libs
 from .utils.logging_utils import set_basic_config
 
@@ -82,6 +82,29 @@ if is_npu_available:
     # for third-party devices such as NPUs. This patch fixes this issue, and the relevant
     # modifications can be removed once the fix is merged into tensordict.
 
+    import tensordict
+
+    if parse_version(tensordict.__version__) < parse_version("0.10.0"):
+        from tensordict.base import TensorDictBase
+
+        def _sync_all_patch(self):
+            from torch._utils import _get_available_device_type, _get_device_module
+
+            device_type = _get_available_device_type()
+            if device_type is None:
+                return
+
+            device_module = _get_device_module(device_type)
+            device_module.synchronize()
+
+        TensorDictBase._sync_all = _sync_all_patch
+
+if is_xpu_available:
+    # XPU: tensordict D2H sync patch — same issue as NPU above.
+    # Intel XPU SYCL DMA transfers are non-blocking by default; without this patch,
+    # the driver process can read tensors before the transfer completes.
+    # The nested_tensor __wrapped__ unwrap above is NPU-specific (torch-npu installs
+    # the intercept); XPU does not intercept torch.nested, so only the sync patch is needed.
     import tensordict
 
     if parse_version(tensordict.__version__) < parse_version("0.10.0"):
