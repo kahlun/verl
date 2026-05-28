@@ -40,7 +40,13 @@ def vocab_parallel_log_softmax(
     # seq_len, batch_size, top_k = target_topk_logps.size()
     vp_logits, logits_max = calculate_logits_max(vp_logits)
 
-    torch.distributed.all_reduce(logits_max, op=torch.distributed.ReduceOp.MAX, group=get_tensor_model_parallel_group())
+    if logits_max.device.type == 'xpu':
+        # Bug #2: XCCL ReduceOp.MAX returns SUM. Route through CPU/Gloo.
+        _logits_max_cpu = logits_max.cpu()
+        torch.distributed.all_reduce(_logits_max_cpu, op=torch.distributed.ReduceOp.MAX, group=get_tensor_model_parallel_group())
+        logits_max.copy_(_logits_max_cpu)
+    else:
+        torch.distributed.all_reduce(logits_max, op=torch.distributed.ReduceOp.MAX, group=get_tensor_model_parallel_group())
 
     vp_logits = vp_logits - logits_max.unsqueeze(dim=-1)
     exp_logits = vp_logits.exp()

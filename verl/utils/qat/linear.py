@@ -274,7 +274,12 @@ class QATLinear(nn.Linear):
         current_amax = torch.amax(torch.abs(x)).detach().to(torch.float32)
 
         if torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1:
-            torch.distributed.all_reduce(current_amax, op=torch.distributed.ReduceOp.MAX)
+            if current_amax.device.type == "xpu":
+                _cpu = current_amax.cpu()
+                torch.distributed.all_reduce(_cpu, op=torch.distributed.ReduceOp.MAX)
+                current_amax.copy_(_cpu)
+            else:
+                torch.distributed.all_reduce(current_amax, op=torch.distributed.ReduceOp.MAX)
 
         scale_factor = FP8_E4M3_MAX * FP4_E2M1_MAX
 
