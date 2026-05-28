@@ -1006,6 +1006,7 @@ class vLLMReplica(RolloutReplica):
             env_vars = {
                 "RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES": "1",
                 "RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES": "1",
+                "RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR": "1",
                 # To prevent hanging or crash during synchronization of weights between actor and rollout
                 # in disaggregated mode. See:
                 # https://docs.vllm.ai/en/latest/usage/troubleshooting.html?h=nccl_cumem_enable#known-issues

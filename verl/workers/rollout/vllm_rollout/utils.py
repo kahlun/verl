@@ -53,6 +53,8 @@ def set_death_signal():
 def get_device_uuid(device_id: int) -> str:
     from vllm.platforms import current_platform
 
+    from verl.utils.device import is_xpu_available
+
     # Convert torch.npu.current_device to its corresponding ASCEND_RT_VISIBLE_DEVICES.
     if is_npu_available:
         if os.getenv("ASCEND_RT_VISIBLE_DEVICES") is not None:
@@ -61,6 +63,20 @@ def get_device_uuid(device_id: int) -> str:
             return "NPU-" + npu_visible_devices[device_id]
         else:
             return f"NPU-{device_id}"
+    elif is_xpu_available:
+        # Convert device_id to physical XPU index via ONEAPI_DEVICE_SELECTOR.
+        # Format: "level_zero:0,1" or "level_zero:0.0,0.1" (multi-tile).
+        oneapi_selector = os.getenv("ONEAPI_DEVICE_SELECTOR")
+        if oneapi_selector is not None:
+            # Extract the device indices from "level_zero:0,1" → ["0", "1"]
+            selector_body = oneapi_selector.split(":", 1)[-1]
+            xpu_visible_devices = selector_body.split(",")
+            assert device_id < len(xpu_visible_devices), (
+                f"device_id {device_id} must be less than {xpu_visible_devices}"
+            )
+            return "XPU-" + xpu_visible_devices[device_id]
+        else:
+            return f"XPU-{device_id}"
     else:
         return current_platform.get_device_uuid(device_id)
 
