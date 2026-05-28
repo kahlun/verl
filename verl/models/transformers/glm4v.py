@@ -29,7 +29,7 @@ from transformers.models.glm4v.modeling_glm4v import (
 )
 from transformers.utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10
 
-from verl.utils.device import is_npu_available
+from verl.utils.device import is_npu_available, is_xpu_available
 from verl.utils.ulysses import (
     gather_heads_scatter_seq,
     gather_seq_scatter_heads,
@@ -57,6 +57,35 @@ if is_npu_available:
     _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
     _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
     _flash_use_top_left_mask = flash_attn_supports_top_left_mask()
+
+if is_xpu_available:
+    import torch.nn.functional as F
+
+    def flash_attn_func(q, k, v, dropout_p=0.0, softmax_scale=None, causal=False, **kwargs):
+        # XPU: use PyTorch SDPA (Intel TLA kernel) instead of CUDA flash_attn
+        # q/k/v are (total_tokens, num_heads, head_dim) — transpose to (batch, heads, seq, dim)
+        q, k, v = q.unsqueeze(0).transpose(1, 2), k.unsqueeze(0).transpose(1, 2), v.unsqueeze(0).transpose(1, 2)
+        out = F.scaled_dot_product_attention(q, k, v, scale=softmax_scale, is_causal=causal)
+        return out.transpose(1, 2).squeeze(0)
+
+    def flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k,
+                               dropout_p=0.0, softmax_scale=None, causal=False, **kwargs):
+        # XPU: SDPA varlen path — process each sequence in the batch independently
+        batch_size = cu_seqlens_q.shape[0] - 1
+        outputs = []
+        for i in range(batch_size):
+            s, e = cu_seqlens_q[i].item(), cu_seqlens_q[i + 1].item()
+            sk, ek = cu_seqlens_k[i].item(), cu_seqlens_k[i + 1].item()
+            qi = q[s:e].unsqueeze(0).transpose(1, 2)
+            ki = k[sk:ek].unsqueeze(0).transpose(1, 2)
+            vi = v[sk:ek].unsqueeze(0).transpose(1, 2)
+            oi = F.scaled_dot_product_attention(qi, ki, vi, scale=softmax_scale, is_causal=causal)
+            outputs.append(oi.transpose(1, 2).squeeze(0))
+        return torch.cat(outputs, dim=0)
+
+    _flash_supports_window_size = False
+    _flash_supports_deterministic = False
+    _flash_use_top_left_mask = False
 
 _flash_deterministic_enabled = os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
 
