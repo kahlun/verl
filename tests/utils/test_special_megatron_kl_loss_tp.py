@@ -47,10 +47,16 @@ class TestVocabParallelKLDivergence:
         destroy_global_process_group()
 
     def cleanup(self):
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-        gc.collect()
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+            gc.collect()
+            torch.cuda.synchronize()
+        elif torch.xpu.is_available():
+            torch.xpu.empty_cache()
+            torch.xpu.reset_peak_memory_stats()
+            gc.collect()
+            torch.xpu.synchronize()
 
     def generate_hyper(self):
         if self.test_case_idx == 0:

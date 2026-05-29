@@ -39,18 +39,35 @@ def test_memory_buffers():
 
     norm_factor = 1024**3
 
-    t_before = torch.cuda.get_device_properties(0).total_memory / norm_factor
-    r_before = torch.cuda.memory_reserved(0) / norm_factor
-    a_before = torch.cuda.memory_allocated(0) / norm_factor
+    if torch.cuda.is_available():
+        t_before = torch.cuda.get_device_properties(0).total_memory / norm_factor
+        r_before = torch.cuda.memory_reserved(0) / norm_factor
+        a_before = torch.cuda.memory_allocated(0) / norm_factor
+    elif torch.xpu.is_available():
+        t_before = torch.xpu.get_device_properties(0).total_memory / norm_factor
+        r_before = torch.xpu.memory_reserved(0) / norm_factor
+        a_before = torch.xpu.memory_allocated(0) / norm_factor
+    else:
+        t_before = r_before = a_before = 0.0
 
     print(f"Before Total memory: {t_before} GB, reserved: {r_before} GB, allocated: {a_before} GB")
 
-    t = torch.cuda.get_device_properties(0).total_memory / norm_factor
-    r = torch.cuda.memory_reserved(0) / norm_factor
-    a = torch.cuda.memory_allocated(0) / norm_factor
+    if torch.cuda.is_available():
+        t = torch.cuda.get_device_properties(0).total_memory / norm_factor
+        r = torch.cuda.memory_reserved(0) / norm_factor
+        a = torch.cuda.memory_allocated(0) / norm_factor
+    elif torch.xpu.is_available():
+        t = torch.xpu.get_device_properties(0).total_memory / norm_factor
+        r = torch.xpu.memory_reserved(0) / norm_factor
+        a = torch.xpu.memory_allocated(0) / norm_factor
+    else:
+        t = r = a = 0.0
 
     gc.collect()
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.xpu.is_available():
+        torch.xpu.empty_cache()
 
     print(f"After Total memory: {t} GB, reserved: {r} GB, allocated: {a} GB")
 

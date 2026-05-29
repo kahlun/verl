@@ -48,7 +48,12 @@ class DummyWorker(Worker):
 def test_data_transfer():
     ray.init()
     # construct resource pool
-    ngpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        ngpus = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        ngpus = torch.xpu.device_count()
+    else:
+        ngpus = 1
     resource_pool = RayResourcePool([ngpus])
     cls_with_init = RayClassWithInitArgs(cls=DummyWorker)
     # construct worker group

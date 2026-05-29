@@ -70,7 +70,12 @@ class Rollout(Worker):
 
 def test_ray_collective_group():
     ray.init()
-    ngpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        ngpus = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        ngpus = torch.xpu.device_count()
+    else:
+        ngpus = 1
     n_rollout = max(1, ngpus // 3)  # keep 2:1 actor:rollout ratio
     n_actor = n_rollout * 2
 

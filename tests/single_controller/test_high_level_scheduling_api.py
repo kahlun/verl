@@ -35,7 +35,12 @@ def test():
     import torch
 
     ray.init()
-    ngpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        ngpus = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        ngpus = torch.xpu.device_count()
+    else:
+        ngpus = 1
     half = ngpus // 2
 
     # test single-node-no-partition

@@ -30,7 +30,13 @@ from verl.utils.device import get_device_name, get_nccl_backend
 
 
 def get_local_gpus_num(division=1):
-    return max(1, torch.cuda.device_count() // division)
+    if torch.cuda.is_available():
+        count = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        count = torch.xpu.device_count()
+    else:
+        count = 1
+    return max(1, count // division)
 
 
 @ray.remote
@@ -53,7 +59,12 @@ class Actor(Worker):
 
 def test_split_resource_pool_with_split_size():
     ray.init()
-    ngpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        ngpus = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        ngpus = torch.xpu.device_count()
+    else:
+        ngpus = 1
     half = get_local_gpus_num(2)
     # simulate 2 nodes of half GPUs each
     global_resource_pool = RayResourcePool(process_on_nodes=[half, half])
@@ -154,7 +165,12 @@ def test_split_resource_pool_with_split_size_list_cross_nodes():
 
 def test_split_resource_pool_with_split_twice():
     ray.init()
-    ngpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        ngpus = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        ngpus = torch.xpu.device_count()
+    else:
+        ngpus = 1
     quarter = get_local_gpus_num(4)
     mid = ngpus - 2 * quarter  # middle pool size
     # simulate ngpus//2 nodes of 2 GPUs each

@@ -119,7 +119,12 @@ def create_training_config(model_type, strategy, device_count, model):
 @pytest.mark.parametrize("strategy", ["fsdp", "fsdp2", "megatron"])
 def test_actor_engine(strategy):
     ray.init()
-    device_count = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        device_count = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        device_count = torch.xpu.device_count()
+    else:
+        device_count = 1
     config = create_training_config(
         model_type="language_model",
         strategy=strategy,
@@ -254,7 +259,12 @@ def create_value_model(language_model_path, output_path):
 
 @pytest.mark.parametrize("strategy", ["fsdp", "fsdp2"])
 def test_critic_engine(strategy):
-    device_count = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        device_count = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        device_count = torch.xpu.device_count()
+    else:
+        device_count = 1
     value_model_path = os.path.expanduser("~/models/test_model")
     language_model_path = get_test_language_model(device_count=device_count)
     create_value_model(language_model_path, value_model_path)
@@ -365,7 +375,10 @@ def create_actor_model(tmp_path, config):
 
 
 def _worker(rank: int, world_size: int, rendezvous_file: str, strategy: str, model_path: str):
-    torch.cuda.set_device(rank)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(rank)
+    elif torch.xpu.is_available():
+        torch.xpu.set_device(rank)
     dist.init_process_group(
         backend="nccl",
         init_method=f"file://{rendezvous_file}",
@@ -454,7 +467,10 @@ def test_per_tensor_generator(world_size, tmp_path, config, strategy):
 def _autocast_dtype_worker(rank: int, world_size: int, rendezvous_file: str, model_path: str):
     # Regression test for #5932: FSDP engine must resolve autocast dtype from
     # mixed_precision.param_dtype rather than hardcoding bfloat16.
-    torch.cuda.set_device(rank)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(rank)
+    elif torch.xpu.is_available():
+        torch.xpu.set_device(rank)
     dist.init_process_group(
         backend="nccl",
         init_method=f"file://{rendezvous_file}",

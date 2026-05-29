@@ -106,7 +106,12 @@ def test_dist_global_info_wg():
     from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
 
     ray.init()
-    ngpus = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        ngpus = torch.cuda.device_count()
+    elif torch.xpu.is_available():
+        ngpus = torch.xpu.device_count()
+    else:
+        ngpus = 1
     infer_tp = ngpus // 2
     train_tp = ngpus // 4
 

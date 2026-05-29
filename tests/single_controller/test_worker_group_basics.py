@@ -47,7 +47,7 @@ def get_ray_remote_options() -> str:
     """
     if get_device_name() == "cuda":
         return dict(num_gpus=0.1)
-    elif get_device_name() == "npu":
+    elif get_device_name() in ("npu", "xpu"):
         return dict(resources={"NPU": 0.1})
     return dict(num_cpus=0.1)
 

@@ -103,12 +103,19 @@ class TestLinearCrossEntropy:
         self.temperature = temperature
 
     def cleanup(self):
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.empty_cache()
+            torch.xpu.reset_peak_memory_stats()
         import gc
 
         gc.collect()
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
 
     def generate_hyper(self):
         global MAX_TEST_CASES
@@ -175,8 +182,20 @@ class TestLinearCrossEntropy:
         kernel_forward_latency = list()
         kernel_backward_latency = list()
 
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
+        if torch.cuda.is_available():
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+        elif torch.xpu.is_available():
+            start_event = torch.xpu.Event(enable_timing=True)
+            end_event = torch.xpu.Event(enable_timing=True)
+        else:
+            start_event = end_event = None
+
+        def _sync():
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.xpu.is_available():
+                torch.xpu.synchronize()
 
         for i in range(iterations):
             print(f"[INFO]: Iteration {i + 1} / {iterations}...", end="\r")
@@ -185,13 +204,13 @@ class TestLinearCrossEntropy:
             start_event.record()
             (torch_logprobs, torch_entropy) = run_torch_entropy(hidden, weight, labels, self.temperature)
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             torch_forward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
             (verl_logprobs, verl_entropy) = run_verl_original_entropy(hidden, weight, labels, self.temperature)
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             verl_forward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
@@ -199,13 +218,13 @@ class TestLinearCrossEntropy:
                 hidden, weight, labels, self.temperature
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             verl_fused_forward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
             (kernel_logprobs, kernel_entropy) = linear_cross_entropy(hidden, weight, labels, self.temperature)
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             kernel_forward_latency.append(start_event.elapsed_time(end_event))
 
             torch.testing.assert_close(torch_logprobs, verl_logprobs, atol=1e-4, rtol=1e-4)
@@ -231,7 +250,7 @@ class TestLinearCrossEntropy:
                 (torch_entropy, torch_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             torch_backward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
@@ -239,7 +258,7 @@ class TestLinearCrossEntropy:
                 (verl_entropy, verl_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             verl_backward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
@@ -247,7 +266,7 @@ class TestLinearCrossEntropy:
                 (verl_fused_entropy, verl_fused_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             verl_fused_backward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
@@ -255,7 +274,7 @@ class TestLinearCrossEntropy:
                 (kernel_entropy, kernel_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             kernel_backward_latency.append(start_event.elapsed_time(end_event))
 
             torch.testing.assert_close(d_torch_hidden, d_verl_hidden, atol=1e-2, rtol=1e-4)
@@ -326,20 +345,38 @@ class TestLinearCrossEntropy:
 
         hidden, weight, labels = self.generate_forward_inputs()
 
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.reset_peak_memory_stats()
         (logprobs, entropy) = run_forward(hidden, weight, labels, self.temperature)
-        torch.cuda.synchronize()
-        torch_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
+            torch_max_memory = torch.xpu.max_memory_allocated() / 1024 / 1024
+        else:
+            torch_max_memory = 0.0
         print(f"[INFO]: {method_name} Forward pass peak memory: {torch_max_memory:.2f} MB")
 
         g_entropy, g_logprobs = self.generate_backward_inputs()
 
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.reset_peak_memory_stats()
         (d_torch_hidden, d_torch_weight) = torch.autograd.grad(
             (entropy, logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
         )
-        torch.cuda.synchronize()
-        torch_backward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch_backward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
+            torch_backward_max_memory = torch.xpu.max_memory_allocated() / 1024 / 1024
+        else:
+            torch_backward_max_memory = 0.0
         print(f"[INFO]: {method_name} Backward pass peak memory: {torch_backward_max_memory:.2f} MB")
 
     def check_storage_all(self):

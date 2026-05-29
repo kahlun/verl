@@ -83,4 +83,7 @@ def test_liger_vl_forward_with_monkey_patch():
     assert output.logits.shape[-1] == 1000  # vocab_size
 
     del model
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.xpu.is_available():
+        torch.xpu.empty_cache()

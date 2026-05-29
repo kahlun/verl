@@ -117,8 +117,8 @@ python3 -m verl.trainer.main_ppo \
     data.train_files="${TRAIN_FILES}" \
     data.val_files="${VAL_FILES}" \
     data.train_batch_size=8 \
-    data.max_prompt_length=256 \
-    data.max_response_length=64 \
+    +data.max_prompt_length=256 \
+    +data.max_response_length=64 \
     data.shuffle=False \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -169,8 +169,8 @@ python3 -m verl.trainer.main_ppo \
     data.train_files="${TRAIN_FILES}" \
     data.val_files="${VAL_FILES}" \
     data.train_batch_size=16 \
-    data.max_prompt_length=256 \
-    data.max_response_length=64 \
+    +data.max_prompt_length=256 \
+    +data.max_response_length=64 \
     data.shuffle=False \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=True \

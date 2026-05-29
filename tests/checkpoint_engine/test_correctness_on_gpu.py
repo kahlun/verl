@@ -27,7 +27,12 @@ from verl.utils.device import get_device_name
 from verl.utils.ray_utils import auto_await
 from verl.workers.config import CheckpointEngineConfig, HFModelConfig, RolloutConfig
 
-_ngpus = torch.cuda.device_count()
+if torch.cuda.is_available():
+    _ngpus = torch.cuda.device_count()
+elif torch.xpu.is_available():
+    _ngpus = torch.xpu.device_count()
+else:
+    _ngpus = 0
 
 
 @pytest.mark.asyncio

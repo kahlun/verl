@@ -185,8 +185,14 @@ class TestLinearCrossEntropy_TensorParallel:
 
         self.local_rank = dist.get_rank(self.group)
         self.world_size = dist.get_world_size(self.group)
-        device = torch.device(f"cuda:{self.local_rank}")
-        torch.cuda.set_device(device)
+        if torch.cuda.is_available():
+            device = torch.device(f"cuda:{self.local_rank}")
+            torch.cuda.set_device(device)
+        elif torch.xpu.is_available():
+            device = torch.device(f"xpu:{self.local_rank}")
+            torch.xpu.set_device(device)
+        else:
+            device = torch.device("cpu")
         print(f"[INFO]: Local rank: {self.local_rank}, World size: {self.world_size}")
 
     def initialize(self, test_case_idx: int, temperature: float = 1.5):
@@ -197,12 +203,19 @@ class TestLinearCrossEntropy_TensorParallel:
         dist.destroy_process_group()
 
     def cleanup(self):
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.empty_cache()
+            torch.xpu.reset_peak_memory_stats()
         import gc
 
         gc.collect()
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
 
     def generate_hyper(self):
         global LOW_MEMORY, LOW_MEMORY_DIV_FACTOR, MAX_TEST_CASES
@@ -338,22 +351,40 @@ class TestLinearCrossEntropy_TensorParallel:
         dist.broadcast(hidden, src=0, group=self.group)
         dist.broadcast(labels, src=0, group=self.group)
 
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.reset_peak_memory_stats()
         (tp_logprobs, tp_entropy) = run_torch_entropy_tp(hidden, weight, labels, self.temperature, self.group)
-        torch.cuda.synchronize()
-        forward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            forward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
+            forward_max_memory = torch.xpu.max_memory_allocated() / 1024 / 1024
+        else:
+            forward_max_memory = 0.0
 
         g_entropy, g_logprobs = self.generate_backward_inputs()
         # NOTE: we need to manually synchronize g_entropy and g_logprobs among Process Group
         dist.broadcast(g_entropy, src=0, group=self.group)
         dist.broadcast(g_logprobs, src=0, group=self.group)
 
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.reset_peak_memory_stats()
         (d_tp_hidden, d_tp_weight) = torch.autograd.grad(
             (tp_entropy, tp_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
         )
-        torch.cuda.synchronize()
-        backward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            backward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
+            backward_max_memory = torch.xpu.max_memory_allocated() / 1024 / 1024
+        else:
+            backward_max_memory = 0.0
         # NOTE: all-reduce on hidden is conducted outside the kernel
         dist.all_reduce(d_tp_hidden, op=dist.ReduceOp.SUM, group=self.group)
 
@@ -370,8 +401,20 @@ class TestLinearCrossEntropy_TensorParallel:
         kernel_forward_latency = list()
         kernel_backward_latency = list()
 
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
+        if torch.cuda.is_available():
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+        elif torch.xpu.is_available():
+            start_event = torch.xpu.Event(enable_timing=True)
+            end_event = torch.xpu.Event(enable_timing=True)
+        else:
+            start_event = end_event = None
+
+        def _sync():
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.xpu.is_available():
+                torch.xpu.synchronize()
 
         for i in range(iterations):
             hidden, weight, labels = self.generate_forward_inputs()
@@ -383,7 +426,7 @@ class TestLinearCrossEntropy_TensorParallel:
             start_event.record()
             (torch_logprobs, torch_entropy) = run_torch_entropy_tp(hidden, weight, labels, self.temperature, self.group)
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             torch_forward_latency.append(start_event.elapsed_time(end_event))
 
             start_event.record()
@@ -391,7 +434,7 @@ class TestLinearCrossEntropy_TensorParallel:
                 hidden, weight, labels, self.temperature, "none", self.group
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             kernel_forward_latency.append(start_event.elapsed_time(end_event))
 
             torch.testing.assert_close(torch_logprobs, kernel_logprobs, atol=1e-1, rtol=1e-2)
@@ -408,7 +451,7 @@ class TestLinearCrossEntropy_TensorParallel:
                 (torch_entropy, torch_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             torch_backward_latency.append(start_event.elapsed_time(end_event))
             # NOTE: all-reduce on hidden is conducted outside the kernel
             dist.all_reduce(torch_d_hidden, op=dist.ReduceOp.SUM, group=self.group)
@@ -418,7 +461,7 @@ class TestLinearCrossEntropy_TensorParallel:
                 (kernel_entropy, kernel_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
             )
             end_event.record()
-            torch.cuda.synchronize()
+            _sync()
             kernel_backward_latency.append(start_event.elapsed_time(end_event))
             # NOTE: all-reduce on hidden is conducted outside the kernel
             dist.all_reduce(kernel_d_hidden, op=dist.ReduceOp.SUM, group=self.group)
@@ -462,24 +505,42 @@ class TestLinearCrossEntropy_TensorParallel:
         dist.broadcast(hidden, src=0, group=self.group)
         dist.broadcast(labels, src=0, group=self.group)
 
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.reset_peak_memory_stats()
         (kernel_logprobs, kernel_entropy) = linear_cross_entropy(
             hidden, weight, labels, self.temperature, "none", self.group
         )
-        torch.cuda.synchronize()
-        kernel_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            kernel_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
+            kernel_max_memory = torch.xpu.max_memory_allocated() / 1024 / 1024
+        else:
+            kernel_max_memory = 0.0
 
         g_entropy, g_logprobs = self.generate_backward_inputs()
         # NOTE: we need to manually synchronize g_entropy and g_logprobs among Process Group
         dist.broadcast(g_entropy, src=0, group=self.group)
         dist.broadcast(g_logprobs, src=0, group=self.group)
 
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        elif torch.xpu.is_available():
+            torch.xpu.reset_peak_memory_stats()
         (d_kernel_hidden, d_kernel_weight) = torch.autograd.grad(
             (kernel_entropy, kernel_logprobs), (hidden, weight), (g_entropy, g_logprobs), retain_graph=False
         )
-        torch.cuda.synchronize()
-        kernel_backward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            kernel_backward_max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        elif torch.xpu.is_available():
+            torch.xpu.synchronize()
+            kernel_backward_max_memory = torch.xpu.max_memory_allocated() / 1024 / 1024
+        else:
+            kernel_backward_max_memory = 0.0
         # NOTE: all-reduce on hidden is conducted outside the kernel
         dist.all_reduce(d_kernel_hidden, op=dist.ReduceOp.SUM, group=self.group)
 

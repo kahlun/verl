@@ -27,7 +27,10 @@ def setup_distributed():
     dist.init_process_group(backend="nccl")
     rank = dist.get_rank()
     world_size = dist.get_world_size()
-    torch.cuda.set_device(rank)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(rank)
+    elif torch.xpu.is_available():
+        torch.xpu.set_device(rank)
     return rank, world_size
 
 
@@ -158,7 +161,10 @@ def main():
 
     # Free model1 memory before creating model2
     del model1
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.xpu.is_available():
+        torch.xpu.empty_cache()
 
     dist.barrier()
 
@@ -209,7 +215,10 @@ def main():
 
     # Cleanup
     del model2
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.xpu.is_available():
+        torch.xpu.empty_cache()
 
     dist.destroy_process_group()
 

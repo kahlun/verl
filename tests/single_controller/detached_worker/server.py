@@ -48,7 +48,10 @@ class Trainer(Worker):
         if not torch.distributed.is_initialized():
             rank = int(os.environ["LOCAL_RANK"])
             torch.distributed.init_process_group(backend="nccl")
-            torch.cuda.set_device(rank)
+            if torch.cuda.is_available():
+                torch.cuda.set_device(rank)
+            elif torch.xpu.is_available():
+                torch.xpu.set_device(rank)
 
             mpu.initialize_model_parallel(
                 tensor_model_parallel_size=2,

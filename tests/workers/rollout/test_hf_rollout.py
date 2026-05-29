@@ -83,7 +83,7 @@ def prepare_fsdp_model(model, world_size):
         model,
         use_orig_params=True,
         auto_wrap_policy=None,
-        device_id=torch.cuda.current_device(),
+        device_id=torch.cuda.current_device() if torch.cuda.is_available() else (torch.xpu.current_device() if torch.xpu.is_available() else 0),
         sharding_strategy=ShardingStrategy.FULL_SHARD,
         mixed_precision=mixed_precision,
         cpu_offload=CPUOffload(offload_params=False),
@@ -101,7 +101,8 @@ def test_hf_rollout(n: int = 1, do_sample: bool = True, validate: bool = False):
     config = OmegaConf.create(BASE_HF_ROLLOUT_CONFIG)
     config.update({"n": n, "do_sample": do_sample})
 
-    assert torch.cuda.device_count() >= 2, "At least 2 GPUs is required to run tp+dp tests."
+    _dev_count = torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 0)
+    assert _dev_count >= 2, "At least 2 GPUs is required to run tp+dp tests."
     local_rank, rank, world_size = initialize_global_process_group()
 
     # Initialize model and tokenizer
@@ -119,7 +120,8 @@ def test_hf_rollout(n: int = 1, do_sample: bool = True, validate: bool = False):
 
     # Initialize HFRollout and start generate
     hf_rollout = HFRollout(fsdp_model, OmegaConf.create(config))
-    input = prepare_input_dataproto(tokenizer, config, validate).to(torch.cuda.current_device())
+    _cur_dev = torch.cuda.current_device() if torch.cuda.is_available() else (torch.xpu.current_device() if torch.xpu.is_available() else "cpu")
+    input = prepare_input_dataproto(tokenizer, config, validate).to(_cur_dev)
     outputs = hf_rollout.generate_sequences(input)
 
     # check generated batch size is expected
