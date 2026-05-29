@@ -653,10 +653,7 @@ def log_probs_from_logits_all_rmpad(input_ids_rmpad, logits_rmpad, indices, batc
         seqlen: int
         response_length: int
     """
-    if get_device_name() in ("npu", "xpu"):
-        from verl.utils.attention_utils import pad_input
-    else:
-        from flash_attn.bert_padding import pad_input
+    from verl.utils.attention_utils import pad_input
 
     input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # transpose back to [total_nnz, 1]
     input_ids_rmpad = input_ids_rmpad.squeeze(-1)
@@ -937,13 +934,25 @@ def distributed_mean_max_min_std(local_tensor, compute_max=True, compute_min=Tru
 
     if compute_max:
         local_max = torch.max(local_tensor)
-        torch.distributed.all_reduce(local_max, op=torch.distributed.ReduceOp.MAX)
+        if local_max.device.type == 'xpu':
+            # Bug #2: XCCL ReduceOp.MAX returns SUM. Route through CPU/Gloo.
+            _max_cpu = local_max.cpu()
+            torch.distributed.all_reduce(_max_cpu, op=torch.distributed.ReduceOp.MAX)
+            local_max.copy_(_max_cpu)
+        else:
+            torch.distributed.all_reduce(local_max, op=torch.distributed.ReduceOp.MAX)
     else:
         local_max = None
 
     if compute_min:
         local_min = torch.min(local_tensor)
-        torch.distributed.all_reduce(local_min, op=torch.distributed.ReduceOp.MIN)
+        if local_min.device.type == 'xpu':
+            # Bug #2: XCCL ReduceOp.MIN returns SUM. Route through CPU/Gloo.
+            _min_cpu = local_min.cpu()
+            torch.distributed.all_reduce(_min_cpu, op=torch.distributed.ReduceOp.MIN)
+            local_min.copy_(_min_cpu)
+        else:
+            torch.distributed.all_reduce(local_min, op=torch.distributed.ReduceOp.MIN)
     else:
         local_min = None
 

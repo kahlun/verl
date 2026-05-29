@@ -186,7 +186,9 @@ class TrainingWorker(Worker, DistProfilerExtension):
         loss = torch.sum(torch.tensor(output.pop("loss"), device=self.device_name))
         dp_group = self.engine.get_data_parallel_group()
         if dp_group is not None:
-            torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+            # Bug #6: XCCL ReduceOp.AVG double-divides. Use SUM + manual divide.
+            torch.distributed.all_reduce(loss, group=dp_group)
+            loss /= torch.distributed.get_world_size(group=dp_group)
         loss = loss.item()
 
         # For grad_norm, we do not perform all reduce because it is already been done when clipping grad

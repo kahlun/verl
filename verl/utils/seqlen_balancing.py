@@ -401,7 +401,13 @@ def rearrange_micro_batches(
         num_micro_batches = max(min_num_micro_batch, num_micro_batches)
     if dist.is_initialized() and same_micro_num_in_dp and dp_group is not None:
         num_micro_batches = torch.tensor([num_micro_batches], device=get_device_name())
-        dist.all_reduce(num_micro_batches, op=dist.ReduceOp.MAX, group=dp_group)
+        if num_micro_batches.device.type == 'xpu':
+            # Bug #2: XCCL ReduceOp.MAX returns SUM. Route through CPU/Gloo.
+            _nb_cpu = num_micro_batches.cpu()
+            dist.all_reduce(_nb_cpu, op=dist.ReduceOp.MAX, group=dp_group)
+            num_micro_batches.copy_(_nb_cpu)
+        else:
+            dist.all_reduce(num_micro_batches, op=dist.ReduceOp.MAX, group=dp_group)
         num_micro_batches = num_micro_batches.cpu().item()
     if num_batches_divided_by is not None:
         num_micro_batches = roundup_divisible(num_micro_batches, num_batches_divided_by)

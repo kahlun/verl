@@ -175,7 +175,13 @@ def vocab_parallel_sum_pi_squared(vocab_parallel_logits: torch.Tensor) -> torch.
     tp_group = mpu.get_tensor_model_parallel_group()
 
     logits_max = vocab_parallel_logits.max(dim=-1, keepdim=True).values
-    dist.all_reduce(logits_max, op=dist.ReduceOp.MAX, group=tp_group)
+    if logits_max.device.type == 'xpu':
+        # Bug #2: XCCL ReduceOp.MAX returns SUM. Route through CPU/Gloo.
+        _logits_max_cpu = logits_max.cpu()
+        dist.all_reduce(_logits_max_cpu, op=dist.ReduceOp.MAX, group=tp_group)
+        logits_max.copy_(_logits_max_cpu)
+    else:
+        dist.all_reduce(logits_max, op=dist.ReduceOp.MAX, group=tp_group)
     shifted = vocab_parallel_logits - logits_max
     exp_shifted = shifted.exp()
     sum_exp = exp_shifted.sum(dim=-1, keepdim=True)
