@@ -165,6 +165,9 @@ class PlatformNPU(PlatformBase):
         pass
 
     # ------------------------------------------------------------------
+    def apply_model_patches(self, model_type: str) -> None:
+        pass
+
     # Low-level runtime API
     # ------------------------------------------------------------------
 

@@ -43,7 +43,7 @@ from sglang.srt.managers.io_struct import (
 from sglang.srt.managers.tokenizer_manager import ServerStatus
 
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_visible_devices_keyword
+from verl.utils.device import get_visible_devices_keyword, is_xpu_available
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_sglang_profiler_args
 from verl.workers.config import HFModelConfig, RolloutConfig
@@ -142,9 +142,6 @@ class SGLangHttpServer:
             f"{nnodes=}, {cuda_visible_devices=}, role={disaggregation_role}"
         )
         os.environ[visible_devices_keyword] = cuda_visible_devices
-        from verl.utils.device import is_device_available
-
-        assert is_device_available(), "SGLang http server should run on GPU node"
 
         assert disaggregation_role in ("null", "prefill", "decode"), (
             f"disaggregation_role must be 'null'|'prefill'|'decode', got {disaggregation_role!r}"
@@ -257,6 +254,19 @@ class SGLangHttpServer:
 
         engine_kwargs = self.config.get("engine_kwargs", {}).get("sglang", {}) or {}
         attention_backend = engine_kwargs.pop("attention_backend", None)
+        mm_attention_backend = engine_kwargs.pop("mm_attention_backend", None)
+        if attention_backend is None:
+            if is_xpu_available:
+                # sglang 0.5.12 XPU backend — requires sgl-kernel-xpu.
+                attention_backend = "intel_xpu"
+            elif version.parse(sglang.__version__) >= version.parse("0.5.12"):
+                # FA3 CUDA-graph capture is broken on sglang>=0.5.12 (#22800).
+                attention_backend = "flashinfer"
+            else:
+                attention_backend = "fa3"
+        # mm_attention_backend uses a different namespace than attention_backend
+        # (e.g. text "flashinfer" vs vision "flashinfer_cudnn"), so don't mirror it.
+        # Leave None to let sglang's VisionAttention auto-pick per device.
         quantization = self.config.get("quantization", None)
         if quantization is not None:
             if quantization == "fp8":
@@ -278,7 +288,9 @@ class SGLangHttpServer:
             "dtype": self.config.dtype,
             "mem_fraction_static": self.config.gpu_memory_utilization,
             "disable_cuda_graph": self.config.enforce_eager,
-            "enable_memory_saver": True,
+            # torch_memory_saver requires CUDA runtime; disable on XPU.
+            "enable_memory_saver": not is_xpu_available,
+            **({"device": "xpu"} if is_xpu_available else {}),
             "base_gpu_id": self.base_gpu_id,
             "gpu_id_step": 1,
             "tp_size": infer_tp,
@@ -290,8 +302,8 @@ class SGLangHttpServer:
             "trust_remote_code": self.model_config.trust_remote_code,
             "max_running_requests": self.config.get("max_num_seqs", None),
             "log_level": "error",
-            "mm_attention_backend": "fa3",
-            "attention_backend": attention_backend if attention_backend is not None else "fa3",
+            "mm_attention_backend": mm_attention_backend,
+            "attention_backend": attention_backend,
             "skip_tokenizer_init": self.config.skip_tokenizer_init,
             "skip_server_warmup": True,
             "quantization": quantization,
@@ -359,7 +371,7 @@ class SGLangHttpServer:
         # mtp
         if self.config.mtp is not None and self.config.mtp.enable and self.config.mtp.enable_rollout:
             # Enable weights CPU backup for sglang >= 0.5.6
-            if sglang.__version__ < "0.5.6":
+            if version.parse(sglang.__version__) < version.parse("0.5.6"):
                 raise ValueError(f"sglang version {sglang.__version__} is not supported for MTP rollout")
 
             args["speculative_algorithm"] = self.config.mtp.speculative_algorithm
@@ -372,6 +384,22 @@ class SGLangHttpServer:
 
         # NOTE: We can't directly call SGLang's launch_server since it's not an async function.
         # https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/entrypoints/http_server.py
+
+        # XPU: sglang spawns scheduler subprocesses via multiprocessing.spawn.
+        # Those subprocesses inherit ONEAPI_DEVICE_SELECTOR which crashes the
+        # triton/XPU driver at import time.  ZE_AFFINITY_MASK alone is
+        # sufficient for device isolation, so pop the selector before fork.
+        if is_xpu_available:
+            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
+            # Enable sglang's Intel XPU kernel backend (sgl-kernel-xpu).
+            os.environ["SGLANG_USE_SGL_XPU"] = "1"
+            # XPU rollout env: disable NVLS (not supported on XPU xccl).
+            os.environ["NCCL_NVLS_ENABLE"] = "0"
+            # XPU weight sync: sglang's MultiprocessingSerializer is patched
+            # at install time (sglang/srt/utils/common.py) to use torch.save/load
+            # with plain pickle_module, avoiding ForkingPickler fd-IPC which
+            # breaks across mp.spawn process boundaries.
+
         sglang.srt.entrypoints.engine._set_envs_and_config = _set_envs_and_config
         os.environ["SGLANG_BLOCK_NONZERO_RANK_CHILDREN"] = "0"
         server_args = ServerArgs(**args)
@@ -654,6 +682,12 @@ class SGLangHttpServer:
                 sequence_length=len(prompt_ids),
                 result_dict=extra_fields,
             )
+
+        # Re-key backend spec-decoding stats to the rollout-common names.
+        if self.config.mtp is not None and self.config.mtp.enable and self.config.mtp.enable_rollout:
+            extra_fields["spec_num_draft_tokens"] = int(meta_info["spec_draft_token_num"])
+            extra_fields["spec_num_accepted_tokens"] = int(meta_info["spec_accept_token_num"])
+            extra_fields["spec_num_verify_steps"] = int(meta_info["spec_verify_ct"])
 
         return TokenOutput(
             token_ids=token_ids,

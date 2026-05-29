@@ -37,6 +37,7 @@ from sglang.srt.weight_sync.utils import _preprocess_tensor_for_update_weights
 from sglang.srt.weight_sync.utils import update_weights as sgl_update_weights
 from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
 
+from verl.utils.device import is_xpu_available
 from verl.utils.net_utils import is_valid_ipv6_address
 from verl.workers.config import HFModelConfig, RolloutConfig
 from verl.workers.rollout.base import BaseRollout
@@ -52,19 +53,14 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
 # patch to avoid issue https://github.com/sgl-project/sglang/issues/6723
 def _set_envs_and_config(server_args: ServerArgs):
-    from verl.plugin.platform.platform_manager import get_platform
-
     # Set global environments
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     os.environ["NCCL_CUMEM_ENABLE"] = "0"
-    # Apply platform-specific rollout env vars (e.g. NCCL_NVLS_ENABLE=0 on XPU).
-    for k, v in get_platform().rollout_env_vars().items():
-        os.environ[k] = v
-    # server_args.enable_nccl_nvls always takes final precedence.
     os.environ["NCCL_NVLS_ENABLE"] = str(int(server_args.enable_nccl_nvls))
     os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
-    os.environ["CUDA_DEVICE_MAX_CONNECTIONS"] = "4"
-    os.environ["CUDA_MODULE_LOADING"] = "AUTO"
+    if is_cuda():
+        os.environ["CUDA_DEVICE_MAX_CONNECTIONS"] = "4"
+        os.environ["CUDA_MODULE_LOADING"] = "AUTO"
     # Enable faulthandler in subprocesses
     os.environ["PYTHONFAULTHANDLER"] = "1"
 
@@ -83,11 +79,19 @@ def _set_envs_and_config(server_args: ServerArgs):
             "Please uninstall the old version and reinstall the latest version by following the instructions at https://docs.flashinfer.ai/installation.html.",
         )
     if is_cuda():
-        assert_pkg_version(
-            "sgl-kernel",
-            "0.1.1",
-            "Please reinstall the latest version with `pip install sgl-kernel --force-reinstall`",
-        )
+        try:
+            # sglang 0.5.12+ renamed sgl-kernel to sglang_kernel
+            assert_pkg_version(
+                "sglang_kernel",
+                "0.1.1",
+                "Please reinstall: https://sgl-project.github.io/get_started/install.html#for-cuda-13",
+            )
+        except AssertionError:
+            assert_pkg_version(
+                "sgl_kernel",
+                "0.1.1",
+                "Please reinstall the latest version with `pip install sgl-kernel --force-reinstall`",
+            )
 
     # Set mp start method
     mp.set_start_method("spawn", force=True)
@@ -345,6 +349,11 @@ class ServerAdapter(BaseRollout):
                 weights = weights
 
             async for params_batch in get_named_tensor_buckets(weights, update_weights_bucket_bytes):
+                if is_xpu_available:
+                    # XPU: move to CPU before serialization; sglang's
+                    # MultiprocessingSerializer is patched to use torch.save/load
+                    # (avoids ForkingPickler fd-IPC across mp.spawn boundaries).
+                    params_batch = [(n, t.cpu()) for n, t in params_batch]
                 await sgl_update_weights(
                     engine=self._engine,
                     params_batch=params_batch,

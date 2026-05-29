@@ -143,6 +143,9 @@ class PlatformCUDA(PlatformBase):
     def profiler_stop(self) -> None:
         torch.cuda.profiler.stop()
 
+    def apply_model_patches(self, model_type: str) -> None:
+        pass
+
     # ------------------------------------------------------------------
     # Low-level runtime API
     # ------------------------------------------------------------------
