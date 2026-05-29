@@ -31,7 +31,7 @@ from verl.utils.device import get_device_name, get_nccl_backend
 
 def get_local_gpus_num(division=1):
     if torch.cuda.is_available():
-        count = torch.cuda.device_count()
+        count = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
     elif torch.xpu.is_available():
         count = torch.xpu.device_count()
     else:
@@ -60,7 +60,7 @@ class Actor(Worker):
 def test_split_resource_pool_with_split_size():
     ray.init()
     if torch.cuda.is_available():
-        ngpus = torch.cuda.device_count()
+        ngpus = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
     elif torch.xpu.is_available():
         ngpus = torch.xpu.device_count()
     else:
@@ -166,7 +166,7 @@ def test_split_resource_pool_with_split_size_list_cross_nodes():
 def test_split_resource_pool_with_split_twice():
     ray.init()
     if torch.cuda.is_available():
-        ngpus = torch.cuda.device_count()
+        ngpus = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
     elif torch.xpu.is_available():
         ngpus = torch.xpu.device_count()
     else:

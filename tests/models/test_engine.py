@@ -120,7 +120,7 @@ def create_training_config(model_type, strategy, device_count, model):
 def test_actor_engine(strategy):
     ray.init()
     if torch.cuda.is_available():
-        device_count = torch.cuda.device_count()
+        device_count = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
     elif torch.xpu.is_available():
         device_count = torch.xpu.device_count()
     else:
@@ -260,7 +260,7 @@ def create_value_model(language_model_path, output_path):
 @pytest.mark.parametrize("strategy", ["fsdp", "fsdp2"])
 def test_critic_engine(strategy):
     if torch.cuda.is_available():
-        device_count = torch.cuda.device_count()
+        device_count = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
     elif torch.xpu.is_available():
         device_count = torch.xpu.device_count()
     else:

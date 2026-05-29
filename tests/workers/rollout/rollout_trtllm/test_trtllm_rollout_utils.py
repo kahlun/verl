@@ -120,7 +120,7 @@ class TestUnimodalTRTLLMRollout:
             replica_rank=0,
             config=rollout_config,
             model_config=model_config,
-            gpus_per_node=torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 1),
+            gpus_per_node = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 1),
             is_reward_model=False,
         )
 
@@ -249,7 +249,7 @@ class TestMultimodalTRTLLMRollout:
             replica_rank=0,
             config=rollout_config,
             model_config=model_config,
-            gpus_per_node=torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 1),
+            gpus_per_node = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 1),
             is_reward_model=False,
         )
 
@@ -432,7 +432,7 @@ class TestTRTLLMServerLifecycle:
             replica_rank=0,
             config=rollout_config,
             model_config=model_config,
-            gpus_per_node=torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 1),
+            gpus_per_node = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 1),
             is_reward_model=False,
         )
 

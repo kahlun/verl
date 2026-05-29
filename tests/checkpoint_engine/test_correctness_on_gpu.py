@@ -28,7 +28,7 @@ from verl.utils.ray_utils import auto_await
 from verl.workers.config import CheckpointEngineConfig, HFModelConfig, RolloutConfig
 
 if torch.cuda.is_available():
-    _ngpus = torch.cuda.device_count()
+    _ngpus = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
 elif torch.xpu.is_available():
     _ngpus = torch.xpu.device_count()
 else:

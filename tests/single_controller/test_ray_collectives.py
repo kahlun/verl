@@ -71,7 +71,7 @@ class Rollout(Worker):
 def test_ray_collective_group():
     ray.init()
     if torch.cuda.is_available():
-        ngpus = torch.cuda.device_count()
+        ngpus = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count()
     elif torch.xpu.is_available():
         ngpus = torch.xpu.device_count()
     else:

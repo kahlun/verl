@@ -101,7 +101,7 @@ def test_hf_rollout(n: int = 1, do_sample: bool = True, validate: bool = False):
     config = OmegaConf.create(BASE_HF_ROLLOUT_CONFIG)
     config.update({"n": n, "do_sample": do_sample})
 
-    _dev_count = torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 0)
+    _dev_count = torch.xpu.device_count() if hasattr(torch, "xpu") and torch.xpu.device_count() > 0 else torch.cuda.device_count() if torch.cuda.is_available() else (torch.xpu.device_count() if torch.xpu.is_available() else 0)
     assert _dev_count >= 2, "At least 2 GPUs is required to run tp+dp tests."
     local_rank, rank, world_size = initialize_global_process_group()
 
