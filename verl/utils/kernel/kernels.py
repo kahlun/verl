@@ -100,7 +100,7 @@ elif SUPPORT_CUDA_TMA:
 
 
 def _on_accelerator(t: torch.Tensor) -> bool:
-    return t.is_cuda or t.device.type == "xpu"
+    return t.device.type in ("cuda", "xpu") or t.device.type == "xpu"
 
 
 @dataclass

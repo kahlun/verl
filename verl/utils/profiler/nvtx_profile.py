@@ -141,11 +141,11 @@ class NsightSystemsProfiler(DistProfiler):
         self.discrete: bool = tool_config.discrete
 
     def start(self, **kwargs):
-        if not self.discrete:
+        if not self.discrete and torch.cuda.is_available():
             torch.cuda.profiler.start()
 
     def stop(self):
-        if not self.discrete:
+        if not self.discrete and torch.cuda.is_available():
             torch.cuda.profiler.stop()
 
     def annotate(
@@ -177,14 +177,14 @@ class NsightSystemsProfiler(DistProfiler):
             def wrapper(*args, **kwargs_inner):
                 profile_name = message or func.__name__
 
-                if self.discrete:
+                if self.discrete and torch.cuda.is_available():
                     torch.cuda.profiler.start()
                 mark_range = mark_start_range(message=profile_name, color=color, domain=domain, category=category)
 
                 result = func(*args, **kwargs_inner)
 
                 mark_end_range(mark_range)
-                if self.discrete:
+                if self.discrete and torch.cuda.is_available():
                     torch.cuda.profiler.stop()
 
                 return result
