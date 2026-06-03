@@ -24,8 +24,7 @@ from typing import Any, Literal, Optional, get_args
 import torch
 from vllm.outputs import RequestOutput
 
-from verl.plugin.platform import get_platform
-from verl.utils.device import is_npu_available
+from verl.utils.device import is_npu_available, is_xpu_available
 from verl.utils.vllm import TensorLoRARequest, VLLMHijack
 from verl.utils.vllm.patch import patch_vllm_moe_model_weight_loader
 from verl.utils.vllm.vllm_fp8_utils import apply_vllm_fp8_patches, is_fp8_model, load_quanted_weights
@@ -77,7 +76,7 @@ def get_device_uuid(device_id: int) -> str:
         try:
             return current_platform.get_device_uuid(device_id)
         except Exception:
-            return get_platform().get_device_uuid(device_id=device_id)
+            return f"GPU-{device_id}"
 
 
 def get_vllm_max_lora_rank(lora_rank: int):

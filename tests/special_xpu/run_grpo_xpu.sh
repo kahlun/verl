@@ -46,6 +46,10 @@ unset ONEAPI_DEVICE_SELECTOR
 #   1. Reduce Ray prestarted workers to avoid L0 context memory pressure
 #   2. Patch vLLM's request_memory to skip the check on XPU
 export RAY_NUM_PRESTART_PYTHON_WORKERS=0
+# Disable Ray OOM monitor: Level Zero maps device memory into each process's
+# VA space (~2.2TB VmPeak), causing kernel page-table pressure that triggers
+# spurious OOM kills during the training step peak. Actual RAM usage stays low.
+export RAY_memory_monitor_refresh_ms=0
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
