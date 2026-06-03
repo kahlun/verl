@@ -5,7 +5,7 @@
 # Pinned here as a hard backstop so uv/pip cannot drift to a CUDA or CPU wheel.
 # Do NOT remove this pin.
 torch==2.10.0+xpu
-# Runtime deps imported directly by the veRL XPU rollout/training paths.
+# Runtime deps imported directly by the verl XPU rollout/training paths.
 cachetools
 #
 # vLLM >= 0.17 with XPU support must be built from source:
