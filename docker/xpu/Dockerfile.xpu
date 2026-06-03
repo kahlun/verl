@@ -1,0 +1,173 @@
+# verl on Intel XPU (Data Center GPU Max / Arc Pro / Arc)
+#
+# Based on vLLM's Dockerfile.xpu pattern (intel/deep-learning-essentials base).
+#
+# Build:
+#   docker build -t verl-xpu:latest -f docker/xpu/Dockerfile.xpu .
+#
+# Behind a corporate proxy:
+#   docker build --build-arg http_proxy=... --build-arg https_proxy=... ...
+#
+# Run (mount GPU devices + render group):
+#   RENDER_GID=$(getent group render | cut -d: -f3)
+#   docker run -it --rm \
+#     --device /dev/dri --group-add ${RENDER_GID} \
+#     --shm-size 16g \
+#     -v $HOME/data:/root/data \
+#     verl-xpu:latest
+#
+# Quick XPU sanity check (requires --device /dev/dri):
+#   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-xpu:latest \
+#     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
+#
+# Tested on: 4x Intel Arc Pro B60 (Battlemage, 24 GB VRAM each)
+#
+# --- Torch version alignment ---
+# vLLM 0.17.1+xpu requires torch==2.10.0+xpu (from vllm/requirements/xpu.txt).
+# All three layers (base torch, vLLM, verl deps) must use the SAME version.
+# Bump TORCH_VERSION / VLLM_VERSION together when upgrading.
+
+FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTHON_VERSION=3.12
+ARG TRITON_XPU_VERSION=3.7.0
+ARG VLLM_VERSION=0.17.1
+# torch version is owned by vllm/requirements/xpu.txt — do not pin here.
+# Upgrading vLLM automatically picks up its tested torch version.
+# XPU wheel index PRIMARY, PyPI is extra — uv/pip picks +xpu over plain wheels.
+ARG PIP_INDEX_URL="https://download.pytorch.org/whl/xpu"
+ARG PIP_EXTRA_INDEX_URL="https://pypi.org/simple"
+
+WORKDIR /workspace
+
+# --- System dependencies ---
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        gcc g++ cmake libnuma-dev wget git curl build-essential \
+        python3.12 python3.12-dev python3-pip ca-certificates && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- uv: fast, deterministic resolver (same tool as vLLM's Dockerfile.xpu) ---
+# uv resolves the full environment in one pass, so torch cannot be overwritten
+# by a later install the way pip's incremental resolver allows.
+# UV_INDEX_STRATEGY=unsafe-best-match: prefer the XPU wheel index over PyPI
+# when a package exists on both (torch, triton-xpu, etc.).
+ENV PATH="/root/.local/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# --- Intel GPU user-mode drivers (UMD) from GitHub releases ---
+# Avoids apt repo dependency issues; pins exact versions for reproducibility.
+# Pinned to compute-runtime 26.09 — fixes P2P IPC, torch.compile, and XCCL
+# MAX/MIN/AVG bugs present in 25.44/25.48.
+RUN mkdir /tmp/neo && cd /tmp/neo && \
+    wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.30.1/intel-igc-core-2_2.30.1+20950_amd64.deb && \
+    wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.30.1/intel-igc-opencl-2_2.30.1+20950_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/intel-ocloc_26.09.37435.1-0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/intel-opencl-icd_26.09.37435.1-0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/libigdgmm12_22.9.0_amd64.deb && \
+    wget -q https://github.com/intel/compute-runtime/releases/download/26.09.37435.1/libze-intel-gpu1_26.09.37435.1-0_amd64.deb && \
+    wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.28.0/level-zero_1.28.0+u24.04_amd64.deb && \
+    dpkg -i *.deb && \
+    cd / && rm -rf /tmp/neo
+
+# --- oneCCL with Battlemage (BMG) support ---
+# Default oneAPI 2025.2 oneCCL lacks BMG support; install specific version.
+ARG ONECCL_INSTALLER="intel-oneccl-2021.15.7.8_offline.sh"
+RUN wget -q "https://github.com/uxlfoundation/oneCCL/releases/download/2021.15.7/${ONECCL_INSTALLER}" && \
+    bash "${ONECCL_INSTALLER}" -a --silent --eula accept && \
+    rm "${ONECCL_INSTALLER}" && \
+    echo "source /opt/intel/oneapi/setvars.sh --force" >> /root/.bashrc && \
+    echo "source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force" >> /root/.bashrc
+RUN rm -f /opt/intel/oneapi/ccl/latest && \
+    ln -s /opt/intel/oneapi/ccl/2021.15 /opt/intel/oneapi/ccl/latest
+
+SHELL ["bash", "-c"]
+# uv resolver: XPU index is PRIMARY so torch+xpu is always preferred
+ENV UV_HTTP_TIMEOUT=500
+ENV UV_INDEX_URL=${PIP_INDEX_URL}
+ENV UV_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
+ENV UV_INDEX_STRATEGY="unsafe-best-match"
+ENV UV_LINK_MODE="copy"
+ENV VLLM_TARGET_DEVICE=xpu
+ENV CCL_ROOT=/opt/intel/oneapi/ccl/2021.15
+ENV LD_LIBRARY_PATH=/opt/intel/oneapi/ccl/2021.15/lib:/opt/intel/oneapi/ccl/2021.15/lib/ccl:${LD_LIBRARY_PATH}
+
+# --- Layer 1: vLLM + torch XPU (uv resolves everything in one pass) ---
+# uv reads requirements/xpu.txt which pins torch==2.10.0+xpu.
+# With unsafe-best-match + XPU extra index, uv picks the +xpu wheel for torch.
+# --no-build-isolation exposes the installed torch to the vLLM C++ build.
+RUN git clone --depth 1 --branch v${VLLM_VERSION} \
+        https://github.com/vllm-project/vllm.git /opt/vllm && \
+    cd /opt/vllm && \
+    source /opt/intel/oneapi/setvars.sh --force && \
+    source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force && \
+    uv pip install -r requirements/xpu.txt && \
+    uv pip install --no-build-isolation . && \
+    python3 -c "import vllm" && \
+    (uv pip uninstall oneccl oneccl-devel || true) && \
+    (uv pip uninstall triton triton-xpu || true) && \
+    python3 -c "import site, pathlib, shutil; root = pathlib.Path(site.getsitepackages()[0]) / 'triton'; shutil.rmtree(root, ignore_errors=True)" && \
+    uv pip install triton-xpu==${TRITON_XPU_VERSION}
+
+# --- Layer 2: verl Python dependencies ---
+# Copied before source for Docker layer caching — dep layer reused when only
+# source files change.
+COPY requirements-xpu.txt /tmp/requirements-xpu.txt
+RUN uv pip install -r /tmp/requirements-xpu.txt && \
+    (uv pip uninstall oneccl oneccl-devel || true) && \
+    (uv pip uninstall triton triton-xpu || true) && \
+    python3 -c "import site, pathlib, shutil; root = pathlib.Path(site.getsitepackages()[0]) / 'triton'; shutil.rmtree(root, ignore_errors=True)" && \
+    uv pip install triton-xpu==${TRITON_XPU_VERSION}
+
+# --- Layer 3: verl source ---
+COPY . /workspace/verl
+WORKDIR /workspace/verl
+RUN uv pip install --no-deps -e .
+
+# --- oneCCL workarounds (pre-DLE 2026.0 driver) ---
+ENV CCL_ATL_SHM=1
+ENV CCL_BUFFER_CACHE=0
+ENV CCL_ZE_IPC_EXCHANGE=sockets
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+# Ensure Ray's internal gRPC (localhost) is never routed through the corporate proxy.
+# Without this, ray.init() times out when http_proxy is set in the container.
+ENV no_proxy=127.0.0.1,localhost,::1
+ENV NO_PROXY=127.0.0.1,localhost,::1
+# SYCL device selector: setvars.sh may leave this as "level_zero:" (empty
+# after ':') which causes SIGABRT in any subprocess that initialises SYCL.
+# Ray also rejects '*' — must be explicit device indices.
+# Do NOT hardcode — sitecustomize.py auto-detects GPU count at startup.
+# Override at docker run time if needed: -e ONEAPI_DEVICE_SELECTOR=level_zero:0,1,2,3
+
+# sitecustomize.py: fix ONEAPI_DEVICE_SELECTOR at Python startup for EVERY
+# Python process (including vLLM's _run_in_subprocess model registry check).
+# Ray workers are fresh processes that may not inherit the corrected env from
+# the parent shell — this ensures even deeply nested subprocesses get a valid
+# device selector rather than the broken "level_zero:" value from setvars.sh.
+# The path is resolved dynamically to support any Python prefix / base image.
+RUN python3 -c "\
+import site, pathlib; \
+lib = pathlib.Path(site.getsitepackages()[0]).parent; \
+p = lib / 'sitecustomize.py'; \
+snippet = (\
+'# verl-xpu: fix ONEAPI_DEVICE_SELECTOR at startup\\n'\
+'import os as _os\\n'\
+'_sel = _os.environ.get(\"ONEAPI_DEVICE_SELECTOR\", \"\")\\n'\
+'if not _sel or _sel.endswith(\":\"):\\n'\
+'    try:\\n'\
+'        import torch; _n = torch.xpu.device_count()\\n'\
+'    except Exception:\\n'\
+'        _n = len(list(_os.path.exists(f\"/dev/dri/renderD{128+i}\") for i in range(16) if _os.path.exists(f\"/dev/dri/renderD{128+i}\")))\\n'\
+'        _n = max(_n, 1)\\n'\
+'    _os.environ[\"ONEAPI_DEVICE_SELECTOR\"] = \"level_zero:\" + \",\".join(str(i) for i in range(_n))\\n'\
+); \
+existing = p.read_text() if p.exists() else ''; \
+p.write_text(existing + ('\\n' if existing and not existing.endswith('\\n') else '') + snippet)\
+"
+
+CMD ["bash", "-c", "source /root/.bashrc && exec bash"]

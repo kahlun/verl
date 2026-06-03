@@ -186,7 +186,9 @@ class TrainingWorker(Worker, DistProfilerExtension):
         loss = torch.sum(torch.tensor(output.pop("loss"), device=self.device_name))
         dp_group = self.engine.get_data_parallel_group()
         if dp_group is not None:
-            torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+            from verl.utils.distributed import all_reduce_avg
+
+            all_reduce_avg(loss, group=dp_group)
         loss = loss.item()
 
         # For grad_norm, we do not perform all reduce because it is already been done when clipping grad
@@ -471,17 +473,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         else:
             tool_config = None
 
-        # Router replay is supported on the megatron engine and on the veomni
-        # engine. Both expose `router_replay` on their per-strategy engine
-        # config (the field lives on the shared `EngineConfig` base).
-        actor_strategy = self.config.actor.strategy
-        if actor_strategy == "megatron":
-            rr_mode = self.config.actor.megatron.router_replay.mode
-        elif actor_strategy == "veomni":
-            rr_mode = self.config.actor.veomni.router_replay.mode
-        else:
-            rr_mode = "disabled"
-        self.enable_routing_replay = rr_mode != "disabled"
+        self.enable_routing_replay = (
+            self.config.actor.strategy == "megatron" and self.config.actor.megatron.router_replay.mode != "disabled"
+        )
 
         DistProfilerExtension.__init__(
             self, DistProfiler(rank=self.rank, config=profiler_config, tool_config=tool_config)
@@ -696,7 +690,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         # 0. send_weights only for async training with disaggregated trainer and rollout
         if effective_mode != "naive":
             per_tensor_param, _ = self.actor.engine.get_per_tensor_param()
-            await self.checkpoint_engine.send_weights(per_tensor_param, global_steps=global_steps)
+            await self.checkpoint_engine.send_weights(per_tensor_param)
             return
 
         set_expandable_segments(False)
