@@ -1,0 +1,216 @@
+Intel GPU Docker Build Guide
+=============================
+
+Last updated: 06/03/2026.
+
+Author: `Kah Lun Teoh <https://github.com/kahlun>`_
+
+Overview
+--------
+
+This page describes how to build and run the Intel XPU Docker image for verl.
+The image bundles all required Intel software stack components in exact
+versions known to work together on Battlemage (Arc Pro B60) and
+Ponte Vecchio (Data Center GPU Max) hardware.
+
+Software Stack
+--------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Component
+     - Version
+     - Purpose
+   * - Base image
+     - ``intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04``
+     - oneAPI 2025.3, MKL, DPC++
+   * - Intel compute-runtime
+     - 26.09.37435.1
+     - Level Zero / OpenCL GPU driver (user-space)
+   * - Intel IGC (GPU compiler)
+     - 2.30.1
+     - SPIRV → ISA JIT compilation
+   * - Level Zero loader
+     - 1.28.0
+     - ``libze_loader`` — driver dispatch
+   * - oneAPI oneCCL
+     - 2021.15
+     - XCCL collective backend for distributed training
+   * - PyTorch (XPU wheel)
+     - 2.11.0+xpu
+     - ``torch.xpu`` device support
+   * - vLLM
+     - 0.17.1+xpu
+     - Rollout engine with XPU platform support
+   * - triton-xpu
+     - 3.7.0
+     - JIT kernel compilation for XPU
+   * - Python
+     - 3.12
+     - —
+
+.. note::
+
+   The compute-runtime and IGC versions are pinned tightly because the default
+   versions shipped in the ``intel/deep-learning-essentials`` base image are too
+   old for Battlemage (BMG / Arc Pro B60). Specifically:
+
+   - compute-runtime ≥ 26.09 is required for Battlemage P2P IPC and XCCL stability.
+   - IGC 2.30.1 matches that compute-runtime release.
+   - oneCCL 2021.15 adds Battlemage support that is absent in the 2025.2 bundle
+     included in the base image.
+
+   These are **not optional**; using older versions causes training crashes or
+   silent incorrect results.
+
+docker/xpu/Dockerfile.xpu
+--------------------------
+
+The full Dockerfile is at
+`docker/xpu/Dockerfile.xpu <https://github.com/verl-project/verl/blob/main/docker/xpu/Dockerfile.xpu>`_.
+
+Build the Image
+---------------
+
+.. code-block:: bash
+
+    # From the verl repo root:
+    docker build -t verl-xpu:latest -f docker/xpu/Dockerfile.xpu .
+
+Behind a corporate proxy:
+
+.. code-block:: bash
+
+    docker build \
+      --build-arg http_proxy=$http_proxy \
+      --build-arg https_proxy=$https_proxy \
+      -t verl-xpu:latest \
+      -f docker/xpu/Dockerfile.xpu .
+
+Build time: approximately 20–30 minutes (downloads compute-runtime debs,
+builds vLLM from source).
+
+Run the Container
+-----------------
+
+.. code-block:: bash
+
+    RENDER_GID=$(getent group render | cut -d: -f3)
+
+    docker run -it --rm \
+      --device /dev/dri \
+      --group-add ${RENDER_GID} \
+      --shm-size 16g \
+      -v $HOME/data:/root/data \
+      -v $HOME/.cache:/root/.cache \
+      -w /workspace \
+      verl-xpu:latest \
+      /bin/bash
+
+Mount additional paths as needed (e.g. ``-v $HOME/models:/root/models``).
+
+Host Hardware Check (Before Docker)
+-------------------------------------
+
+Confirm the GPU is visible to the host before launching the container:
+
+.. code-block:: bash
+
+    # List Intel GPU render nodes
+    ls /dev/dri/renderD*
+
+    # Show GPU name and driver info (requires intel-gpu-tools)
+    # apt install intel-gpu-tools
+    lspci | grep -i "VGA\|Display\|3D" | grep -i intel
+
+    # Check render group GID (must exist before docker run)
+    getent group render
+
+Expected (2× Arc Pro B60):
+
+.. code-block:: text
+
+    /dev/dri/renderD128  /dev/dri/renderD129
+    ...Intel Corporation Battlemage [Arc Pro B60]...
+    render:x:993:
+
+Quick Sanity Check (Inside Container)
+--------------------------------------
+
+After entering the container:
+
+.. code-block:: bash
+
+    python3 - <<'PY'
+    import torch
+    print("torch:", torch.__version__)
+    print("xpu_available:", torch.xpu.is_available())
+    print("device_count:", torch.xpu.device_count())
+    for i in range(torch.xpu.device_count()):
+        print(f"  device_{i}:", torch.xpu.get_device_name(i))
+    PY
+
+    # oneCCL for multi-GPU collective communication
+    python3 -c "import oneccl_bindings_for_pytorch; print('oneCCL OK')"
+
+    # vLLM XPU platform
+    python3 -c "from vllm.platforms import current_platform; print('vLLM platform:', current_platform.device_type)"
+
+Expected output (2× Arc Pro B60):
+
+.. code-block:: text
+
+    torch: 2.11.0+xpu
+    xpu_available: True
+    device_count: 2
+      device_0: Intel(R) Arc(TM) Pro B60 Graphics
+      device_1: Intel(R) Arc(TM) Pro B60 Graphics
+    oneCCL OK
+    vLLM platform: xpu
+
+Environment Variables
+---------------------
+
+The following environment variables are relevant for XPU training. The test
+scripts in ``tests/special_xpu/`` set these automatically.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Variable
+     - Value
+     - Purpose
+   * - ``ZE_AFFINITY_MASK``
+     - e.g. ``0,1``
+     - Restrict Level Zero device visibility (analogous to ``CUDA_VISIBLE_DEVICES``)
+   * - ``ONEAPI_DEVICE_SELECTOR``
+     - **Must NOT be set**
+     - If set to ``level_zero:*``, blocks oneDNN from finding its OpenCL device
+       and crashes SDPA. Three places unset it: (1) the launch scripts run
+       ``unset ONEAPI_DEVICE_SELECTOR``; (2) ``constants_ppo.py`` removes it
+       from the Ray worker runtime env; (3) ``vllm_async_server.py`` pops it
+       before vLLM's ``EngineCore`` subprocess spawns.
+   * - ``RAY_memory_monitor_refresh_ms``
+     - ``0``
+     - Disables Ray OOM monitor. Level Zero maps device memory into CPU VA space
+       (~2.2 TB ``VmPeak`` per process), which makes Ray think the system is OOM
+       even when actual RAM usage is normal.
+   * - ``RAY_NUM_PRESTART_PYTHON_WORKERS``
+     - ``0``
+     - Reduces idle Ray worker processes, lowering Level Zero context and
+       page-table pressure.
+   * - ``CCL_ATL_SHM``
+     - ``1``
+     - Enable oneCCL shared-memory transport for intra-node collectives
+   * - ``CCL_TOPO_ALGO``
+     - ``0``
+     - Disable oneCCL topology-aware algorithm (required on BMG)
+   * - ``NCCL_NVLS_ENABLE``
+     - ``0``
+     - Disable NVLS (not applicable on XPU; prevents spurious warnings)
+
+Next Steps
+----------
+
+See :doc:`xpu_quick_start` for training examples (GRPO, PPO, SFT).

@@ -158,6 +158,8 @@ verl is fast with:
    amd_tutorial/amd_build_dockerfile_page.rst
    amd_tutorial/amd_vllm_page.rst
    amd_tutorial/amd_quick_start.rst
+   xpu_tutorial/xpu_build_dockerfile_page.rst
+   xpu_tutorial/xpu_quick_start.rst
    ascend_tutorial/README.md
    ascend_tutorial/get_start/dockerfile_build_guidance.rst
    ascend_tutorial/get_start/install_guidance.rst

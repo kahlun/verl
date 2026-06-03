@@ -37,14 +37,15 @@ docker run -it --rm \
 ### Run e2e tests inside the container
 
 ```bash
-# SFT smoke test (4 GPU)
-NUM_GPUS=4 bash tests/special_xpu/run_sft_xpu.sh
+# GRPO e2e with vLLM rollout — validated on Arc Pro B60
+NUM_GPUS=1 bash tests/special_xpu/run_grpo_xpu.sh   # 1-GPU: ~51 s/step, 148 tok/s
+NUM_GPUS=2 bash tests/special_xpu/run_grpo_xpu.sh   # 2-GPU: ~93 s/step (same batch)
 
-# GRPO e2e with vLLM rollout (2 GPU)
-NUM_GPUS=2 bash tests/special_xpu/run_grpo_xpu.sh
+# PPO e2e with critic model (scripts default to 4 GPU; pass NUM_GPUS=2 for 2-GPU workstation)
+NUM_GPUS=2 bash tests/special_xpu/run_ppo_xpu.sh
 
-# PPO e2e with critic model (4 GPU)
-NUM_GPUS=4 bash tests/special_xpu/run_ppo_xpu.sh
+# SFT (scripts default to 4 GPU; pass NUM_GPUS=2 for 2-GPU workstation)
+NUM_GPUS=2 bash tests/special_xpu/run_sft_xpu.sh
 ```
 
 ## Dependencies
@@ -54,7 +55,7 @@ NUM_GPUS=4 bash tests/special_xpu/run_ppo_xpu.sh
 | PyTorch | 2.11.0+xpu | `https://download.pytorch.org/whl/xpu` |
 | oneccl-bind-pt | (matches torch) | `https://download.pytorch.org/whl/xpu` |
 | triton-xpu | 3.7.0 | `https://download.pytorch.org/whl/xpu` |
-| vLLM | >= 0.17 | Built from source with `VLLM_TARGET_DEVICE=xpu` |
+| vLLM | 0.17.1+xpu | Built from source with `VLLM_TARGET_DEVICE=xpu` |
 | vllm-xpu-kernels | 0.1.5 | GitHub release (pulled by vLLM XPU build) |
 | transformers | latest | PyPI |
 
