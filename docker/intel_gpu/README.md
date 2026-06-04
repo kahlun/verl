@@ -2,9 +2,7 @@
 
 ## Supported Hardware
 
-- Intel Data Center GPU Max Series (Ponte Vecchio)
 - Intel Arc Pro B-Series (Battlemage)
-- Intel Arc A-Series (Alchemist)
 
 ## Quick Start
 

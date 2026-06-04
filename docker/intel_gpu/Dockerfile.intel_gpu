@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# verl on Intel GPU (Data Center GPU Max / Arc Pro / Arc)
+# verl on Intel GPU 
 #
 # Design goals:
 # - Match vLLM's Intel GPU container workflow (DLE base + uv + oneCCL setup).

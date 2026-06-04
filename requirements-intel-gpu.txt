@@ -1,4 +1,4 @@
-# Requirements for Intel XPU (Data Center GPU Max / Arc Pro / Arc)
+# Requirements for Intel XPU
 #
 # PyTorch with XPU support is installed by docker/intel_gpu/Dockerfile.intel_gpu, NOT here.
 # Version must match vLLM XPU requirements (currently torch==2.11.0+xpu).
