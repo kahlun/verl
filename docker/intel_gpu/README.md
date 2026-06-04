@@ -83,8 +83,8 @@ Runtime sanity checks validated on this image:
 
 ## Backend Policy
 
-- Default rollout backend on XPU is vLLM.
-- sglang is not the default XPU path in this image.
+- Default rollout backend on Intel GPU is vLLM.
+- sglang is not the default path for Intel GPU in this image.
 - Separate image/profile will be released when SGLang is validated on Intel GPU.
 
 ## Known Workarounds (pre-DLE 2026.0 driver)

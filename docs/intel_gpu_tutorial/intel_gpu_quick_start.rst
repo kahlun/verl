@@ -200,7 +200,7 @@ The SFT script defaults to 4 GPUs. Pass ``NUM_GPUS=2`` for a 2× GPU workstation
 Manual Training Launch
 -----------------------
 
-The shell scripts are thin wrappers. You can launch directly:
+To launch training directly, use the following instructions.
 
 .. code-block:: bash
 
