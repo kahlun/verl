@@ -21,7 +21,7 @@ each see raw Level-Zero driver free-memory.
     https://github.com/vllm-project/vllm/pull/37149   (XpuMemAllocator /
     transparent sleep mode — draft, requires torch-xpu 2.11)
 
-Remove the patches in apply() once PR #37149 merges and torch-xpu ≥ 2.11 is
+Patches in apply() will be removed once PR #37149 merges and torch-xpu ≥ 2.11 is
 the minimum supported version.
 
 Usage:
@@ -37,13 +37,13 @@ _APPLIED = False
 
 
 def _patch_request_memory() -> bool:
-    """Wrap vllm.v1.worker.utils.request_memory to skip the OOM check on XPU.
+    """Wrap vllm.v1.worker.utils.request_memory to skip the OOM check on Intel GPU.
 
     vLLM checks ``free_memory >= requested_memory`` at startup.  When FSDP is
     already resident on the GPU this raises ValueError even though FSDP will
     CPU-offload before inference begins.
 
-    The check is skipped entirely on XPU because Level-Zero context overhead
+    The check is skipped entirely on Intel GPU because Level-Zero context overhead
     from Ray pre-started workers inflates ``used`` memory by ~20 GB, making
     the free-memory figure unreliable.
 
@@ -66,7 +66,7 @@ def _patch_request_memory() -> bool:
 
         def _patched_request_memory(init_snapshot, requested_memory):
             if hasattr(torch, "xpu") and torch.xpu.is_available():
-                # XPU: Level-Zero context overhead inflates "used" memory.
+                # Intel GPU: Level-Zero context overhead inflates "used" memory.
                 # FSDP will CPU-offload before inference so the ValueError is
                 # spurious.  See verl/utils/vllm/xpu_patches.py for details.
                 return
@@ -83,21 +83,19 @@ def _patch_request_memory() -> bool:
 
 
 def _patch_profiling_assert() -> bool:
-    """Wrap the vLLM GPUWorker profiling method to tolerate the XPU assert.
+    """Wrap the vLLM GPUWorker profiling method to tolerate Intel GPU assert.
 
     vLLM asserts that free GPU memory did not grow during the profiling run.
     When FSDP offloads parameters to CPU during vLLM init, free memory
     *increases*, tripping the assert even though this is expected behaviour.
 
     Instead of string-patching the source, we wrap the method and convert the
-    AssertionError to a warning on XPU only.
+    AssertionError to a warning on Intel GPU only.
 
     Affected code (vllm/v1/worker/gpu_worker.py):
         assert self.init_snapshot.free_memory >= free_gpu_memory, (...)
 
     Upstream reference: https://github.com/vllm-project/vllm/pull/36720
-      (same assert hit ROCm; xinyu-intel noted "Similar on XPU" but no XPU
-      fix was submitted upstream)
     """
     try:
         import torch

@@ -44,14 +44,14 @@ def is_torch_npu_available(check_device=True) -> bool:
 
 
 def is_torch_xpu_available(check_device=True) -> bool:
-    """Check if Intel XPU is available for PyTorch operations.
+    """Check if Intel GPU is available for PyTorch operations.
 
     Args:
         check_device: If True, check actual device availability.
             If False, only check for torch.xpu namespace.
 
     Returns:
-        bool: True if XPU is available, False otherwise.
+        bool: True if Intel GPU is available, False otherwise.
     """
     try:
         if not hasattr(torch, "xpu"):
