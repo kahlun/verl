@@ -30,7 +30,7 @@ configure_xpu_runtime() {
         set +a
     fi
 
-    # Temporary oneCCL workarounds for multi-GPU XPU.
+    # Temporary oneCCL workarounds for multi-GPU XPU, to be removed after PyTorch 2.13 release
     export CCL_ATL_SHM="${CCL_ATL_SHM:-1}"
     export CCL_BUFFER_CACHE="${CCL_BUFFER_CACHE:-0}"
     export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK="${CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK:-0}"
