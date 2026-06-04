@@ -13,7 +13,7 @@
 #   CCL_ATL_SHM=1 CCL_BUFFER_CACHE=0  (Level Zero IPC bug on PCIe cards)
 #
 # Usage:
-#   NUM_GPUS=2 bash tests/special_xpu/run_grpo_xpu.sh
+#   NUM_GPUS=2 bash tests/special_intel_gpu/run_grpo_intel_gpu.sh
 
 set -x
 
@@ -22,12 +22,12 @@ MODEL_ID=${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/xpu_env.sh" ]]; then
+if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
     # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/xpu_env.sh"
+    source "${SCRIPT_DIR}/intel_gpu_env.sh"
     configure_xpu_runtime vllm
 else
-    echo "WARN: ${SCRIPT_DIR}/xpu_env.sh not found; using built-in fallback env." >&2
+    echo "WARN: ${SCRIPT_DIR}/intel_gpu_env.sh not found; using built-in fallback env." >&2
     export CCL_ATL_SHM="${CCL_ATL_SHM:-1}"
     export CCL_BUFFER_CACHE="${CCL_BUFFER_CACHE:-0}"
     export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK="${CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK:-0}"

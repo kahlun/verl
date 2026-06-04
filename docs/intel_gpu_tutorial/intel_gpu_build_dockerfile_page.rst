@@ -1,14 +1,14 @@
 Intel GPU Docker Build Guide
 =============================
 
-Last updated: 06/03/2026.
+Last updated: 06/04/2026.
 
 Author: `Kah Lun Teoh <https://github.com/kahlun>`_
 
 Overview
 --------
 
-This page describes how to build and run the Intel XPU Docker image for verl.
+This page describes how to build and run the Intel GPU Docker image for verl.
 The image bundles all required Intel software stack components in exact
 versions known to work together on Battlemage (Arc Pro B60) and
 Ponte Vecchio (Data Center GPU Max) hardware.
@@ -64,11 +64,11 @@ Software Stack
    These are **not optional**; using older versions causes training crashes or
    silent incorrect results.
 
-docker/xpu/Dockerfile.xpu
---------------------------
+docker/intel_gpu/Dockerfile.intel_gpu
+-------------------------------------
 
 The full Dockerfile is at
-`docker/xpu/Dockerfile.xpu <https://github.com/verl-project/verl/blob/main/docker/xpu/Dockerfile.xpu>`_.
+`docker/intel_gpu/Dockerfile.intel_gpu <https://github.com/verl-project/verl/blob/main/docker/intel_gpu/Dockerfile.intel_gpu>`_.
 
 Build the Image
 ---------------
@@ -76,7 +76,7 @@ Build the Image
 .. code-block:: bash
 
     # From the verl repo root:
-    docker build -t verl-xpu:latest -f docker/xpu/Dockerfile.xpu .
+    docker build -t verl-xpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
 
 Behind a corporate proxy:
 
@@ -86,7 +86,7 @@ Behind a corporate proxy:
       --build-arg http_proxy=$http_proxy \
       --build-arg https_proxy=$https_proxy \
       -t verl-xpu:latest \
-      -f docker/xpu/Dockerfile.xpu .
+      -f docker/intel_gpu/Dockerfile.intel_gpu .
 
 Build time: approximately 20–30 minutes (downloads compute-runtime debs,
 builds vLLM from source).
@@ -151,8 +151,13 @@ After entering the container:
         print(f"  device_{i}:", torch.xpu.get_device_name(i))
     PY
 
-    # oneCCL for multi-GPU collective communication
-    python3 -c "import oneccl_bindings_for_pytorch; print('oneCCL OK')"
+    # oneCCL runtime env and shared library
+    python3 - <<'PY'
+    import ctypes.util
+    import os
+    print("CCL_ROOT:", os.environ.get("CCL_ROOT"))
+    print("libccl:", ctypes.util.find_library("ccl"))
+    PY
 
     # vLLM XPU platform
     python3 -c "from vllm.platforms import current_platform; print('vLLM platform:', current_platform.device_type)"
@@ -166,14 +171,21 @@ Expected output (2× Arc Pro B60):
     device_count: 2
       device_0: Intel(R) Arc(TM) Pro B60 Graphics
       device_1: Intel(R) Arc(TM) Pro B60 Graphics
-    oneCCL OK
+    CCL_ROOT: /opt/intel/oneapi/ccl/2021.15
+    libccl: libccl.so.1
     vLLM platform: xpu
+
+  .. note::
+
+     The current Docker image does not expose a separate
+     ``oneccl_bindings_for_pytorch`` Python module. Use the runtime probe above
+     to validate oneCCL setup; real training runs also emit oneCCL startup logs.
 
 Environment Variables
 ---------------------
 
 The following environment variables are relevant for XPU training. The test
-scripts in ``tests/special_xpu/`` set these automatically.
+scripts in ``tests/special_intel_gpu/`` set these automatically.
 
 .. list-table::
    :header-rows: 1
@@ -213,4 +225,4 @@ scripts in ``tests/special_xpu/`` set these automatically.
 Next Steps
 ----------
 
-See :doc:`xpu_quick_start` for training examples (GRPO, PPO, SFT).
+See :doc:`intel_gpu_quick_start` for training examples (GRPO, PPO, SFT).

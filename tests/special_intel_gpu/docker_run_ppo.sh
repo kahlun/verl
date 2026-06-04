@@ -21,4 +21,4 @@ docker run --rm -it \
     -e NUM_GPUS="${NUM_GPUS}" \
     -e MODEL_PATH="${MODEL_PATH}" \
     "${IMAGE_TAG}" \
-    bash tests/special_xpu/run_ppo_xpu.sh
+    bash tests/special_intel_gpu/run_ppo_intel_gpu.sh

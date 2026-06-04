@@ -13,23 +13,22 @@ NUM_GPUS=${NUM_GPUS:-4}
 MODEL_ID=${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 
-# oneCCL workarounds for multi-GPU (pre-DLE 2026.0 driver)
-export CCL_ATL_SHM=${CCL_ATL_SHM:-1}
-export CCL_BUFFER_CACHE=${CCL_BUFFER_CACHE:-0}
-# Disable topology recognition — assume XeLink across devices
-export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0
-# Disable topo algo — ZE_AFFINITY_MASK renumbers all worker devices to 0,
-# causing oneCCL to think all ranks are on the same device (oversubscription).
-export CCL_TOPO_ALGO=0
-
-# XPU device selection: use ZE_AFFINITY_MASK (Level Zero) for device restriction.
-# vLLM 0.17+ XPU platform uses ZE_AFFINITY_MASK as device_control_env_var; setting
-# ONEAPI_DEVICE_SELECTOR=level_zero:N,M breaks the FLA/triton SYCL JIT init path.
-_DEVICES=$(seq 0 $((NUM_GPUS-1)) | paste -sd',')
-export ZE_AFFINITY_MASK="${_DEVICES}"
-
-# XPU fix: Ray pre-starts ~100 idle workers, each opens an L0 context on the GPU.
-export RAY_NUM_PRESTART_PYTHON_WORKERS=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/xpu_env.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/xpu_env.sh"
+    configure_xpu_runtime vllm
+else
+    echo "WARN: ${SCRIPT_DIR}/xpu_env.sh not found; using built-in fallback env." >&2
+    export CCL_ATL_SHM="${CCL_ATL_SHM:-1}"
+    export CCL_BUFFER_CACHE="${CCL_BUFFER_CACHE:-0}"
+    export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK="${CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK:-0}"
+    export CCL_TOPO_ALGO="${CCL_TOPO_ALGO:-0}"
+    export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-$(seq 0 $((NUM_GPUS - 1)) | paste -sd',')}"
+    unset ONEAPI_DEVICE_SELECTOR
+    export RAY_NUM_PRESTART_PYTHON_WORKERS="${RAY_NUM_PRESTART_PYTHON_WORKERS:-0}"
+    export RAY_memory_monitor_refresh_ms="${RAY_memory_monitor_refresh_ms:-0}"
+fi
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=gae \

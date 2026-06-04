@@ -1,14 +1,14 @@
 Getting Started with Intel GPU
 ==============================
 
-Last updated: 06/03/2026.
+Last updated: 06/04/2026.
 
 Author: `Kah Lun Teoh <https://github.com/kahlun>`_
 
 Overview
 --------
 
-This document is a quick-start tutorial for running verl on Intel XPU
+This document is a quick-start tutorial for running verl on Intel GPU
 (Arc / Arc Pro / Data Center GPU Max series).
 
 It covers environment verification and training examples using FSDP + vLLM
@@ -28,12 +28,12 @@ Current software and hardware scope:
 
 For the Docker image software stack (PyTorch 2.11.0+xpu, vLLM 0.17.1,
 compute-runtime 26.09), build instructions, and environment variables
-reference, see :doc:`xpu_build_dockerfile_page`.
+reference, see :doc:`intel_gpu_build_dockerfile_page`.
 
 Environment Check (Inside Container)
 --------------------------------------
 
-After launching the container (see :doc:`xpu_build_dockerfile_page`):
+After launching the container (see :doc:`intel_gpu_build_dockerfile_page`):
 
 .. code-block:: bash
 
@@ -47,8 +47,14 @@ After launching the container (see :doc:`xpu_build_dockerfile_page`):
         print(f"  device_{i}:", torch.xpu.get_device_name(i))
     PY
 
-    # Confirm oneCCL is sourced (required for multi-GPU XCCL collective)
-    python3 -c "import oneccl_bindings_for_pytorch; print('oneCCL OK')"
+    # Confirm oneCCL runtime env and shared library are available.
+    # The Docker image does not currently ship a separate Python binding module.
+    python3 - <<'PY'
+    import ctypes.util
+    import os
+    print("CCL_ROOT:", os.environ.get("CCL_ROOT"))
+    print("libccl:", ctypes.util.find_library("ccl"))
+    PY
 
 Expected output (2× Arc Pro B60):
 
@@ -59,7 +65,14 @@ Expected output (2× Arc Pro B60):
     device_count: 2
       device_0: Intel(R) Arc(TM) Pro B60 Graphics
       device_1: Intel(R) Arc(TM) Pro B60 Graphics
-    oneCCL OK
+    CCL_ROOT: /opt/intel/oneapi/ccl/2021.15
+    libccl: libccl.so.1
+
+  .. note::
+
+     On the current image, oneCCL is validated through its runtime environment
+     and shared library availability rather than a Python import. During GRPO/PPO
+     launches you should also see oneCCL startup messages in the worker logs.
 
 Feature Support Matrix
 -----------------------
@@ -75,7 +88,7 @@ Feature Support Matrix
      - FSDP/FSDP2 actor + vLLM rollout on same GPU(s)
    * - Inference engine
      - vLLM validated
-     - SGLang: weight sync (``update_weights``) not yet supported on XPU
+     - SGLang: weight sync (``update_weights``) not yet supported on Intel GPU
    * - Trainer backend
      - FSDP, FSDP2
      - Megatron not yet validated
@@ -96,7 +109,7 @@ Known Limitations
 -----------------
 
 **Level Zero VA pressure (2-GPU+).**
-Level Zero maps XPU device memory into each process's CPU virtual address
+Level Zero maps Intel GPU device memory into each process's CPU virtual address
 space (~2.2 TB ``VmPeak`` per process). With many colocated Ray workers, this
 exhausts kernel page table resources. The test scripts mitigate this with:
 
@@ -132,7 +145,7 @@ Prepare data (run once)
 
 .. code-block:: bash
 
-    NUM_GPUS=1 bash tests/special_xpu/run_grpo_xpu.sh
+    NUM_GPUS=1 bash tests/special_intel_gpu/run_grpo_intel_gpu.sh
 
 Expected output (Qwen2.5-0.5B-Instruct, GSM8K, batch 16, 1 step):
 
@@ -140,6 +153,9 @@ Expected output (Qwen2.5-0.5B-Instruct, GSM8K, batch 16, 1 step):
 
     timing_s/step: ~51  timing_per_token_ms/gen: ~0.35
     perf/throughput: ~148 tok/s
+
+  Verified on this image: the command launches successfully through dataset load,
+  FSDP initialization, and vLLM server startup on a 1-GPU run.
 
 2) GRPO — 2 GPUs
 ~~~~~~~~~~~~~~~~~
@@ -152,7 +168,7 @@ Expected output (Qwen2.5-0.5B-Instruct, GSM8K, batch 16, 1 step):
 
 .. code-block:: bash
 
-    NUM_GPUS=2 bash tests/special_xpu/run_grpo_xpu.sh
+    NUM_GPUS=2 bash tests/special_intel_gpu/run_grpo_intel_gpu.sh
 
 Expected output (same batch size as 1-GPU baseline):
 
@@ -168,7 +184,7 @@ Pass ``NUM_GPUS=2`` to run on a 2× GPU workstation with CPU offload enabled:
 
 .. code-block:: bash
 
-    NUM_GPUS=2 bash tests/special_xpu/run_ppo_xpu.sh
+    NUM_GPUS=2 bash tests/special_intel_gpu/run_ppo_intel_gpu.sh
 
 4) SFT
 ~~~~~~
@@ -177,7 +193,7 @@ The SFT script defaults to 4 GPUs. Pass ``NUM_GPUS=2`` for a 2× GPU workstation
 
 .. code-block:: bash
 
-    NUM_GPUS=2 bash tests/special_xpu/run_sft_xpu.sh
+    NUM_GPUS=2 bash tests/special_intel_gpu/run_sft_intel_gpu.sh
 
 Manual Training Launch
 -----------------------
