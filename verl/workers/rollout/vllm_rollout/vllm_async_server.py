@@ -412,6 +412,7 @@ class vLLMHttpServer:
         # Apply XPU-specific vLLM patches in the actual training process.
         # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)
         # so the monkey-patches are active when vLLM initialises its workers.
+        # to be removed after https://github.com/vllm-project/vllm/pull/37149 is merged on vLLM
         if is_xpu_available:
             from verl.utils.vllm import xpu_patches as _xpu_patches
 
