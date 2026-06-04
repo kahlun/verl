@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SFT smoke test on Intel XPU — validates FSDP multi-GPU training without vLLM.
+# SFT smoke test on Intel GPU — validates FSDP multi-GPU training without vLLM.
 #
 # Usage:
 #   NUM_GPUS=4 bash tests/special_intel_gpu/run_sft_intel_gpu.sh
@@ -38,8 +38,8 @@ $PYTHON3 -m torch.distributed.run --nproc-per-node=${NUM_GPUS} --standalone \
     model.use_remove_padding=False \
     +model.override_config.attn_implementation=sdpa \
     trainer.default_local_dir=./checkpoints/xpu_sft_test \
-    trainer.project_name='verl_xpu_sft_e2e' \
-    trainer.experiment_name='qwen2_5_05b_xpu_sft' \
+    trainer.project_name='verl_intel_gpu_sft_e2e' \
+    trainer.experiment_name='qwen2_5_05b_intel_gpu_sft' \
     trainer.logger=console \
     trainer.total_epochs=1 \
     trainer.total_training_steps=5 \

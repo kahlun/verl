@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E PPO (GAE) test on Intel XPU — mirrors tests/special_npu/run_qwen3_06b_ppo.sh
+# E2E PPO (GAE) test on Intel GPU — mirrors tests/special_npu/run_qwen3_06b_ppo.sh
 #
 # Validates PPO training with critic model on XPU:
 #   FSDP training (actor + critic + ref) → vLLM rollout → GAE reward → train
@@ -68,8 +68,8 @@ python3 -m verl.trainer.main_ppo \
     critic.fsdp.optimizer_offload=True \
     trainer.critic_warmup=0 \
     trainer.logger='["console"]' \
-    trainer.project_name='verl_xpu_ppo_e2e' \
-    trainer.experiment_name='qwen2_5_05b_xpu_ppo' \
+    trainer.project_name='verl_intel_gpu_ppo_e2e' \
+    trainer.experiment_name='qwen2_5_05b_intel_gpu_ppo' \
     trainer.n_gpus_per_node=${NUM_GPUS} \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \

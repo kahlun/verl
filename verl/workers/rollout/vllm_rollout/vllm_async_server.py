@@ -125,9 +125,9 @@ class vLLMHttpServer:
         self.model_config = self._init_model_config(model_config)
         self._validate_configs()
 
-        # Forcing vLLM sleep mode to 1. XPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
+        # Forcing vLLM sleep mode to 1. Intel GPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
         if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
-            logger.warning("[XPU] Forcing enable_sleep_mode=False — MemPool will be supported on XPU by PyTorch 2.13..")
+            logger.warning("[Intel GPU] Forcing enable_sleep_mode=False — MemPool will be supported on Intel GPU by PyTorch 2.13..")
             object.__setattr__(self.config, "enable_sleep_mode", False)
 
         self.rollout_mode = rollout_mode
@@ -388,7 +388,7 @@ class vLLMHttpServer:
             await self.run_headless(server_args)
 
     async def run_server(self, args: argparse.Namespace):
-        # XPU: vLLM v1 EngineCore spawns a subprocess via multiprocessing.spawn.
+        # Intel GPU: vLLM v1 EngineCore spawns a subprocess via multiprocessing.spawn.
         # That subprocess inherits ONEAPI_DEVICE_SELECTOR which triggers a fatal
         # SYCL exception in the FLA/triton backend at module-import time
         # (triton.runtime.driver.active.get_current_target() crashes whenever
@@ -399,24 +399,24 @@ class vLLMHttpServer:
 
         engine_args = AsyncEngineArgs.from_cli_args(args)
 
-        # XPU: vLLM detects Ray and selects the "ray" executor backend, which
+        # Intel GPU: vLLM detects Ray and selects the "ray" executor backend, which
         # spawns additional Worker processes each with their own L0 context.
-        # On memory-constrained XPU devices (Arc Pro B60 ≈ 22 GB), the combined
+        # On memory-constrained Intel GPU devices (Arc Pro B60 ≈ 22 GB), the combined
         # L0 context overhead of FSDP workers + EngineCore + Worker processes
-        # exhausts device memory.  With TP=1 (the common XPU case), force the
+        # exhausts device memory.  With TP=1 (the common Intel GPU case), force the
         # "uni" executor so the model runs inside the EngineCore process directly,
         # avoiding an extra Worker process and its L0 context cost.
         if is_xpu_available and engine_args.tensor_parallel_size <= 1:
             engine_args.distributed_executor_backend = "uni"
 
-        # Apply XPU-specific vLLM patches in the actual training process.
+        # Apply Intel GPU-specific vLLM patches in the actual training process.
         # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)
         # so the monkey-patches are active when vLLM initialises its workers.
         # to be removed after https://github.com/vllm-project/vllm/pull/37149 is merged on vLLM
         if is_xpu_available:
-            from verl.utils.vllm import xpu_patches as _xpu_patches
+            from verl.utils.vllm import intel_gpu_patches as _intel_gpu_patches
 
-            _xpu_patches.apply()
+            _intel_gpu_patches.apply()
 
         usage_context = UsageContext.OPENAI_API_SERVER
         try:

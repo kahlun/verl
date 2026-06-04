@@ -74,8 +74,8 @@ python3 -m verl.trainer.main_ppo \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
     trainer.logger=console \
-    trainer.project_name='verl_xpu_grpo_e2e' \
-    trainer.experiment_name='qwen2_5_05b_xpu_grpo' \
+    trainer.project_name='verl_intel_gpu_grpo_e2e' \
+    trainer.experiment_name='qwen2_5_05b_intel_gpu_grpo' \
     trainer.n_gpus_per_node=${NUM_GPUS} \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \

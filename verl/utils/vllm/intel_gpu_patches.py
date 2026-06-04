@@ -25,7 +25,7 @@ Patches in apply() will be removed once PR #37149 merges and torch-xpu ≥ 2.11 
 the minimum supported version.
 
 Usage:
-    python3 -c "from verl.utils.vllm import xpu_patches; xpu_patches.apply()"
+    python3 -c "from verl.utils.vllm import intel_gpu_patches; intel_gpu_patches.apply()"
 """
 
 import logging
@@ -68,7 +68,7 @@ def _patch_request_memory() -> bool:
             if hasattr(torch, "xpu") and torch.xpu.is_available():
                 # Intel GPU: Level-Zero context overhead inflates "used" memory.
                 # FSDP will CPU-offload before inference so the ValueError is
-                # spurious.  See verl/utils/vllm/xpu_patches.py for details.
+                # spurious.  See verl/utils/vllm/intel_gpu_patches.py for details.
                 return
             return _orig(init_snapshot, requested_memory)
 

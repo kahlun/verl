@@ -8,7 +8,7 @@
 # - Keep torch/vLLM alignment owned by vLLM requirements/xpu.txt.
 #
 # Build:
-#   docker build -t verl-xpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
+#   docker build -t verl-intel-gpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
 #
 # Behind a corporate proxy:
 #   docker build --build-arg http_proxy=... --build-arg https_proxy=... ...
@@ -19,15 +19,15 @@
 #     --device /dev/dri --group-add ${RENDER_GID} \
 #     --shm-size 16g \
 #     -v $HOME/data:/root/data \
-#     verl-xpu:latest
+#     verl-intel-gpu:latest
 #
 # Quick Intel GPU sanity check:
-#   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-xpu:latest \
+#   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-intel-gpu:latest \
 #     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
 
 FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04
 
-LABEL org.opencontainers.image.title="verl-xpu"
+LABEL org.opencontainers.image.title="verl-intel-gpu"
 LABEL org.opencontainers.image.description="verl development image for Intel GPU"
 LABEL org.opencontainers.image.vendor="verl"
 
@@ -139,9 +139,9 @@ RUN set -ex && \
     uv pip install --no-build-isolation .
 
 # --- Layer 2: verl Python dependencies ---
-COPY requirements-xpu.txt /tmp/requirements-xpu.txt
-RUN set -eux && uv pip install -r /tmp/requirements-xpu.txt
-
+COPY requirements-intel-gpu.txt /tmp/requirements-intel-gpu.txt
+RUN set -eux && uv pip install -r /tmp/requirements-intel-gpu.txt
+    
 # --- Layer 3: verl source ---
 COPY . /workspace/verl
 WORKDIR /workspace/verl
@@ -162,7 +162,7 @@ RUN python3 - <<'PY'
 import site
 from pathlib import Path
 
-snippet = '''# verl-xpu: fix ONEAPI_DEVICE_SELECTOR at startup
+snippet = '''# verl-intel-gpu: fix ONEAPI_DEVICE_SELECTOR at startup
 import os as _os
 
 _sel = _os.environ.get("ONEAPI_DEVICE_SELECTOR", "")
@@ -183,7 +183,7 @@ if not _sel or _sel.endswith(":"):
 lib_dir = Path(site.getsitepackages()[0]).parent
 sitecustomize = lib_dir / "sitecustomize.py"
 existing = sitecustomize.read_text() if sitecustomize.exists() else ""
-if "# verl-xpu: fix ONEAPI_DEVICE_SELECTOR at startup" not in existing:
+if "# verl-intel-gpu: fix ONEAPI_DEVICE_SELECTOR at startup" not in existing:
     if existing and not existing.endswith("\n"):
         existing += "\n"
     sitecustomize.write_text(existing + snippet)

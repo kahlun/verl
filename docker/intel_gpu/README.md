@@ -1,4 +1,4 @@
-# verl on Intel XPU
+# verl on Intel GPU
 
 ## Supported Hardware
 
@@ -10,13 +10,13 @@
 
 ```bash
 # Standard build
-docker build -t verl-xpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
+docker build -t verl-intel-gpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
 
 # Behind a corporate proxy
 docker build \
   --build-arg http_proxy=$http_proxy \
   --build-arg https_proxy=$https_proxy \
-  -t verl-xpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
+  -t verl-intel-gpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
 ```
 
 ### Run with GPU access
@@ -29,7 +29,7 @@ docker run -it --rm \
   --device /dev/dri --group-add ${RENDER_GID} \
   --shm-size 16g \
   -v $HOME/data:/root/data \
-  verl-xpu:latest
+  verl-intel-gpu:latest
 ```
 
 ### Runtime env override (recommended)
@@ -48,7 +48,7 @@ docker run -it --rm \
   --device /dev/dri --group-add ${RENDER_GID} \
   --shm-size 16g \
   -v $HOME/data:/root/data \
-  verl-xpu:latest
+  verl-intel-gpu:latest
 ```
 
 ### Run e2e tests inside the container
@@ -71,7 +71,7 @@ NUM_GPUS=4 bash tests/special_intel_gpu/run_ppo_intel_gpu.sh
 | PyTorch XPU | from vLLM xpu requirements | `https://download.pytorch.org/whl/xpu` |
 | oneCCL runtime | installed in image via oneAPI / oneCCL bundle | bundled in image |
 | vLLM | from Dockerfile `VLLM_VERSION` | built from source with `VLLM_TARGET_DEVICE=xpu` |
-| verl deps | from `requirements-xpu.txt` | PyPI and extra indexes |
+| verl deps | from `requirements-intel-gpu.txt` | PyPI and extra indexes |
 
 Runtime sanity checks validated on this image:
 

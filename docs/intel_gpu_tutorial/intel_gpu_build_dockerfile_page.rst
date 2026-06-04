@@ -69,7 +69,7 @@ Build the Image
 .. code-block:: bash
 
     # From the verl repo root:
-    docker build -t verl-xpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
+    docker build -t verl-intel-gpu:latest -f docker/intel_gpu/Dockerfile.intel_gpu .
 
 Behind a corporate proxy:
 
@@ -78,7 +78,7 @@ Behind a corporate proxy:
     docker build \
       --build-arg http_proxy=$http_proxy \
       --build-arg https_proxy=$https_proxy \
-      -t verl-xpu:latest \
+      -t verl-intel-gpu:latest \
       -f docker/intel_gpu/Dockerfile.intel_gpu .
 
 Build time: approximately 20–30 minutes (downloads compute-runtime debs,
@@ -98,7 +98,7 @@ Run the Container
       -v $HOME/data:/root/data \
       -v $HOME/.cache:/root/.cache \
       -w /workspace \
-      verl-xpu:latest \
+      verl-intel-gpu:latest \
       /bin/bash
 
 Mount additional paths as needed (e.g. ``-v $HOME/models:/root/models``).

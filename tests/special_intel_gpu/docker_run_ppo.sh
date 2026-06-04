@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-IMAGE_TAG=${IMAGE_TAG:-verl-xpu:latest}
+IMAGE_TAG=${IMAGE_TAG:-verl-intel-gpu:latest}
 NUM_GPUS=${NUM_GPUS:-2}
 HF_CACHE_DIR=${HF_CACHE_DIR:-$HOME/.cache/huggingface}
 DATA_DIR=${DATA_DIR:-$HOME/data}
