@@ -11,7 +11,7 @@ cachetools
 # vLLM >= 0.17 with XPU support must be built from source:
 #   VLLM_TARGET_DEVICE=xpu pip install --no-build-isolation -v .
 #
-# flash-attn CUDA package is NOT needed — XPU uses SDPA which dispatches
+# flash-attn CUDA package is NOT needed — XPU uses SDPA for now. XPU flash-attn enablement in progress.
 # to Intel's SYCL-TLA Flash kernel automatically (10-22x faster than eager).
 accelerate
 codetiming
