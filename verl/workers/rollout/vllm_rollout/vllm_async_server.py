@@ -36,7 +36,7 @@ from vllm.v1.engine.async_llm import AsyncLLM
 
 from verl.plugin.platform import get_platform
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available
+from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available, is_xpu_available
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
@@ -135,6 +135,13 @@ class vLLMHttpServer:
             os.environ["VERL_FULL_DETERMINISM"] = "1"
             os.environ["VERL_SEED"] = str(rollout_seed)
             os.environ["VLLM_BATCH_INVARIANT"] = "1"
+
+        # Forcing vLLM sleep mode to 1. Intel GPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
+        if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
+            logger.warning(
+                "[Intel GPU] Forcing enable_sleep_mode=False — MemPool will be supported on Intel GPU by PyTorch 2.13.."
+            )
+            object.__setattr__(self.config, "enable_sleep_mode", False)
 
         self.rollout_mode = rollout_mode
         self.workers = workers
@@ -410,9 +417,48 @@ class vLLMHttpServer:
             await self.run_headless(server_args)
 
     async def run_server(self, args: argparse.Namespace):
+        # Intel GPU: vLLM v1 EngineCore spawns a subprocess via multiprocessing.spawn.
+        # That subprocess inherits ONEAPI_DEVICE_SELECTOR which triggers a fatal
+        # SYCL exception in the FLA/triton backend at module-import time
+        # (triton.runtime.driver.active.get_current_target() crashes whenever
+        # ONEAPI_DEVICE_SELECTOR is set to any level_zero:* value).
+        # ZE_AFFINITY_MASK alone is sufficient for device isolation.
+        if is_xpu_available:
+            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
+
         engine_args = AsyncEngineArgs.from_cli_args(args)
+
+        # Intel GPU: vLLM detects Ray and selects the "ray" executor backend, which
+        # spawns additional Worker processes each with their own L0 context.
+        # On memory-constrained Intel GPU devices (Arc Pro B60 ≈ 22 GB), the combined
+        # L0 context overhead of FSDP workers + EngineCore + Worker processes
+        # exhausts device memory.  With TP=1 (the common Intel GPU case), force the
+        # "uni" executor so the model runs inside the EngineCore process directly,
+        # avoiding an extra Worker process and its L0 context cost.
+        if is_xpu_available and engine_args.tensor_parallel_size <= 1:
+            engine_args.distributed_executor_backend = "uni"
+
+        # Apply Intel GPU-specific vLLM patches in the actual training process.
+        # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)
+        # so the monkey-patches are active when vLLM initialises its workers.
+        # to be removed after https://github.com/vllm-project/vllm/pull/37149 is merged on vLLM
+        if is_xpu_available:
+            from verl.utils.vllm import intel_gpu_patches as _intel_gpu_patches
+
+            _intel_gpu_patches.apply()
+
         usage_context = UsageContext.OPENAI_API_SERVER
-        vllm_config = engine_args.create_engine_config(usage_context=usage_context)
+        try:
+            vllm_config = engine_args.create_engine_config(usage_context=usage_context)
+        except Exception as e:
+            if is_xpu_available:
+                # pydantic ValidationError (e.g. model inspection failure) contains
+                # ArgsKwargs objects that cloudpickle/Ray cannot serialize, causing a
+                # secondary "cannot pickle ArgsKwargs" error that hides the real cause.
+                # Convert to a plain RuntimeError so Ray can propagate it cleanly while
+                # preserving the original traceback via "from e".
+                raise RuntimeError(f"vLLM create_engine_config failed: {e}") from e
+            raise
         vllm_config.parallel_config.data_parallel_master_port = self._dp_master_port
 
         fn_args = set(dict(inspect.signature(AsyncLLM.from_vllm_config).parameters).keys())

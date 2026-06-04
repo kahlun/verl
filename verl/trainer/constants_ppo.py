@@ -18,7 +18,7 @@ import os
 import torch
 from ray._private.runtime_env.constants import RAY_JOB_CONFIG_JSON_ENV_VAR
 
-from verl.utils.device import get_device_capability
+from verl.utils.device import get_device_capability, is_xpu_available
 
 _major, _ = get_device_capability()
 # Opt-in GB200 NCCL WAR: set TLLM_DISABLE_NVLS_MNNVL=1 in the launch shell to disable
@@ -76,4 +76,17 @@ def get_ppo_ray_runtime_env():
     # Always forward these at call-time, not import-time.
     for key in ("PYTHONHASHSEED", "VERL_FULL_DETERMINISM", "VLLM_BATCH_INVARIANT"):
         runtime_env["env_vars"][key] = os.environ.get(key, "0")
+
+    # Intel XPU: propagate ZE_AFFINITY_MASK to Ray workers (Level Zero device
+    # restriction). Ray workers are fresh processes; without explicit propagation
+    # they see all physical devices regardless of what the driver process was given.
+    # Do NOT propagate ONEAPI_DEVICE_SELECTOR — setting it to "level_zero:..." blocks
+    # oneDNN from finding its OpenCL device and crashes SDPA (oneDNN primitive init).
+    if is_xpu_available:
+        ze_mask = os.environ.get("ZE_AFFINITY_MASK")
+        if ze_mask:
+            runtime_env["env_vars"]["ZE_AFFINITY_MASK"] = ze_mask
+        # Explicitly clear ONEAPI_DEVICE_SELECTOR in workers so oneDNN can use OpenCL.
+        runtime_env["env_vars"].pop("ONEAPI_DEVICE_SELECTOR", None)
+
     return runtime_env
