@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Runtime patches for colocated FSDP + vLLM on Intel XPU.
+"""Runtime patches for colocated FSDP + vLLM on Intel GPU.
 
-Root cause: XPU has no CuMemAllocator equivalent.  CUDA uses a shared memory
-pool so that FSDP and vLLM see a unified allocation picture; on XPU they
+Root cause: Intel GPU has no CuMemAllocator equivalent.  CUDA uses a shared memory
+pool so that FSDP and vLLM see a unified allocation picture; on Intel GPU they
 each see raw Level-Zero driver free-memory.
 
   Upstream fix in progress:
