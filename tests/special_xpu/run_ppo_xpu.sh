@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E PPO (GAE) test on Intel XPU — mirrors tests/special_npu/run_qwen3_06b_ppo.sh
+# E2E PPO (GAE) test on Intel GPU — mirrors tests/special_npu/run_qwen3_06b_ppo.sh
 #
 # Validates PPO training with critic model on XPU:
 #   FSDP training (actor + critic + ref) → vLLM rollout → GAE reward → train

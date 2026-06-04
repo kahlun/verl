@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SFT smoke test on Intel XPU — validates FSDP multi-GPU training without vLLM.
+# SFT smoke test on Intel GPU — validates FSDP multi-GPU training without vLLM.
 #
 # Usage:
 #   NUM_GPUS=4 bash tests/special_xpu/run_sft_xpu.sh

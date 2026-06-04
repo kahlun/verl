@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# E2E GRPO test on Intel XPU — mirrors tests/special_npu/run_qwen2_5_05b_grpo.sh
+# E2E GRPO test on Intel GPU — mirrors tests/special_npu/run_qwen2_5_05b_grpo.sh
 #
-# Validates the full RL training loop on XPU:
+# Validates the full RL training loop on Intel GPU:
 #   FSDP training (actor + ref) → vLLM rollout → reward → train
 #
 # Prerequisites:

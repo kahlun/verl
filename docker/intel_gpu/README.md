@@ -85,7 +85,7 @@ Runtime sanity checks validated on this image:
 
 - Default rollout backend on XPU is vLLM.
 - sglang is not the default XPU path in this image.
-- If sglang XPU becomes validated, add a separate tested image/profile rather than mixing defaults.
+- Separate image/profile will be released when SGLang is validated on Intel GPU.
 
 ## Known Workarounds (pre-DLE 2026.0 driver)
 
@@ -96,7 +96,7 @@ export CCL_ATL_SHM=1        # Route collectives via /dev/shm
 export CCL_BUFFER_CACHE=0    # Prevent stale IPC handle cache
 ```
 
-Also commonly required in multi-GPU XPU runs:
+Also commonly required in multi-GPU runs:
 
 ```bash
 export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK=0
