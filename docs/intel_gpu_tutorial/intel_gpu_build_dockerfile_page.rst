@@ -54,7 +54,6 @@ Software Stack
 .. note::
 
    versions shipped in the ``intel/deep-learning-essentials`` base image are too
-   old for Battlemage (BMG / Arc Pro B60). Specifically:
 
    - compute-runtime  26.09 is required for Battlemage P2P IPC and XCCL stability. 
 
