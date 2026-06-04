@@ -10,8 +10,7 @@ Overview
 
 This page describes how to build and run the Intel GPU Docker image for verl.
 The image bundles all required Intel software stack components in exact
-versions known to work together on Battlemage (Arc Pro B60) and
-Ponte Vecchio (Data Center GPU Max) hardware.
+versions known to work together on Battlemage (Arc Pro B60, Arc Pro B70).
 
 Software Stack
 --------------
@@ -35,16 +34,16 @@ Software Stack
      - 1.28.0
      - ``libze_loader`` — driver dispatch
    * - oneAPI oneCCL
-     - 2021.15
+     - 2021.15.7
      - XCCL collective backend for distributed training
    * - PyTorch (XPU wheel)
-     - 2.11.0+xpu
+     - from vLLM ``requirements/xpu.txt`` (current image: 2.11.0+xpu)
      - ``torch.xpu`` device support
    * - vLLM
-     - 0.17.1+xpu
+     - 0.17.1
      - Rollout engine with XPU platform support
    * - triton-xpu
-     - 3.7.0
+     - from vLLM ``requirements/xpu.txt`` (current image: 3.7.0)
      - JIT kernel compilation for XPU
    * - Python
      - 3.12
@@ -58,7 +57,7 @@ Software Stack
 
    - compute-runtime ≥ 26.09 is required for Battlemage P2P IPC and XCCL stability.
    - IGC 2.30.1 matches that compute-runtime release.
-   - oneCCL 2021.15 adds Battlemage support that is absent in the 2025.2 bundle
+   - oneCCL 2021.15.7 adds Battlemage support that is absent in the 2025.2 bundle
      included in the base image.
 
    These are **not optional**; using older versions causes training crashes or
@@ -181,46 +180,6 @@ Expected output (2× Arc Pro B60):
      ``oneccl_bindings_for_pytorch`` Python module. Use the runtime probe above
      to validate oneCCL setup; real training runs also emit oneCCL startup logs.
 
-Environment Variables
----------------------
-
-The following environment variables are relevant for XPU training. The test
-scripts in ``tests/special_intel_gpu/`` set these automatically.
-
-.. list-table::
-   :header-rows: 1
-
-   * - Variable
-     - Value
-     - Purpose
-   * - ``ZE_AFFINITY_MASK``
-     - e.g. ``0,1``
-     - Restrict Level Zero device visibility (analogous to ``CUDA_VISIBLE_DEVICES``)
-   * - ``ONEAPI_DEVICE_SELECTOR``
-     - **Must NOT be set**
-     - If set to ``level_zero:*``, blocks oneDNN from finding its OpenCL device
-       and crashes SDPA. Three places unset it: (1) the launch scripts run
-       ``unset ONEAPI_DEVICE_SELECTOR``; (2) ``constants_ppo.py`` removes it
-       from the Ray worker runtime env; (3) ``vllm_async_server.py`` pops it
-       before vLLM's ``EngineCore`` subprocess spawns.
-   * - ``RAY_memory_monitor_refresh_ms``
-     - ``0``
-     - Disables Ray OOM monitor. Level Zero maps device memory into CPU VA space
-       (~2.2 TB ``VmPeak`` per process), which makes Ray think the system is OOM
-       even when actual RAM usage is normal.
-   * - ``RAY_NUM_PRESTART_PYTHON_WORKERS``
-     - ``0``
-     - Reduces idle Ray worker processes, lowering Level Zero context and
-       page-table pressure.
-   * - ``CCL_ATL_SHM``
-     - ``1``
-     - Enable oneCCL shared-memory transport for intra-node collectives
-   * - ``CCL_TOPO_ALGO``
-     - ``0``
-     - Disable oneCCL topology-aware algorithm (required on BMG)
-   * - ``NCCL_NVLS_ENABLE``
-     - ``0``
-     - Disable NVLS (not applicable on XPU; prevents spurious warnings)
 
 Next Steps
 ----------

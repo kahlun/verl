@@ -9,7 +9,7 @@ Overview
 --------
 
 This document is a quick-start tutorial for running verl on Intel GPU
-(Arc / Arc Pro / Data Center GPU Max series).
+(Arc / Arc Pro).
 
 It covers environment verification and training examples using FSDP + vLLM
 rollout in colocated mode.
@@ -23,11 +23,11 @@ Current software and hardware scope:
 - Hardware targets:
 
   - Intel Arc Pro B60 (Battlemage, 24 GB)
-  - Intel Arc Pro B60 (2× GPU, 24 GB each)
-  - Intel Data Center GPU Max series (Ponte Vecchio) — untested, same driver stack
+  - Intel Arc Pro B70 (2× GPU, 32 GB each)
 
-For the Docker image software stack (PyTorch 2.11.0+xpu, vLLM 0.17.1,
-compute-runtime 26.09), build instructions, and environment variables
+For the Docker image software stack (vLLM 0.17.1, compute-runtime 26.09, and
+the corresponding torch/triton XPU versions resolved from vLLM
+``requirements/xpu.txt``), build instructions, and environment variables
 reference, see :doc:`intel_gpu_build_dockerfile_page`.
 
 Environment Check (Inside Container)
@@ -126,9 +126,11 @@ workaround exists but has not been upstreamed. Use vLLM as the rollout engine
 for now.
 
 **ONEAPI_DEVICE_SELECTOR.**
-Do not propagate ``ONEAPI_DEVICE_SELECTOR`` to Ray workers. It blocks oneDNN
-from finding its OpenCL device and crashes SDPA (oneDNN primitive init).
-Use ``ZE_AFFINITY_MASK`` instead — the scripts handle this automatically.
+Do not manually propagate ``ONEAPI_DEVICE_SELECTOR`` to Ray workers. Invalid
+values (for example ``level_zero:``) can block oneDNN from finding its OpenCL
+device and crash SDPA (oneDNN primitive init). The Docker image includes a
+startup guard that repairs empty/invalid values; for device placement use
+``ZE_AFFINITY_MASK`` instead.
 
 Example Workflow
 -----------------
