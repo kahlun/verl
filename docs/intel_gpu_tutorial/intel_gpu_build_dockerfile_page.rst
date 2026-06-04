@@ -52,7 +52,6 @@ Software Stack
 
    - compute-runtime  26.09 is required for Battlemage P2P IPC and XCCL stability. 
    - IGC 2.30.1 matches that compute-runtime release. 
-
    - oneCCL 2021.15 adds Battlemage support that is absent in the 2025.2 bundle 
 
      included in the base image. 
