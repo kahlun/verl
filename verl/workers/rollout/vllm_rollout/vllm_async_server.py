@@ -127,7 +127,7 @@ class vLLMHttpServer:
 
         # Forcing vLLM sleep mode to 1. XPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
         if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
-            logger.warning("[XPU] Forcing enable_sleep_mode=False — MemPool not supported on XPU.")
+            logger.warning("[XPU] Forcing enable_sleep_mode=False — MemPool will be supported on XPU by PyTorch 2.13..")
             object.__setattr__(self.config, "enable_sleep_mode", False)
 
         self.rollout_mode = rollout_mode
