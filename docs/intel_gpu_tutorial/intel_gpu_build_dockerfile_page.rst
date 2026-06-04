@@ -61,7 +61,6 @@ Software Stack
 
      included in the base image. 
 
-   These are **not optional**; using older versions causes training crashes or
    silent incorrect results.
 
 docker/intel_gpu/Dockerfile.intel_gpu
