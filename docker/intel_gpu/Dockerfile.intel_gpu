@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# verl on Intel XPU (Data Center GPU Max / Arc Pro / Arc)
+# verl on Intel GPU (Data Center GPU Max / Arc Pro / Arc)
 #
 # Design goals:
-# - Match vLLM's XPU container workflow (DLE base + uv + oneCCL setup).
+# - Match vLLM's Intel GPU container workflow (DLE base + uv + oneCCL setup).
 # - Keep versions explicit and reproducible.
 # - Keep torch/vLLM alignment owned by vLLM requirements/xpu.txt.
 #
@@ -21,14 +21,14 @@
 #     -v $HOME/data:/root/data \
 #     verl-xpu:latest
 #
-# Quick XPU sanity check:
+# Quick Intel GPU sanity check:
 #   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-xpu:latest \
 #     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
 
 FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04
 
 LABEL org.opencontainers.image.title="verl-xpu"
-LABEL org.opencontainers.image.description="verl development image for Intel XPU"
+LABEL org.opencontainers.image.description="verl development image for Intel GPU"
 LABEL org.opencontainers.image.vendor="verl"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -126,7 +126,7 @@ ENV UV_INDEX_STRATEGY="unsafe-best-match"
 ENV UV_LINK_MODE="copy"
 ENV VLLM_TARGET_DEVICE="xpu"
 
-# --- Layer 1: vLLM + torch XPU ---
+# --- Layer 1: vLLM + torch Intel GPU ---
 # oneAPI vars scripts may reference optional unset vars; avoid nounset here.
 RUN set -ex && \
     git clone --depth 1 --branch "v${VLLM_VERSION}" \
