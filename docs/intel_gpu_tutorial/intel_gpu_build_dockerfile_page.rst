@@ -8,9 +8,11 @@ Author: `Kah Lun Teoh <https://github.com/kahlun>`_
 Overview
 --------
 
-This page describes how to build and run the Intel GPU Docker image for verl.
-The image bundles all required Intel software stack components in exact
-versions known to work together on Battlemage (Arc Pro B60, Arc Pro B70).
+
+This page provides guidance on building and executing the verl Intel GPU Docker image
+The container image is configured Intel software stack, including device drivers, runtime components, and supporting toolchains.
+The versions have been tested on Battlemage (Arc Pro B60, Arc Pro B70) and Ponte Vecchio (Data Center GPU Max) architectures. 
+
 
 Software Stack
 --------------
@@ -55,10 +57,13 @@ Software Stack
    versions shipped in the ``intel/deep-learning-essentials`` base image are too
    old for Battlemage (BMG / Arc Pro B60). Specifically:
 
-   - compute-runtime ≥ 26.09 is required for Battlemage P2P IPC and XCCL stability.
-   - IGC 2.30.1 matches that compute-runtime release.
-   - oneCCL 2021.15.7 adds Battlemage support that is absent in the 2025.2 bundle
-     included in the base image.
+   - compute-runtime  26.09 is required for Battlemage P2P IPC and XCCL stability. 
+
+   - IGC 2.30.1 matches that compute-runtime release. 
+
+   - oneCCL 2021.15 adds Battlemage support that is absent in the 2025.2 bundle 
+
+     included in the base image. 
 
    These are **not optional**; using older versions causes training crashes or
    silent incorrect results.
@@ -109,10 +114,10 @@ Run the Container
 
 Mount additional paths as needed (e.g. ``-v $HOME/models:/root/models``).
 
-Host Hardware Check (Before Docker)
+Host Hardware Check
 -------------------------------------
 
-Confirm the GPU is visible to the host before launching the container:
+To confirm that GPU is visible to the host before launching the container: 
 
 .. code-block:: bash
 
