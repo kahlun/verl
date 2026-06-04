@@ -125,7 +125,7 @@ class vLLMHttpServer:
         self.model_config = self._init_model_config(model_config)
         self._validate_configs()
 
-        # XPU: MemPool (sleep_mode=2) is not available; force level 1
+        # Forcing vLLM sleep mode to 1. XPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
         if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
             logger.warning("[XPU] Forcing enable_sleep_mode=False — MemPool not supported on XPU.")
             object.__setattr__(self.config, "enable_sleep_mode", False)
