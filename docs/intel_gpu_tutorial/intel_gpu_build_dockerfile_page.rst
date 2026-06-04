@@ -53,7 +53,6 @@ Software Stack
 
 .. note::
 
-   The compute-runtime and IGC versions are pinned tightly because the default
    versions shipped in the ``intel/deep-learning-essentials`` base image are too
    old for Battlemage (BMG / Arc Pro B60). Specifically:
 
