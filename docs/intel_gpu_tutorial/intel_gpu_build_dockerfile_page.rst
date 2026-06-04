@@ -54,7 +54,6 @@ Software Stack
 .. note::
 
    versions shipped in the ``intel/deep-learning-essentials`` base image are too
-
    - compute-runtime  26.09 is required for Battlemage P2P IPC and XCCL stability. 
 
    - IGC 2.30.1 matches that compute-runtime release. 
