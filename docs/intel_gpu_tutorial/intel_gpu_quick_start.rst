@@ -37,7 +37,7 @@ After launching the container (see :doc:`intel_gpu_build_dockerfile_page`):
 
 .. code-block:: bash
 
-    # Confirm XPU devices are visible
+    # Confirm Intel GPU devices are visible
     python3 - <<'PY'
     import torch
     print("torch:", torch.__version__)
@@ -120,7 +120,7 @@ exhausts kernel page table resources. The test scripts mitigate this with:
   context per vLLM server.
 
 **SGLang weight sync.**
-``update_weights`` over IPC fails on XPU due to a ``ForkingPickler``
+``update_weights`` over IPC fails on Intel GPU due to a ``ForkingPickler``
 authentication error when crossing Ray actor boundaries. A POSIX shared-memory
 workaround exists but has not been upstreamed. Use vLLM as the rollout engine
 for now.
