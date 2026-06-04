@@ -9,7 +9,7 @@
 #   - vLLM >= 0.17 with XPU platform support
 #   - oneCCL for xccl distributed backend
 #
-# Known workarounds (pre-DLE 2026.0):
+# Known workarounds (pre-DLE 2026.0, to be removed after PyTorch 2.13 release):
 #   CCL_ATL_SHM=1 CCL_BUFFER_CACHE=0  (Level Zero IPC bug on PCIe cards)
 #
 # Usage:
