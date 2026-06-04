@@ -36,7 +36,7 @@ configure_xpu_runtime() {
     export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK="${CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK:-0}"
     export CCL_TOPO_ALGO="${CCL_TOPO_ALGO:-0}"
 
-    # Restrict visible XPU devices for this process tree.
+    # Restrict visible GPU devices for this process tree.
     local devices
     devices="$(seq 0 $((NUM_GPUS - 1)) | paste -sd',')"
     export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-${devices}}"
