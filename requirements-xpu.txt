@@ -1,10 +1,10 @@
 # Requirements for Intel XPU (Data Center GPU Max / Arc Pro / Arc)
 #
 # PyTorch with XPU support is installed by Dockerfile.xpu, NOT here.
-# Version must match vLLM XPU requirements (currently torch==2.10.0+xpu).
+# Version must match vLLM XPU requirements (currently torch==2.11.0+xpu).
 # Pinned here as a hard backstop so uv/pip cannot drift to a CUDA or CPU wheel.
 # Do NOT remove this pin.
-torch==2.10.0+xpu
+torch==2.11.0+xpu
 # Runtime deps imported directly by the verl XPU rollout/training paths.
 cachetools
 #

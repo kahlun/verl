@@ -23,7 +23,7 @@
 # Tested on: 4x Intel Arc Pro B60 (Battlemage, 24 GB VRAM each)
 #
 # --- Torch version alignment ---
-# vLLM 0.17.1+xpu requires torch==2.10.0+xpu (from vllm/requirements/xpu.txt).
+# vLLM 0.17.x+xpu requires torch==2.11.0+xpu (from vllm/requirements/xpu.txt).
 # All three layers (base torch, vLLM, verl deps) must use the SAME version.
 # Bump TORCH_VERSION / VLLM_VERSION together when upgrading.
 
@@ -98,7 +98,7 @@ ENV CCL_ROOT=/opt/intel/oneapi/ccl/2021.15
 ENV LD_LIBRARY_PATH=/opt/intel/oneapi/ccl/2021.15/lib:/opt/intel/oneapi/ccl/2021.15/lib/ccl:${LD_LIBRARY_PATH}
 
 # --- Layer 1: vLLM + torch XPU (uv resolves everything in one pass) ---
-# uv reads requirements/xpu.txt which pins torch==2.10.0+xpu.
+# uv reads requirements/xpu.txt which pins torch==2.11.0+xpu.
 # With unsafe-best-match + XPU extra index, uv picks the +xpu wheel for torch.
 # --no-build-isolation exposes the installed torch to the vLLM C++ build.
 RUN git clone --depth 1 --branch v${VLLM_VERSION} \
