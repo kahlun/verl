@@ -61,7 +61,6 @@ Software Stack
 
      included in the base image. 
 
-   silent incorrect results.
 
 docker/intel_gpu/Dockerfile.intel_gpu
 -------------------------------------
