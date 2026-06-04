@@ -8,11 +8,8 @@ Author: `Kah Lun Teoh <https://github.com/kahlun>`_
 Overview
 --------
 
-
-This page provides guidance on building and executing the verl Intel GPU Docker image
-The container image is configured Intel software stack, including device drivers, runtime components, and supporting toolchains.
-The versions have been tested on Battlemage (Arc Pro B60, Arc Pro B70) and Ponte Vecchio (Data Center GPU Max) architectures. 
-
+This page describes how to build and run the Intel GPU Docker image for verl.
+The image bundles all required Intel software stack components in exact versions known to work together on Battlemage (Arc Pro B60, Arc Pro B70).
 
 Software Stack
 --------------
