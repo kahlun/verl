@@ -286,7 +286,7 @@ class SGLangHttpServer:
             "dtype": self.config.dtype,
             "mem_fraction_static": self.config.gpu_memory_utilization,
             "disable_cuda_graph": self.config.enforce_eager,
-            "enable_memory_saver": True,
+            "enable_memory_saver": not (hasattr(torch, "xpu") and torch.xpu.is_available()),
             "base_gpu_id": self.base_gpu_id,
             "gpu_id_step": 1,
             "tp_size": infer_tp,
@@ -298,8 +298,10 @@ class SGLangHttpServer:
             "trust_remote_code": self.model_config.trust_remote_code,
             "max_running_requests": self.config.get("max_num_seqs", None),
             "log_level": "error",
-            "mm_attention_backend": mm_attention_backend,
-            "attention_backend": attention_backend,
+            **({"mm_attention_backend": "intel_xpu"} if hasattr(torch, "xpu") and torch.xpu.is_available() else {}),
+            "attention_backend": attention_backend if attention_backend is not None else (
+                "intel_xpu" if hasattr(torch, "xpu") and torch.xpu.is_available() else "fa3"
+            ),
             "skip_tokenizer_init": self.config.skip_tokenizer_init,
             "skip_server_warmup": True,
             "quantization": quantization,
@@ -380,6 +382,15 @@ class SGLangHttpServer:
 
         # NOTE: We can't directly call SGLang's launch_server since it's not an async function.
         # https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/entrypoints/http_server.py
+
+        # XPU: sglang spawns scheduler subprocesses via multiprocessing.spawn which inherits
+        # ONEAPI_DEVICE_SELECTOR from the Ray worker environment.  If the variable contains a
+        # partial value (e.g. "level_zero:") the SYCL runtime aborts at import time with
+        # "Empty input after ':' delimiter is not allowed."  ZE_AFFINITY_MASK is sufficient
+        # for device isolation so we pop ONEAPI_DEVICE_SELECTOR before any fork happens.
+        # if hasattr(torch, "xpu") and torch.xpu.is_available():
+        #     os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
+
         sglang.srt.entrypoints.engine._set_envs_and_config = _set_envs_and_config
         os.environ["SGLANG_BLOCK_NONZERO_RANK_CHILDREN"] = "0"
         server_args = ServerArgs(**args)
