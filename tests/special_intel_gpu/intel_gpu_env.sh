@@ -37,18 +37,9 @@ configure_xpu_runtime() {
     export CCL_TOPO_ALGO="${CCL_TOPO_ALGO:-0}"
 
     # Restrict visible GPU devices for this process tree.
-    local devices
-    devices="$(seq 0 $((NUM_GPUS - 1)) | paste -sd',')"
-    export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-${devices}}"
-
-    if [[ "${mode}" == "vllm" ]]; then
-        # vLLM XPU uses ZE_AFFINITY_MASK as device control variable.
-        if [[ "${XPU_UNSET_ONEAPI_DEVICE_SELECTOR:-1}" == "1" ]]; then
-            unset ONEAPI_DEVICE_SELECTOR
-        fi
-
-        # Ray/XPU workarounds: reduce idle contexts and disable host-memory false OOM checks.
-        export RAY_NUM_PRESTART_PYTHON_WORKERS="${RAY_NUM_PRESTART_PYTHON_WORKERS:-0}"
-        export RAY_memory_monitor_refresh_ms="${RAY_memory_monitor_refresh_ms:-0}"
-    fi
+    # if [[ "${mode}" == "vllm" ]]; then
+    #     # Ray/XPU workarounds: reduce idle contexts and disable host-memory false OOM checks.
+    #     export RAY_NUM_PRESTART_PYTHON_WORKERS="${RAY_NUM_PRESTART_PYTHON_WORKERS:-0}"
+    #     export RAY_memory_monitor_refresh_ms="${RAY_memory_monitor_refresh_ms:-0}"
+    # fi
 }

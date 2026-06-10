@@ -32,10 +32,8 @@ else
     export CCL_BUFFER_CACHE="${CCL_BUFFER_CACHE:-0}"
     export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK="${CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK:-0}"
     export CCL_TOPO_ALGO="${CCL_TOPO_ALGO:-0}"
-    export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-$(seq 0 $((NUM_GPUS - 1)) | paste -sd',')}"
-    unset ONEAPI_DEVICE_SELECTOR
-    export RAY_NUM_PRESTART_PYTHON_WORKERS="${RAY_NUM_PRESTART_PYTHON_WORKERS:-0}"
-    export RAY_memory_monitor_refresh_ms="${RAY_memory_monitor_refresh_ms:-0}"
+    # export RAY_NUM_PRESTART_PYTHON_WORKERS="${RAY_NUM_PRESTART_PYTHON_WORKERS:-0}"
+    # export RAY_memory_monitor_refresh_ms="${RAY_memory_monitor_refresh_ms:-0}"
 fi
 
 python3 -m verl.trainer.main_ppo \

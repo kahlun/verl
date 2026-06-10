@@ -76,7 +76,11 @@ if _VLLM_VERSION > version.parse("0.11.0"):
     if get_encoding is not None and os.getenv("VERL_USE_GPT_OSS", "0") == "1":
         get_encoding()
 else:
-    from vllm.utils import FlexibleArgumentParser
+    # TODO tempfix, this is just to prevent runtime erorr due to version is non tag.
+    try:
+        from vllm.utils.argparse_utils import FlexibleArgumentParser
+    except ImportError:
+        from vllm.utils import FlexibleArgumentParser
 
 
 logger = logging.getLogger(__file__)
@@ -137,11 +141,11 @@ class vLLMHttpServer:
             os.environ["VLLM_BATCH_INVARIANT"] = "1"
 
         # Forcing vLLM sleep mode to 1. Intel GPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
-        if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
-            logger.warning(
-                "[Intel GPU] Forcing enable_sleep_mode=False — MemPool will be supported on Intel GPU by PyTorch 2.13.."
-            )
-            object.__setattr__(self.config, "enable_sleep_mode", False)
+        # if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
+        #     logger.warning(
+        #         "[Intel GPU] Forcing enable_sleep_mode=False — MemPool will be supported on Intel GPU by PyTorch 2.13.."
+        #     )
+        #     object.__setattr__(self.config, "enable_sleep_mode", False)
 
         self.rollout_mode = rollout_mode
         self.workers = workers

@@ -82,11 +82,4 @@ def get_ppo_ray_runtime_env():
     # they see all physical devices regardless of what the driver process was given.
     # Do NOT propagate ONEAPI_DEVICE_SELECTOR — setting it to "level_zero:..." blocks
     # oneDNN from finding its OpenCL device and crashes SDPA (oneDNN primitive init).
-    if is_xpu_available:
-        ze_mask = os.environ.get("ZE_AFFINITY_MASK")
-        if ze_mask:
-            runtime_env["env_vars"]["ZE_AFFINITY_MASK"] = ze_mask
-        # Explicitly clear ONEAPI_DEVICE_SELECTOR in workers so oneDNN can use OpenCL.
-        runtime_env["env_vars"].pop("ONEAPI_DEVICE_SELECTOR", None)
-
     return runtime_env

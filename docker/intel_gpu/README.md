@@ -43,12 +43,7 @@ cp docker/intel_gpu/.env.example docker/intel_gpu/.env
 ```
 
 ```bash
-docker run -it --rm \
-  --env-file docker/intel_gpu/.env \
-  --device /dev/dri --group-add ${RENDER_GID} \
-  --shm-size 16g \
-  -v $HOME/data:/root/data \
-  verl-intel-gpu:latest
+docker run -it --rm   --device /dev/dri --group-add ${RENDER_GID}   --shm-size 16g   -v $HOME/data:/root/data   verl-intel-gpu:latest
 ```
 
 ### Run e2e tests inside the container

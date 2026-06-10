@@ -43,11 +43,6 @@ elif is_npu_available:
     VLLM_SLEEP_LEVEL = 1
     from vllm import LLM
     from vllm.distributed import parallel_state
-elif is_xpu_available:
-    # XPU MemPool (sleep_mode=2) is not available yet; use level 1.
-    VLLM_SLEEP_LEVEL = 1
-    from vllm import LLM
-    from vllm.distributed import parallel_state
 elif vs.parse(package_version) >= vs.parse("0.7.0"):
     vllm_version = package_version
     if vs.parse(package_version) >= vs.parse("0.8.5"):
