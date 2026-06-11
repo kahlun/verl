@@ -421,26 +421,8 @@ class vLLMHttpServer:
             await self.run_headless(server_args)
 
     async def run_server(self, args: argparse.Namespace):
-        # Intel GPU: vLLM v1 EngineCore spawns a subprocess via multiprocessing.spawn.
-        # That subprocess inherits ONEAPI_DEVICE_SELECTOR which triggers a fatal
-        # SYCL exception in the FLA/triton backend at module-import time
-        # (triton.runtime.driver.active.get_current_target() crashes whenever
-        # ONEAPI_DEVICE_SELECTOR is set to any level_zero:* value).
-        # ZE_AFFINITY_MASK alone is sufficient for device isolation.
-        if is_xpu_available:
-            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
-
         engine_args = AsyncEngineArgs.from_cli_args(args)
 
-        # Intel GPU: vLLM detects Ray and selects the "ray" executor backend, which
-        # spawns additional Worker processes each with their own L0 context.
-        # On memory-constrained Intel GPU devices (Arc Pro B60 ≈ 22 GB), the combined
-        # L0 context overhead of FSDP workers + EngineCore + Worker processes
-        # exhausts device memory.  With TP=1 (the common Intel GPU case), force the
-        # "uni" executor so the model runs inside the EngineCore process directly,
-        # avoiding an extra Worker process and its L0 context cost.
-        if is_xpu_available and engine_args.tensor_parallel_size <= 1:
-            engine_args.distributed_executor_backend = "uni"
 
         # Apply Intel GPU-specific vLLM patches in the actual training process.
         # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)
