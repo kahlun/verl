@@ -18,7 +18,7 @@ import os
 import torch
 from ray._private.runtime_env.constants import RAY_JOB_CONFIG_JSON_ENV_VAR
 
-from verl.utils.device import get_device_capability, is_xpu_available
+from verl.utils.device import get_device_capability
 
 _major, _ = get_device_capability()
 # Opt-in GB200 NCCL WAR: set TLLM_DISABLE_NVLS_MNNVL=1 in the launch shell to disable

@@ -143,7 +143,7 @@ class vLLMHttpServer:
         # Forcing vLLM sleep mode to 1. Intel GPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
         # if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
         #     logger.warning(
-        #         "[Intel GPU] Forcing enable_sleep_mode=False — MemPool will be supported on Intel GPU by PyTorch 2.13.."
+        #         "[Intel GPU] Forcing enable_sleep_mode=False — MemPool supported on Intel GPU in PyTorch 2.13."
         #     )
         #     object.__setattr__(self.config, "enable_sleep_mode", False)
 
@@ -422,7 +422,6 @@ class vLLMHttpServer:
 
     async def run_server(self, args: argparse.Namespace):
         engine_args = AsyncEngineArgs.from_cli_args(args)
-
 
         # Apply Intel GPU-specific vLLM patches in the actual training process.
         # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)

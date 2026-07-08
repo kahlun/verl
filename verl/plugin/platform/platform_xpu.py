@@ -2,7 +2,6 @@
 """Intel GPU (PyTorch XPU) platform implementation."""
 
 import logging
-import os
 from contextlib import contextmanager
 from types import ModuleType
 from typing import Any, Optional
