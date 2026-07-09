@@ -155,6 +155,11 @@ RUN set -eux && uv pip install --no-deps -e .
 RUN uv pip uninstall triton triton-xpu -y 2>/dev/null || true && \
     uv pip install triton-xpu==3.7.1 --extra-index-url https://download.pytorch.org/whl/xpu
 
+# TransferQueue: required by the V1 trainer (verl/trainer/main_ppo.py imports it
+# unconditionally since upstream #6710). Not on PyPI's dependency graph for verl,
+# so install explicitly with --no-deps, mirroring upstream CI workflows.
+RUN uv pip install --no-deps TransferQueue==0.1.8
+
 # --- Runtime defaults / workarounds ---
 ENV CCL_ATL_SHM=${DEFAULT_CCL_ATL_SHM}
 ENV CCL_BUFFER_CACHE=${DEFAULT_CCL_BUFFER_CACHE}
