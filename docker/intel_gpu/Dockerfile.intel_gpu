@@ -25,7 +25,14 @@
 #   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-intel-gpu:latest \
 #     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
 
-FROM intel/deep-learning-essentials:2025.3.3-0-devel-ubuntu24.04
+# Base pinned to the 2025.3.x / ubuntu24.04 DLE image on purpose. The XPU torch
+# wheel that vLLM's requirements/xpu.txt pins (torch 2.11.0+xpu, SYCL build
+# 20250302) is compiled against the oneAPI 2025.x Level-Zero *V1* adapter.
+# The 2026.1.0 / ubuntu26.04 base ships oneAPI 2026.1 with the L0 *V2* adapter
+# as default, which fails with `sycl::exception: Backends mismatch` and SIGSEGVs
+# on the first XPU allocation. Bump this base only in lockstep with a torch+xpu
+# wheel built for the matching oneAPI runtime.
+FROM intel/deep-learning-essentials:2026.1.0-devel-ubuntu24.04
 
 LABEL org.opencontainers.image.title="verl-intel-gpu"
 LABEL org.opencontainers.image.description="verl development image for Intel GPU"
@@ -33,9 +40,14 @@ LABEL org.opencontainers.image.vendor="verl"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
-# TO DO, after VLLM VERSION TAG avaialble for Sleep mode, will convert commit back to tag.
-ARG VLLM_VERSION=0.22.1
-ARG VLLM_COMMIT=54c660c3a6c30c79e6457a162a19f4ed68042743
+# vLLM XPU sleep mode lives in PR #37149 ("transparent sleep mode support on XPU"),
+# which is not in a released tag yet, so we pin the PR head commit (public,
+# fetchable from GitHub as refs/pull/37149/head). This commit already enables
+# sleep mode on XPU out of the box (the base Platform.is_sleep_mode_available
+# includes PlatformEnum.XPU), so no source patch is needed — vLLM is used
+# verbatim. Convert back to a released tag once PR #37149 is merged/released.
+ARG VLLM_VERSION=v0.26.1
+ARG VLLM_COMMIT=d398beca606c8cf421e0dcc481affc11b708e60e
 
 # torch version is intentionally not pinned here. vLLM's requirements/xpu.txt
 # owns the tested torch+xpu pairing for each vLLM release.
@@ -66,6 +78,10 @@ WORKDIR /workspace
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # --- System dependencies ---
+# python${PYTHON_VERSION}-dev is required: vLLM's XPU extension is compiled from
+# source (uv pip install --no-build-isolation .), and its CMake step needs the
+# CPython development headers (Python_INCLUDE_DIRS / Development.Module). The
+# ubuntu24.04 DLE base ships python3.12 + python3.12-dev as apt packages.
 RUN set -eux && \
     apt-get update -y && \
     apt-get install -y --no-install-recommends \
@@ -129,10 +145,24 @@ ENV VLLM_TARGET_DEVICE="xpu"
 
 # --- Layer 1: vLLM + torch Intel GPU ---
 # oneAPI vars scripts may reference optional unset vars; avoid nounset here.
+#
+# vLLM is fetched at the pinned PR #37149 head (${VLLM_COMMIT}). GitHub serves
+# PR-head commits by SHA, so a shallow `git fetch <sha>` resolves it without a
+# branch ref. That PR carries all the XPU sleep-mode machinery
+# (device_allocator/xpumem.py, the XpuMemAllocator analogue of CUDA's
+# CuMemAllocator, and the xpumem kernels wiring) AND enables it in the platform
+# capability check — so vLLM source is used verbatim, no patching. Sleep mode
+# also needs the vllm_xpu_kernels xpumem backend + xpu_memcpy_sync op, both
+# provided by the kernels wheel in requirements/xpu.txt.
+# Shallow clone has no tags, so setuptools-scm can't derive the version; pin it
+# explicitly to what the PR head reports (matches vllm/_version.py).
+ENV SETUPTOOLS_SCM_PRETEND_VERSION="0.26.1+g.d398beca"
 RUN set -ex && \
-    git clone https://github.com/vllm-project/vllm.git /opt/vllm && \
-    git -C /opt/vllm checkout "${VLLM_COMMIT}" && \
+    git init /opt/vllm && \
     cd /opt/vllm && \
+    git remote add origin https://github.com/vllm-project/vllm.git && \
+    git fetch --depth 1 origin "${VLLM_VERSION}" && \
+    git checkout FETCH_HEAD && \
     source /opt/intel/oneapi/setvars.sh --force && \
     source /opt/intel/oneapi/ccl/${ONECCL_SERIES}/env/vars.sh --force && \
     uv pip install --upgrade pip setuptools wheel && \

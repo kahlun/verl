@@ -140,12 +140,6 @@ class vLLMHttpServer:
             os.environ["VERL_SEED"] = str(rollout_seed)
             os.environ["VLLM_BATCH_INVARIANT"] = "1"
 
-        # Forcing vLLM sleep mode to 1. Intel GPU: MemPool (sleep_mode=2) to be enabled by PyTorch 2.13.
-        # if is_xpu_available and getattr(self.config, "enable_sleep_mode", False):
-        #     logger.warning(
-        #         "[Intel GPU] Forcing enable_sleep_mode=False — MemPool supported on Intel GPU in PyTorch 2.13."
-        #     )
-        #     object.__setattr__(self.config, "enable_sleep_mode", False)
 
         self.rollout_mode = rollout_mode
         self.workers = workers
@@ -233,6 +227,16 @@ class vLLMHttpServer:
             self._master_address = master_address
             self._master_port = master_port
             self._dp_rpc_port = dp_rpc_port
+
+        # XPU: vLLM spawns EngineCore / model-registry subprocesses (multiprocessing +
+        # "mp" executor) that inherit ONEAPI_DEVICE_SELECTOR from this Ray worker's env.
+        # Ray's IntelGPUAcceleratorManager may set it to a partial value (e.g.
+        # "level_zero:") which makes the SYCL runtime abort at import time with
+        # "ONEAPI_DEVICE_SELECTOR parsing error. Empty input after ':' delimiter is not
+        # allowed." ZE_AFFINITY_MASK already provides device isolation, so drop the
+        # selector before any fork/spawn. Mirrors the sglang server's guard.
+        if is_xpu_available:
+            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
 
         # 1. setup vllm serve cli args
         engine_kwargs = self.config.get("engine_kwargs", {}).get(self._get_engine_kwargs_key(), {}) or {}
@@ -422,15 +426,6 @@ class vLLMHttpServer:
 
     async def run_server(self, args: argparse.Namespace):
         engine_args = AsyncEngineArgs.from_cli_args(args)
-
-        # Apply Intel GPU-specific vLLM patches in the actual training process.
-        # Must run here (before create_engine_config / AsyncLLM.from_vllm_config)
-        # so the monkey-patches are active when vLLM initialises its workers.
-        # to be removed after https://github.com/vllm-project/vllm/pull/37149 is merged on vLLM
-        if is_xpu_available:
-            from verl.utils.vllm import intel_gpu_patches as _intel_gpu_patches
-
-            _intel_gpu_patches.apply()
 
         usage_context = UsageContext.OPENAI_API_SERVER
         try:
