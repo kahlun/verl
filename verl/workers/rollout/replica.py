@@ -223,7 +223,7 @@ class RolloutReplica(ABC):
             bin_pack=False,
             name_prefix=name_prefix,
             use_gpu=use_gpu,
-            device_name=get_device_name,
+            device_name=get_device_name(),
         )
         self.workers = worker_group.workers
         await self.launch_servers()
