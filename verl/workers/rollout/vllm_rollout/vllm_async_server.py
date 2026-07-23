@@ -36,7 +36,7 @@ from vllm.v1.engine.async_llm import AsyncLLM
 
 from verl.plugin.platform import get_platform
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available, is_xpu_available
+from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
@@ -77,10 +77,7 @@ if _VLLM_VERSION > version.parse("0.11.0"):
         get_encoding()
 else:
     # TODO tempfix, this is just to prevent runtime erorr due to version is non tag.
-    try:
-        from vllm.utils.argparse_utils import FlexibleArgumentParser
-    except ImportError:
-        from vllm.utils import FlexibleArgumentParser
+    from vllm.utils.argparse_utils import FlexibleArgumentParser
 
 
 logger = logging.getLogger(__file__)
@@ -139,7 +136,6 @@ class vLLMHttpServer:
             os.environ["VERL_FULL_DETERMINISM"] = "1"
             os.environ["VERL_SEED"] = str(rollout_seed)
             os.environ["VLLM_BATCH_INVARIANT"] = "1"
-
 
         self.rollout_mode = rollout_mode
         self.workers = workers
@@ -227,16 +223,6 @@ class vLLMHttpServer:
             self._master_address = master_address
             self._master_port = master_port
             self._dp_rpc_port = dp_rpc_port
-
-        # XPU: vLLM spawns EngineCore / model-registry subprocesses (multiprocessing +
-        # "mp" executor) that inherit ONEAPI_DEVICE_SELECTOR from this Ray worker's env.
-        # Ray's IntelGPUAcceleratorManager may set it to a partial value (e.g.
-        # "level_zero:") which makes the SYCL runtime abort at import time with
-        # "ONEAPI_DEVICE_SELECTOR parsing error. Empty input after ':' delimiter is not
-        # allowed." ZE_AFFINITY_MASK already provides device isolation, so drop the
-        # selector before any fork/spawn. Mirrors the sglang server's guard.
-        if is_xpu_available:
-            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
 
         # 1. setup vllm serve cli args
         engine_kwargs = self.config.get("engine_kwargs", {}).get(self._get_engine_kwargs_key(), {}) or {}
@@ -428,17 +414,7 @@ class vLLMHttpServer:
         engine_args = AsyncEngineArgs.from_cli_args(args)
 
         usage_context = UsageContext.OPENAI_API_SERVER
-        try:
-            vllm_config = engine_args.create_engine_config(usage_context=usage_context)
-        except Exception as e:
-            if is_xpu_available:
-                # pydantic ValidationError (e.g. model inspection failure) contains
-                # ArgsKwargs objects that cloudpickle/Ray cannot serialize, causing a
-                # secondary "cannot pickle ArgsKwargs" error that hides the real cause.
-                # Convert to a plain RuntimeError so Ray can propagate it cleanly while
-                # preserving the original traceback via "from e".
-                raise RuntimeError(f"vLLM create_engine_config failed: {e}") from e
-            raise
+        vllm_config = engine_args.create_engine_config(usage_context=usage_context)
         vllm_config.parallel_config.data_parallel_master_port = self._dp_master_port
 
         fn_args = set(dict(inspect.signature(AsyncLLM.from_vllm_config).parameters).keys())

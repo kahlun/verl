@@ -383,17 +383,6 @@ class SGLangHttpServer:
             args["enable_weights_cpu_backup"] = True
             args["enable_draft_weights_cpu_backup"] = True
 
-        # NOTE: We can't directly call SGLang's launch_server since it's not an async function.
-        # https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/entrypoints/http_server.py
-
-        # XPU: sglang spawns scheduler subprocesses via multiprocessing.spawn which inherits
-        # ONEAPI_DEVICE_SELECTOR from the Ray worker environment.  If the variable contains a
-        # partial value (e.g. "level_zero:") the SYCL runtime aborts at import time with
-        # "Empty input after ':' delimiter is not allowed."  ZE_AFFINITY_MASK is sufficient
-        # for device isolation so we pop ONEAPI_DEVICE_SELECTOR before any fork happens.
-        if hasattr(torch, "xpu") and torch.xpu.is_available():
-            os.environ.pop("ONEAPI_DEVICE_SELECTOR", None)
-
         sglang.srt.entrypoints.engine._set_envs_and_config = _set_envs_and_config
         os.environ["SGLANG_BLOCK_NONZERO_RANK_CHILDREN"] = "0"
         server_args = ServerArgs(**args)

@@ -77,9 +77,4 @@ def get_ppo_ray_runtime_env():
     for key in ("PYTHONHASHSEED", "VERL_FULL_DETERMINISM", "VLLM_BATCH_INVARIANT"):
         runtime_env["env_vars"][key] = os.environ.get(key, "0")
 
-    # Intel XPU: propagate ZE_AFFINITY_MASK to Ray workers (Level Zero device
-    # restriction). Ray workers are fresh processes; without explicit propagation
-    # they see all physical devices regardless of what the driver process was given.
-    # Do NOT propagate ONEAPI_DEVICE_SELECTOR — setting it to "level_zero:..." blocks
-    # oneDNN from finding its OpenCL device and crashes SDPA (oneDNN primitive init).
     return runtime_env

@@ -25,6 +25,8 @@ from ray.actor import ActorHandle
 
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup, ResourcePoolManager
 from verl.utils.config import omega_conf_to_dataclass
+
+# original official code. now want to test this issue.
 from verl.utils.device import get_device_name
 from verl.workers.config import HFModelConfig, RolloutConfig
 
@@ -221,7 +223,7 @@ class RolloutReplica(ABC):
             bin_pack=False,
             name_prefix=name_prefix,
             use_gpu=use_gpu,
-            device_name=get_device_name(),
+            device_name=get_device_name,
         )
         self.workers = worker_group.workers
         await self.launch_servers()

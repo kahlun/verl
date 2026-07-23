@@ -2,7 +2,7 @@
 # Reproduce the UNPATCHED sglang + XPU weight-sync bug.
 #
 # Purpose:
-#   Run veRL GRPO with sglang rollout on XPU with NO custom patches applied.
+#   Run verl GRPO with sglang rollout on XPU with NO custom patches applied.
 #   Expected failure: update_weights takes ~88s (full tensor HTTP serialization)
 #   because PyTorch's ForkingPickler has no _share_xpu_() path, and
 #   monkey_patch_torch_reductions() corrupts the XPU pickle tuple.
