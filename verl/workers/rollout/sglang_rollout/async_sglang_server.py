@@ -44,7 +44,7 @@ from sglang.srt.managers.tokenizer_manager import ServerStatus
 
 from verl.plugin.platform import get_platform
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_visible_devices_keyword
+from verl.utils.device import get_resource_name, get_visible_devices_keyword
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_sglang_profiler_args
 from verl.workers.config import HFModelConfig, RolloutConfig
@@ -255,10 +255,12 @@ class SGLangHttpServer:
 
         engine_kwargs = self.config.get("engine_kwargs", {}).get("sglang", {}) or {}
         attention_backend = engine_kwargs.pop("attention_backend", None)
-        mm_attention_backend = engine_kwargs.pop("mm_attention_backend", None)
+
         if attention_backend is None:
             if torch.version.hip is not None:
                 attention_backend = "aiter"
+            elif hasattr(torch, "xpu") and torch.xpu.is_available():
+                attention_backend = "intel_xpu"
             elif version.parse(sglang.__version__) >= version.parse("0.5.12"):
                 # FA3 CUDA-graph capture is broken on sglang>=0.5.12 (#22800);
                 # default to flashinfer (users can opt into fa4 via engine_kwargs).
@@ -269,6 +271,9 @@ class SGLangHttpServer:
         # (e.g. text "flashinfer" vs vision "flashinfer_cudnn"), so don't mirror it.
         # Leave None to let sglang's VisionAttention auto-pick per device
         # (triton_attn on Ada, fa3 on Hopper, fa4 on Blackwell).
+        mm_attention_backend = attention_backend or (
+            "intel_xpu" if hasattr(torch, "xpu") and torch.xpu.is_available() else None
+        )
         quantization = self.config.get("quantization", None)
         if quantization is not None:
             if quantization == "fp8":
@@ -286,7 +291,7 @@ class SGLangHttpServer:
             "dtype": self.config.dtype,
             "mem_fraction_static": self.config.gpu_memory_utilization,
             "disable_cuda_graph": self.config.enforce_eager,
-            "enable_memory_saver": True,
+            "enable_memory_saver": not (hasattr(torch, "xpu") and torch.xpu.is_available()),
             "base_gpu_id": self.base_gpu_id,
             "gpu_id_step": 1,
             "tp_size": infer_tp,
@@ -378,8 +383,6 @@ class SGLangHttpServer:
             args["enable_weights_cpu_backup"] = True
             args["enable_draft_weights_cpu_backup"] = True
 
-        # NOTE: We can't directly call SGLang's launch_server since it's not an async function.
-        # https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/entrypoints/http_server.py
         sglang.srt.entrypoints.engine._set_envs_and_config = _set_envs_and_config
         os.environ["SGLANG_BLOCK_NONZERO_RANK_CHILDREN"] = "0"
         server_args = ServerArgs(**args)
@@ -743,7 +746,10 @@ class SGLangReplica(RolloutReplica):
         worker_infos = await asyncio.gather(
             *[
                 worker.__ray_call__.remote(
-                    lambda self: (ray.get_runtime_context().get_node_id(), os.environ[visible_devices_keyword])
+                    lambda self: (
+                        ray.get_runtime_context().get_node_id(),
+                        ray.get_runtime_context().get_accelerator_ids()[get_resource_name()][0],
+                    )
                 )
                 for worker in self.workers
             ]

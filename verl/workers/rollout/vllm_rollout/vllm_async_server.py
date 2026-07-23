@@ -76,7 +76,8 @@ if _VLLM_VERSION > version.parse("0.11.0"):
     if get_encoding is not None and os.getenv("VERL_USE_GPT_OSS", "0") == "1":
         get_encoding()
 else:
-    from vllm.utils import FlexibleArgumentParser
+    # TODO tempfix, this is just to prevent runtime erorr due to version is non tag.
+    from vllm.utils.argparse_utils import FlexibleArgumentParser
 
 
 logger = logging.getLogger(__file__)
@@ -411,6 +412,7 @@ class vLLMHttpServer:
 
     async def run_server(self, args: argparse.Namespace):
         engine_args = AsyncEngineArgs.from_cli_args(args)
+
         usage_context = UsageContext.OPENAI_API_SERVER
         vllm_config = engine_args.create_engine_config(usage_context=usage_context)
         vllm_config.parallel_config.data_parallel_master_port = self._dp_master_port
