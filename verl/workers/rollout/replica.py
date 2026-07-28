@@ -25,8 +25,6 @@ from ray.actor import ActorHandle
 
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup, ResourcePoolManager
 from verl.utils.config import omega_conf_to_dataclass
-
-# original official code. now want to test this issue.
 from verl.utils.device import get_device_name
 from verl.workers.config import HFModelConfig, RolloutConfig
 

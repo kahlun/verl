@@ -76,7 +76,6 @@ if _VLLM_VERSION > version.parse("0.11.0"):
     if get_encoding is not None and os.getenv("VERL_USE_GPT_OSS", "0") == "1":
         get_encoding()
 else:
-    # TODO tempfix, this is just to prevent runtime erorr due to version is non tag.
     from vllm.utils.argparse_utils import FlexibleArgumentParser
 
 
