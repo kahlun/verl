@@ -25,7 +25,7 @@
 #   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-intel-gpu:latest \
 #     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
 
-# Base pinned to 2025.3.3 / ubuntu24.04 DLE on purpose. vLLM v0.25.1's
+# Base pinned to 2025.3.3 / ubuntu24.04 DLE on purpose. vLLM v0.26.0's
 # requirements/xpu.txt pins torch==2.12.0, whose wheel bundles its own matched
 # SYCL/UR runtime (pip pkg intel-sycl-rt==2025.3.2, libsycl.so.8, libur_loader
 # v0.12.0). The 2026.1.0 base ships a newer system SYCL/UR (libsycl.so.9,
@@ -37,7 +37,7 @@
 # driver init (reproduced 8/8, not flaky). Staying on 2025.3.3 keeps system
 # and torch-bundled SYCL/UR at the same generation, side-stepping the bug
 # entirely. Bump back to 2026.1+ only once vLLM ships a torch pin built
-# against a 2026.x oneAPI runtime (i.e. vLLM upgrades past v0.25.1's
+# against a 2026.x oneAPI runtime (i.e. vLLM upgrades past v0.26.0's
 # torch==2.12.0 pin) — otherwise re-apply the PATH/ONEAPI_ROOT workaround
 # documented in that vLLM version's own Dockerfile variant instead.
 FROM intel/deep-learning-essentials:2025.3.3-0-devel-ubuntu24.04
@@ -48,12 +48,7 @@ LABEL org.opencontainers.image.vendor="verl"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
-# vLLM XPU sleep mode landed via PR #37149 ("transparent sleep mode support on
-# XPU"), squash-merged as 3bb46975bd3 on 2026-06-07. That commit is included in
-# every release tag from v0.23.0 onward, so a plain tag pin (v0.25.1) already
-# enables sleep mode on XPU out of the box (Platform.is_sleep_mode_available
-# includes PlatformEnum.XPU) — vLLM is used verbatim, no patching needed.
-ARG VLLM_VERSION=v0.25.1
+ARG VLLM_VERSION=v0.26.0
 
 # torch version is intentionally not pinned here. vLLM's requirements/xpu.txt
 # owns the tested torch+xpu pairing for each vLLM release.
@@ -61,11 +56,11 @@ ARG PIP_INDEX_URL="https://download.pytorch.org/whl/xpu"
 ARG PIP_EXTRA_INDEX_URL="https://pypi.org/simple"
 
 # Intel userspace driver/component versions (explicit for reproducible builds).
-ARG IGC_VERSION=2.30.1
-ARG IGC_BUILD=20950
-ARG COMPUTE_RUNTIME_VERSION=26.09.37435.1
-ARG IGDGMM_VERSION=22.9.0
-ARG LEVEL_ZERO_VERSION=1.28.0+u24.04
+ARG IGC_VERSION=2.34.4
+ARG IGC_BUILD=21428
+ARG COMPUTE_RUNTIME_VERSION=26.18.38308.1
+ARG IGDGMM_VERSION=22.10.0
+ARG LEVEL_ZERO_VERSION=1.28.2+u24.04
 
 # oneCCL with Battlemage support.
 ARG ONECCL_VERSION=2021.15.7
@@ -116,7 +111,8 @@ RUN set -eux && \
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 # --- Intel GPU user-mode drivers (UMD) ---
-# Pinned to compute-runtime 26.09 to avoid known IPC/compile/collective issues.
+# Bumped to compute-runtime 26.18: fixes vllm_xpu_kernels.getMemoryInfo always
+# returning free=0 on 26.09 (vllm_xpu_kernels bug exposed by that driver version).
 RUN set -eux && \
     tmp_dir="$(mktemp -d)" && \
     cd "${tmp_dir}" && \
@@ -127,6 +123,7 @@ RUN set -eux && \
     wget -q "https://github.com/intel/compute-runtime/releases/download/${COMPUTE_RUNTIME_VERSION}/libigdgmm12_${IGDGMM_VERSION}_amd64.deb" && \
     wget -q "https://github.com/intel/compute-runtime/releases/download/${COMPUTE_RUNTIME_VERSION}/libze-intel-gpu1_${COMPUTE_RUNTIME_VERSION}-0_amd64.deb" && \
     wget -q "https://github.com/oneapi-src/level-zero/releases/download/v${LEVEL_ZERO_VERSION%%+*}/level-zero_${LEVEL_ZERO_VERSION}_amd64.deb" && \
+    wget -q "https://github.com/oneapi-src/level-zero/releases/download/v${LEVEL_ZERO_VERSION%%+*}/level-zero-devel_${LEVEL_ZERO_VERSION}_amd64.deb" && \
     dpkg -i --force-overwrite ./*.deb && \
     cd / && \
     rm -rf "${tmp_dir}"
@@ -189,11 +186,6 @@ RUN set -eux && uv pip install --no-deps -e .
 # to do or better enhance the triton link with the vllm pytorch for triton-xpu
 RUN uv pip uninstall triton triton-xpu -y 2>/dev/null || true && \
     uv pip install triton-xpu==3.7.1 --extra-index-url https://download.pytorch.org/whl/xpu
-
-# TransferQueue: required by the V1 trainer (verl/trainer/main_ppo.py imports it
-# unconditionally since upstream #6710). Not on PyPI's dependency graph for verl,
-# so install explicitly with --no-deps, mirroring upstream CI workflows.
-RUN uv pip install --no-deps TransferQueue==0.1.8
 
 # --- Runtime defaults / workarounds ---
 ENV CCL_ATL_SHM=${DEFAULT_CCL_ATL_SHM}
