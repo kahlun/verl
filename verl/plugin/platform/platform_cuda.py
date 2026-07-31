@@ -164,6 +164,26 @@ class PlatformCUDA(PlatformBase):
             return None
 
     # ------------------------------------------------------------------
+    # Attention / sequence-packing helpers
+    # ------------------------------------------------------------------
+
+    def get_attention_functions(self) -> tuple[Any, Any, Any, Any]:
+        """Prefer the canonical ``flash_attn`` kernels available on CUDA GPUs.
+
+        ``flash_attn.bert_padding`` is the upstream implementation these helpers
+        are adapted from, so use it directly when the package is installed. If
+        ``flash_attn`` is absent (e.g. a CUDA build without it), fall back to the
+        shape-identical pure-torch/einops implementations from
+        :class:`PlatformBase` (``verl.utils.attention_impl``).
+        """
+        try:
+            from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
+        except ImportError:
+            return super().get_attention_functions()
+
+        return index_first_axis, pad_input, rearrange, unpad_input
+
+    # ------------------------------------------------------------------
     # Profiling helpers
     # ------------------------------------------------------------------
 

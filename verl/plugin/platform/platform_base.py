@@ -205,6 +205,38 @@ class PlatformBase(abc.ABC):
         return  # default no-op
 
     # ------------------------------------------------------------------
+    # Attention / sequence-packing helpers
+    # ------------------------------------------------------------------
+
+    def get_attention_functions(self) -> tuple[Any, Any, Any, Any]:
+        """Return the ``(index_first_axis, pad_input, rearrange, unpad_input)`` helpers.
+
+        These FlashAttention ``bert_padding`` helpers pack/unpack padded batches
+        into the variable-length layout attention kernels expect. Each platform
+        selects the implementation that suits its device so the rest of verl can
+        stay device-agnostic (see :mod:`verl.utils.attention_utils`).
+
+        This default is **hardware-agnostic**: it returns the pure PyTorch +
+        einops implementations from :mod:`verl.utils.attention_impl`, which run
+        unchanged on any torch backend (they contain no fused CUDA kernel and no
+        device-specific op). ``rearrange`` is ``einops.rearrange`` (already a
+        verl dependency).
+
+        We deliberately do **not** use
+        ``transformers.modeling_flash_attention_utils._index_first_axis`` here:
+        it re-flattens ``(batch, seq, ...)`` internally, so for verl's
+        already-flattened ``(total_tokens, feat)`` inputs it would collapse the
+        result to ``(N,)`` instead of ``(N, feat)``.
+
+        Platforms with a device-optimized path (e.g. CUDA's fused ``flash_attn``
+        kernels) override this; accelerators without a native flash-attn build
+        (NPU, XPU, …) reuse this default.
+        """
+        from verl.utils.attention_impl import index_first_axis, pad_input, rearrange, unpad_input
+
+        return index_first_axis, pad_input, rearrange, unpad_input
+
+    # ------------------------------------------------------------------
     # Ray integration
     # ------------------------------------------------------------------
 

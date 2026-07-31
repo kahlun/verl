@@ -74,3 +74,7 @@ class PlatformROCm(PlatformCUDA):
             "RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES",
             "RAY_EXPERIMENTAL_NOSET_ROCR_VISIBLE_DEVICES",
         ]
+
+    # NOTE: get_attention_functions() is intentionally inherited from PlatformCUDA.
+    # ROCm ships a hipified flash_attn (flash_attn.bert_padding works), so the CUDA
+    # path — prefer flash_attn, fall back to transformers/einops — is correct here.

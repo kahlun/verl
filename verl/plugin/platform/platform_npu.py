@@ -175,6 +175,19 @@ class PlatformNPU(PlatformBase):
             raise RuntimeError(f"Error checking IPC support: {e}") from e
 
     # ------------------------------------------------------------------
+    # Attention / sequence-packing helpers
+    # ------------------------------------------------------------------
+
+    def get_attention_functions(self) -> tuple[Any, Any, Any, Any]:
+        """NPU has no ``flash_attn.bert_padding`` build, so use the
+        device-agnostic transformers/einops helpers from :class:`PlatformBase`.
+
+        transformers routes flash-attn 2/3/4 (and the Ascend fused kernels)
+        internally, so verl does not reimplement that dispatch here.
+        """
+        return super().get_attention_functions()
+
+    # ------------------------------------------------------------------
     # Profiling helpers
     # ------------------------------------------------------------------
 

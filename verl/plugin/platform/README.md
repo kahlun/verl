@@ -69,6 +69,25 @@ Platforms can override `apply_model_patches(model_type)` to apply device-specifi
 monkey patches (e.g. replacing RMSNorm/RoPE with NPU-optimized ops). The engine
 calls this hook during initialization, before model construction.
 
+### Attention helpers are platform-dispatched
+
+The FlashAttention `bert_padding` helpers (`index_first_axis`, `pad_input`,
+`rearrange`, `unpad_input`) that pack/unpack padded batches are selected per
+device via `get_attention_functions()`. The `PlatformBase` default is
+hardware-agnostic — it returns the pure PyTorch + einops implementations from
+`verl.utils.attention_impl`, which run unchanged on any torch backend (no fused
+CUDA kernel, no device-specific op). `PlatformCUDA` overrides it to prefer the
+canonical `flash_attn.bert_padding` kernels when installed, falling back to that
+same shape-identical default (and `PlatformROCm` inherits this); accelerators
+without a native flash-attn build (NPU, XPU, …) reuse the default directly.
+Callers reach these through `verl.utils.attention_utils`, which is a thin
+facade over `get_platform().get_attention_functions()`.
+
+> Note: the default intentionally avoids
+> `transformers.modeling_flash_attention_utils._index_first_axis`, which
+> re-flattens `(batch, seq, ...)` internally and would collapse verl's
+> already-flattened `(total_tokens, feat)` inputs to `(N,)` instead of `(N, feat)`.
+
 ## Adding a New Chip / Accelerator
 
 New hardware backends are added via **`@PlatformRegistry.register()`** — no changes to
@@ -227,6 +246,7 @@ VERL_USE_EXTERNAL_PLUGINS=pkg1,pkg2  # only load named entry_points
 | **IPC** | `is_ipc_supported()` | Whether IPC tensor sharing is supported |
 | **Rollout** | `rollout_env_vars()` | Env vars for rollout engine launch |
 | **Model Patches** | `apply_model_patches(model_type)` | Apply platform-specific model monkey patches |
+| **Attention** | `get_attention_functions()` | `(index_first_axis, pad_input, rearrange, unpad_input)` for the device |
 | **Profiling** | `nvtx_range(msg)` | Context manager for profiler ranges |
 | | `profiler_start()` | Start device profiler |
 | | `profiler_stop()` | Stop device profiler |
