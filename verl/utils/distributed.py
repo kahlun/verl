@@ -29,7 +29,6 @@ from verl.utils.device import (
     get_resource_name,
     get_torch_device,
     is_npu_available,
-    is_xpu_available,
 )
 from verl.utils.net_utils import is_ipv6
 
@@ -87,12 +86,8 @@ def destroy_global_process_group():
 
 
 def all_reduce_avg(tensor, group=None):
-    """All-reduce with AVG, using SUM + division on backends that lack ReduceOp.AVG (e.g. xccl/oneCCL)."""
-    if is_xpu_available:
-        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.SUM, group=group)
-        tensor /= torch.distributed.get_world_size(group)
-    else:
-        torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.AVG, group=group)
+    """All-reduce with AVG reduction."""
+    torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.AVG, group=group)
     return tensor
 
 

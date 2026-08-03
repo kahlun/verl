@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# verl on Intel GPU 
+# verl on Intel GPU
 #
 # Design goals:
 # - Match vLLM's Intel GPU container workflow (DLE base + uv + oneCCL setup).
@@ -25,22 +25,22 @@
 #   docker run --rm --device /dev/dri --group-add ${RENDER_GID} verl-intel-gpu:latest \
 #     python3 -c "import torch; print(torch.__version__); print(torch.xpu.is_available()); print(torch.xpu.device_count())"
 
-# Base pinned to 2025.3.3 / ubuntu24.04 DLE on purpose. vLLM v0.26.0's
-# requirements/xpu.txt pins torch==2.12.0, whose wheel bundles its own matched
-# SYCL/UR runtime (pip pkg intel-sycl-rt==2025.3.2, libsycl.so.8, libur_loader
-# v0.12.0). The 2026.1.0 base ships a newer system SYCL/UR (libsycl.so.9,
-# newer libur_loader) at $ONEAPI_ROOT/compiler/latest — triton-xpu's driver
-# (triton/backends/intel/driver.py: find_sycl()) hardcodes searching there
-# whenever `icpx` is on PATH or $ONEAPI_ROOT is set, ignoring torch's own
-# bundled runtime. Two SYCL/UR generations end up loaded in one process ->
-# `sycl::exception: Backends mismatch` -> native SIGABRT on first triton-xpu
-# driver init (reproduced 8/8, not flaky). Staying on 2025.3.3 keeps system
-# and torch-bundled SYCL/UR at the same generation, side-stepping the bug
-# entirely. Bump back to 2026.1+ only once vLLM ships a torch pin built
-# against a 2026.x oneAPI runtime (i.e. vLLM upgrades past v0.26.0's
-# torch==2.12.0 pin) — otherwise re-apply the PATH/ONEAPI_ROOT workaround
-# documented in that vLLM version's own Dockerfile variant instead.
-FROM intel/deep-learning-essentials:2025.3.3-0-devel-ubuntu24.04
+# Base: DLE 2026.1.0 / ubuntu24.04. UBUNTU flavor is load-bearing — the 2026.1
+# ubuntu26.04 variant SIGSEGVs on torch init (glibc/SYCL ABI mismatch on that
+# beta distro). ubuntu24.04 is stable and ships python3.12-dev as an apt package,
+# which the vLLM CMake build requires.
+#
+# oneCCL: intentionally NOT installed separately. The 2026.1.0 DLE base already
+# ships a torch-2.13-compatible oneCCL (Gold-2022.1.0, linked against the base's
+# libsycl.so.9) at /opt/intel/oneapi/ccl/2022.1, and bakes CCL_ROOT,
+# LD_LIBRARY_PATH, and CMAKE_PREFIX_PATH (lib/cmake/oneCCL) into the image ENV
+# with no sourcing required. The torch 2.13.0+xpu wheel also bundles its own
+# oneCCL, but the base's 2022.1.0 takes precedence via LD_LIBRARY_PATH and is
+# the one torch-xpu-ops links against at wheel-build time — so they match.
+# The old Battlemage oneCCL 2021.15.7 offline bundle is removed: it was built
+# for an older SYCL ABI, torch never linked it anyway, and its /root/.bashrc
+# sourcing + ccl/latest symlink override actively shadowed the base's good env.
+FROM intel/deep-learning-essentials:2026.1.0-devel-ubuntu24.04
 
 LABEL org.opencontainers.image.title="verl-intel-gpu"
 LABEL org.opencontainers.image.description="verl development image for Intel GPU"
@@ -48,10 +48,14 @@ LABEL org.opencontainers.image.vendor="verl"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
-ARG VLLM_VERSION=v0.26.0
+
+# vLLM pinned to the commit that bumped XPU to torch==2.13.0 + kernels 0.1.12.
+# No stable tag covers this yet (v0.26.0 = torch 2.12.0; v0.27.0 not released).
+# Update to a tag once vLLM cuts a release from main past this commit.
+ARG VLLM_COMMIT=5b29c958c713d367c7caf9313529d4fb2dd6b762
 
 # torch version is intentionally not pinned here. vLLM's requirements/xpu.txt
-# owns the tested torch+xpu pairing for each vLLM release.
+# owns the tested torch+xpu pairing for each vLLM commit.
 ARG PIP_INDEX_URL="https://download.pytorch.org/whl/xpu"
 ARG PIP_EXTRA_INDEX_URL="https://pypi.org/simple"
 
@@ -62,16 +66,6 @@ ARG COMPUTE_RUNTIME_VERSION=26.18.38308.1
 ARG IGDGMM_VERSION=22.10.0
 ARG LEVEL_ZERO_VERSION=1.28.2+u24.04
 
-# oneCCL with Battlemage support.
-ARG ONECCL_VERSION=2021.15.7
-ARG ONECCL_INSTALLER="intel-oneccl-2021.15.7.8_offline.sh"
-# oneCCL install tree series used for env and /latest symlink.
-ARG ONECCL_SERIES=2021.15
-
-# Runtime defaults. Keep configurable because some values are temporary
-# workarounds and may be removed after upstream fixes (for example PyTorch 2.13+).
-ARG DEFAULT_CCL_ATL_SHM=1
-ARG DEFAULT_CCL_BUFFER_CACHE=0
 ARG DEFAULT_NO_PROXY=127.0.0.1,localhost,::1
 
 WORKDIR /workspace
@@ -128,15 +122,9 @@ RUN set -eux && \
     cd / && \
     rm -rf "${tmp_dir}"
 
-# --- oneCCL setup ---
-RUN set -eux && \
-    wget -q "https://github.com/uxlfoundation/oneCCL/releases/download/${ONECCL_VERSION}/${ONECCL_INSTALLER}" && \
-    bash "${ONECCL_INSTALLER}" -a --silent --eula accept && \
-    rm -f "${ONECCL_INSTALLER}" && \
-    echo "source /opt/intel/oneapi/setvars.sh --force" >> /root/.bashrc && \
-    echo "source /opt/intel/oneapi/ccl/${ONECCL_SERIES}/env/vars.sh --force" >> /root/.bashrc && \
-    rm -f /opt/intel/oneapi/ccl/latest && \
-    ln -s /opt/intel/oneapi/ccl/${ONECCL_SERIES} /opt/intel/oneapi/ccl/latest
+# No oneAPI/oneCCL sourcing needed: the 2026.1.0 base bakes CCL_ROOT,
+# LD_LIBRARY_PATH and CMAKE_PREFIX_PATH (ccl/2022.1/lib/cmake/oneCCL) into the
+# image ENV, so vLLM's XPU build finds oneCCL headers/cmake directly.
 
 ENV UV_HTTP_TIMEOUT=500
 # XPU index is primary, PyPI is extra. This avoids pulling CPU-only torch from PyPI.
@@ -147,28 +135,22 @@ ENV UV_LINK_MODE="copy"
 ENV VLLM_TARGET_DEVICE="xpu"
 
 # --- Layer 1: vLLM + torch Intel GPU ---
-# oneAPI vars scripts may reference optional unset vars; avoid nounset here.
-#
-# vLLM is fetched at the pinned release tag (${VLLM_VERSION}), which already
-# carries all the XPU sleep-mode machinery from PR #37149 (device_allocator/
-# xpumem.py, the XpuMemAllocator analogue of CUDA's CuMemAllocator, and the
-# xpumem kernels wiring) AND enables it in the platform capability check — so
-# vLLM source is used verbatim, no patching. Sleep mode also needs the
-# vllm_xpu_kernels xpumem backend + xpu_memcpy_sync op, both provided by the
-# kernels wheel in requirements/xpu.txt.
-# Fetching refs/tags/<tag> (not a bare commit) creates a local tag ref, so
-# setuptools-scm's `git describe` resolves the version naturally — no
-# SETUPTOOLS_SCM_PRETEND_VERSION hack needed.
+# vLLM is fetched at the pinned commit (${VLLM_COMMIT}), which carries:
+#   - torch==2.13.0 + vllm_xpu_kernels 0.1.12 in requirements/xpu.txt
+#   - XPU sleep-mode (device_allocator/xpumem.py + xpumem kernels wiring)
+# We fetch the commit directly and set SETUPTOOLS_SCM_PRETEND_VERSION so
+# setuptools-scm can resolve a version string without a tag on this commit.
 RUN set -ex && \
     git init /opt/vllm && \
     cd /opt/vllm && \
     git remote add origin https://github.com/vllm-project/vllm.git && \
-    git fetch --depth 1 origin "refs/tags/${VLLM_VERSION}:refs/tags/${VLLM_VERSION}" && \
-    git checkout "${VLLM_VERSION}" && \
-    source /opt/intel/oneapi/setvars.sh --force && \
-    source /opt/intel/oneapi/ccl/${ONECCL_SERIES}/env/vars.sh --force && \
+    git fetch --depth 1 origin "${VLLM_COMMIT}" && \
+    git checkout FETCH_HEAD && \
+    SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0.dev0 \
     uv pip install --upgrade pip setuptools wheel && \
+    SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0.dev0 \
     uv pip install -r requirements/xpu.txt && \
+    SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0.dev0 \
     uv pip install --no-build-isolation .
 
 # --- Layer 2: verl Python dependencies ---
@@ -183,13 +165,8 @@ RUN set -eux && uv pip install --no-deps -e .
 # xgrammar (via vLLM's common.txt) pulls in plain triton as a transitive dep.
 # Plain triton is for NVIDIA only — replace with triton-xpu per official vLLM XPU docs.
 # See: https://docs.vllm.ai/en/latest/getting_started/xpu-installation.html
-# to do or better enhance the triton link with the vllm pytorch for triton-xpu
 RUN uv pip uninstall triton triton-xpu -y 2>/dev/null || true && \
     uv pip install triton-xpu==3.7.1 --extra-index-url https://download.pytorch.org/whl/xpu
-
-# --- Runtime defaults / workarounds ---
-ENV CCL_ATL_SHM=${DEFAULT_CCL_ATL_SHM}
-ENV CCL_BUFFER_CACHE=${DEFAULT_CCL_BUFFER_CACHE}
 
 # Ensure Ray internal localhost traffic is never routed through proxies.
 ENV no_proxy=${DEFAULT_NO_PROXY}
@@ -205,4 +182,4 @@ COPY docker/intel_gpu/verl-entrypoint.sh /usr/local/bin/verl-entrypoint.sh
 RUN chmod +x /usr/local/bin/verl-entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/verl-entrypoint.sh"]
-CMD ["bash", "-c", "source /root/.bashrc && exec bash"]
+CMD ["bash", "-c", "exec bash"]

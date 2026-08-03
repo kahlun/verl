@@ -9,9 +9,6 @@
 #   - vLLM >= 0.17 with XPU platform support
 #   - oneCCL for xccl distributed backend
 #
-# Known workarounds (pre-DLE 2026.0, to be removed after PyTorch 2.13 release):
-#   CCL_ATL_SHM=1 CCL_BUFFER_CACHE=0  (Level Zero IPC bug on PCIe cards)
-#
 # Usage:
 #   NUM_GPUS=2 bash tests/special_intel_gpu/run_grpo_intel_gpu.sh
 
@@ -26,14 +23,6 @@ if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
     # shellcheck disable=SC1091
     source "${SCRIPT_DIR}/intel_gpu_env.sh"
     configure_xpu_runtime vllm
-else
-    echo "WARN: ${SCRIPT_DIR}/intel_gpu_env.sh not found; using built-in fallback env." >&2
-    export CCL_ATL_SHM="${CCL_ATL_SHM:-1}"
-    export CCL_BUFFER_CACHE="${CCL_BUFFER_CACHE:-0}"
-    export CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK="${CCL_TOPO_FABRIC_VERTEX_CONNECTION_CHECK:-0}"
-    export CCL_TOPO_ALGO="${CCL_TOPO_ALGO:-0}"
-    # export RAY_NUM_PRESTART_PYTHON_WORKERS="${RAY_NUM_PRESTART_PYTHON_WORKERS:-0}"
-    # export RAY_memory_monitor_refresh_ms="${RAY_memory_monitor_refresh_ms:-0}"
 fi
 
 python3 -m verl.trainer.main_ppo \

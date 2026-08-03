@@ -1,20 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-if [ -f /root/.bashrc ]; then
-    # shellcheck disable=SC1091
-    source /root/.bashrc >/dev/null 2>&1 || true
-fi
-
-if [ -f /opt/intel/oneapi/setvars.sh ]; then
-    # shellcheck disable=SC1091
-    source /opt/intel/oneapi/setvars.sh --force >/dev/null 2>&1 || true
-fi
-
-if [ -f /opt/intel/oneapi/ccl/latest/env/vars.sh ]; then
-    # shellcheck disable=SC1091
-    source /opt/intel/oneapi/ccl/latest/env/vars.sh --force >/dev/null 2>&1 || true
-fi
+# The DLE 2026.1.0 base bakes CCL_ROOT, LD_LIBRARY_PATH, and CMAKE_PREFIX_PATH
+# for oneCCL 2022.1 directly into the image ENV — no sourcing needed at runtime.
 
 if [ -f "${VERL_PRIMARY_ENV_FILE}" ]; then
     set -a
