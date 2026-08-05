@@ -18,13 +18,6 @@ NUM_GPUS=${NUM_GPUS:-2}
 MODEL_ID=${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/intel_gpu_env.sh"
-    configure_xpu_runtime vllm
-fi
-
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files=$HOME/data/gsm8k/train.parquet \
@@ -52,6 +45,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=True \
     actor_rollout_ref.rollout.free_cache_engine=False \
+    +actor_rollout_ref.rollout.enable_sleep_mode=False \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.4 \

@@ -18,13 +18,6 @@ MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 DATA_PATH=${DATA_PATH:-$HOME/data/gsm8k/test.parquet}
 OUTPUT_PATH=${OUTPUT_PATH:-$HOME/data/gsm8k/qwen2_5_05b_intel_gpu_gen_test.parquet}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/intel_gpu_env.sh"
-    configure_xpu_runtime vllm
-fi
-
 python3 -m verl.trainer.main_generation_server \
     trainer.nnodes=1 \
     trainer.n_gpus_per_node=${NUM_GPUS} \

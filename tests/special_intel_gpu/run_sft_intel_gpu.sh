@@ -10,13 +10,6 @@ NUM_GPUS=${NUM_GPUS:-4}
 MODEL_ID=${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/intel_gpu_env.sh"
-    configure_xpu_runtime sft
-fi
-
 # Use python -m torch.distributed.run instead of torchrun so the correct
 # Python interpreter is used regardless of PATH (e.g. inside conda envs).
 PYTHON3=$(python3 -c "import torch; import sys; print(sys.executable)" 2>/dev/null || command -v python3)

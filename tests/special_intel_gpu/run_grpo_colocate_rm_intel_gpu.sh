@@ -26,13 +26,6 @@ MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 RM_MODEL_ID=${RM_MODEL_ID:-Skywork/Skywork-Reward-V2-Llama-3.2-1B}
 RM_MODEL_PATH=${RM_MODEL_PATH:-${RM_MODEL_ID}}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/intel_gpu_env.sh"
-    configure_xpu_runtime vllm
-fi
-
 adv_estimator=grpo
 n_resp_per_prompt=4
 num_reward_workers=${NUM_REWARD_WORKERS:-4}

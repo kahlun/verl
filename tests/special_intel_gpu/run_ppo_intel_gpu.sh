@@ -13,13 +13,6 @@ NUM_GPUS=${NUM_GPUS:-4}
 MODEL_ID=${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/intel_gpu_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/intel_gpu_env.sh"
-    configure_xpu_runtime vllm
-fi
-
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=gae \
     data.train_files=$HOME/data/gsm8k/train.parquet \

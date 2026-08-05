@@ -105,8 +105,8 @@ RUN set -eux && \
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 # --- Intel GPU user-mode drivers (UMD) ---
-# Bumped to compute-runtime 26.18: fixes vllm_xpu_kernels.getMemoryInfo always
-# returning free=0 on 26.09 (vllm_xpu_kernels bug exposed by that driver version).
+# Bumped to compute-runtime 26.18: fixes vllm's request_memory reading free=0 on
+# device xpu:0 with 26.09 (getMemoryInfo bug). 26.18 reports free memory correctly.
 RUN set -eux && \
     tmp_dir="$(mktemp -d)" && \
     cd "${tmp_dir}" && \

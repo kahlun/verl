@@ -85,12 +85,6 @@ def destroy_global_process_group():
         torch.distributed.destroy_process_group()
 
 
-def all_reduce_avg(tensor, group=None):
-    """All-reduce with AVG reduction."""
-    torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.AVG, group=group)
-    return tensor
-
-
 def initialize_global_process_group_ray(timeout_second=None, backend=None):
     # in current ray environment, LOCAL_RANK is always zero.
 
