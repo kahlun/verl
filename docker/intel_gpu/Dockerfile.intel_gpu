@@ -172,14 +172,4 @@ RUN uv pip uninstall triton triton-xpu -y 2>/dev/null || true && \
 ENV no_proxy=${DEFAULT_NO_PROXY}
 ENV NO_PROXY=${DEFAULT_NO_PROXY}
 
-# Runtime env precedence:
-# 1) /workspace/.env (workspace-local)
-# 2) /workspace/verl/.env (repo-local fallback)
-ENV VERL_PRIMARY_ENV_FILE=/workspace/.env
-ENV VERL_FALLBACK_ENV_FILE=/workspace/verl/.env
-
-COPY docker/intel_gpu/verl-entrypoint.sh /usr/local/bin/verl-entrypoint.sh
-RUN chmod +x /usr/local/bin/verl-entrypoint.sh
-
-ENTRYPOINT ["/usr/local/bin/verl-entrypoint.sh"]
 CMD ["bash", "-c", "exec bash"]

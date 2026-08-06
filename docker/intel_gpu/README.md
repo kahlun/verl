@@ -32,18 +32,17 @@ docker run -it --rm \
   verl-intel-gpu:latest
 ```
 
-### Runtime env override (recommended)
+### Runtime env override
 
-For machine-specific or temporary settings (proxy, oneCCL workarounds, debug flags),
-prefer explicit runtime injection via env file instead of baking values into the image.
-
-```bash
-# Start from the tracked template and customize locally.
-cp docker/intel_gpu/.env.example docker/intel_gpu/.env
-```
+For machine-specific or temporary settings (proxy, debug flags), inject them
+explicitly at `docker run` time with `-e`/`--env-file` instead of baking values
+into the image:
 
 ```bash
-docker run -it --rm   --device /dev/dri --group-add ${RENDER_GID}   --shm-size 16g   -v $HOME/data:/root/data   verl-intel-gpu:latest
+docker run -it --rm --device /dev/dri --group-add ${RENDER_GID} \
+  --shm-size 16g -v $HOME/data:/root/data \
+  -e CCL_ATL_SHM=1 \
+  verl-intel-gpu:latest
 ```
 
 ### Run e2e tests inside the container
