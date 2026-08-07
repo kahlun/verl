@@ -17,11 +17,12 @@ set -x
 NUM_GPUS=${NUM_GPUS:-2}
 MODEL_ID=${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PATH=${MODEL_PATH:-${MODEL_ID}}
+DATA_DIR=${DATA_DIR:-$HOME/data}
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_files=$HOME/data/gsm8k/train.parquet \
-    data.val_files=$HOME/data/gsm8k/test.parquet \
+    data.train_files=$DATA_DIR/gsm8k/train.parquet \
+    data.val_files=$DATA_DIR/gsm8k/test.parquet \
     data.train_batch_size=16 \
     data.max_prompt_length=512 \
     data.max_response_length=128 \
