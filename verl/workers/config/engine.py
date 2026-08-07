@@ -175,6 +175,7 @@ class McoreEngineConfig(EngineConfig):
         override_ddp_config (dict[str, Any]): Override configuration for DDP.
         override_transformer_config (dict[str, Any]): Override configuration for transformer.
         use_mbridge (bool): Whether to use MBridge for communication.
+        vanilla_mbridge (bool): Whether to use the deprecated legacy mbridge backend instead of Megatron-Bridge.
         use_megatron_fsdp (bool): Whether to use Megatron-FSDP (Zero-3 sharding).
         dtype (str): Mixed precision training param dtype, default "bfloat16"
     """
@@ -204,7 +205,7 @@ class McoreEngineConfig(EngineConfig):
     override_transformer_config: dict[str, Any] = field(default_factory=dict)
     override_mcore_model_config: dict[str, Any] = field(default_factory=dict)
     use_mbridge: bool = True
-    vanilla_mbridge: bool = True
+    vanilla_mbridge: bool = False
     use_megatron_fsdp: bool = False
     strategy: str = "megatron"
     qat: QATEngineConfig = field(default_factory=QATEngineConfig)
@@ -214,6 +215,13 @@ class McoreEngineConfig(EngineConfig):
         """config validation logics go here"""
         assert self.strategy == "megatron"
         assert self.dtype in ["bfloat16", "float16"], f"dtype {self.dtype} not supported"
+        if self.vanilla_mbridge:
+            warnings.warn(
+                "The legacy mbridge backend selected by `vanilla_mbridge=True` is deprecated and will be removed "
+                "in a future release. Use Megatron-Bridge by setting `vanilla_mbridge=False` or removing the option.",
+                FutureWarning,
+                stacklevel=2,
+            )
         if self.tensor_model_parallel_size == 1:
             warnings.warn("set sequence parallel to false as TP size is 1", stacklevel=2)
             self.sequence_parallel = False
@@ -241,6 +249,19 @@ class FSDPEngineConfig(EngineConfig):
             debugging.
         mixed_precision (Optional[dict[str, Any]]): Mixed precision configuration for FSDP, default None
         dtype (str): Mixed precision training param dtype, default "bfloat16"
+        pad_to_length (bool): Round every packed micro-batch up to a multiple of
+            ``pad_to_length_bucket`` tokens, so the packed shape only takes a handful of distinct
+            values instead of a new one per micro-batch, which avoids repeated kernel
+            recompilation / autotuning. Requires ``use_remove_padding=True``. Pad tokens carry
+            their own ``position_ids`` segment and are stripped before the outputs reach the loss,
+            but they still cost a full forward pass. default False
+        pad_to_length_bucket (int): Padding granularity in tokens, on the *global* packed sequence
+            (before the sequence-parallel split). Rounded up internally to a multiple of
+            ``ulysses_sequence_parallel_size``. Smaller values waste fewer tokens per micro-batch
+            but admit more distinct shapes; setting it to the dynamic-batching token budget
+            (``max_token_len_per_gpu * ulysses_sequence_parallel_size``) collapses every
+            within-budget micro-batch onto a single shape. Only read when ``pad_to_length=True``.
+            default 1024
         qat (QATEngineConfig): QAT configuration, default disabled
     """
 
@@ -262,6 +283,8 @@ class FSDPEngineConfig(EngineConfig):
     use_torch_compile: bool = True
     entropy_checkpointing: bool = False
     strategy: str = "fsdp"
+    pad_to_length: bool = False
+    pad_to_length_bucket: int = 1024
     qat: QATEngineConfig = field(default_factory=QATEngineConfig)
 
     def __post_init__(self):
@@ -330,6 +353,21 @@ class VeOmniEngineConfig(EngineConfig):
             in distributed training. Important: this will negatively impact performance, so only use it for
             debugging.
         mixed_precision (Optional[dict[str, Any]]): Mixed precision configuration for FSDP, default None
+        pad_to_length (bool): Round every packed micro-batch up to a multiple of
+            ``pad_to_length_bucket`` tokens, so the packed shape only takes a handful of distinct
+            values instead of a new one per micro-batch, which avoids repeated kernel
+            recompilation / autotuning (the verl counterpart of VeOmni's ``train.pad_to_length``,
+            which pads to a single length because its dyn-bsz collator caps the packed length --
+            verl's workload-balanced ``rearrange_micro_batches`` does not, hence the buckets).
+            Requires ``use_remove_padding=True``. Pad tokens carry their own ``position_ids``
+            segment and are stripped before the outputs reach the loss, but they still cost a full
+            forward pass. default False
+        pad_to_length_bucket (int): Padding granularity in tokens, on the *global* packed sequence
+            (before the sequence-parallel split). Rounded up internally to a multiple of
+            ``ulysses_parallel_size``. Smaller values waste fewer tokens per micro-batch but admit
+            more distinct shapes; setting it to the dynamic-batching token budget
+            (``max_token_len_per_gpu * ulysses_parallel_size``) collapses every within-budget
+            micro-batch onto a single shape. Only read when ``pad_to_length=True``. default 1024
         rms_norm_gated_implementation (str): Gated RMSNorm implementation (Qwen3.5 GatedDeltaNet
             ``self.norm``). ``"fla"`` uses fla.modules.FusedRMSNormGated (requires flash-linear-attention,
             GPU). ``"eager"`` (default) uses the HuggingFace Qwen3_5RMSNormGated. Qwen3.5 has no NPU
@@ -383,9 +421,14 @@ class VeOmniEngineConfig(EngineConfig):
     rms_norm_gated_implementation: str = "eager"
     causal_conv1d_implementation: str = "eager"
     chunk_gated_delta_rule_implementation: str = "eager"
+    dsa_indexer_implementation: str = "eager"
+    dsa_attention_implementation: str = "eager"
+    mhc_implementation: str = "eager"
     force_use_huggingface: bool = False
     activation_gpu_limit: float = 0.0
     basic_modules: Optional[list[str]] = field(default_factory=list)
+    pad_to_length: bool = False
+    pad_to_length_bucket: int = 1024
 
     def __post_init__(self):
         super().__post_init__()
