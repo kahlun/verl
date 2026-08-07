@@ -66,8 +66,6 @@ ARG COMPUTE_RUNTIME_VERSION=26.18.38308.1
 ARG IGDGMM_VERSION=22.10.0
 ARG LEVEL_ZERO_VERSION=1.28.2+u24.04
 
-ARG DEFAULT_NO_PROXY=127.0.0.1,localhost,::1
-
 WORKDIR /workspace
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -167,9 +165,5 @@ RUN set -eux && uv pip install --no-deps -e .
 # See: https://docs.vllm.ai/en/latest/getting_started/xpu-installation.html
 RUN uv pip uninstall triton triton-xpu -y 2>/dev/null || true && \
     uv pip install triton-xpu==3.7.1 --extra-index-url https://download.pytorch.org/whl/xpu
-
-# Ensure Ray internal localhost traffic is never routed through proxies.
-ENV no_proxy=${DEFAULT_NO_PROXY}
-ENV NO_PROXY=${DEFAULT_NO_PROXY}
 
 CMD ["bash", "-c", "exec bash"]

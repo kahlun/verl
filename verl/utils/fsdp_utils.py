@@ -594,6 +594,14 @@ def apply_fsdp2(model, fsdp_kwargs, config):
             if next_targets and hasattr(m, "set_modules_to_forward_prefetch"):
                 m.set_modules_to_forward_prefetch(next_targets)
 
+    if get_device_name() == "xpu":
+        if not hasattr(model, "set_force_sum_reduction_for_comms"):
+            raise RuntimeError(
+                "FSDP2 on Intel XPU requires set_force_sum_reduction_for_comms() to avoid unsupported "
+                "oneCCL ReduceOp.AVG reduce_scatter operations."
+            )
+        model.set_force_sum_reduction_for_comms(True)
+
 
 def get_shard_placement_fn(fsdp_size):
     """Choose the dimension that can divide fsdp_size to avoid padding"""
