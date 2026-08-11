@@ -1,7 +1,7 @@
 # Requirements for Intel XPU
 #
 # PyTorch with XPU support is installed by docker/intel_gpu/Dockerfile.intel_gpu, NOT here.
-# Version must match vLLM XPU requirements (vLLM commit 5b29c958 pins torch==2.13.0+xpu).
+# Version must match vLLM XPU requirements (vLLM v0.27.0 pins torch==2.13.0+xpu).
 # Pinned here as a hard backstop so uv/pip cannot drift to a CUDA or CPU wheel.
 # Do NOT remove this pin.
 torch==2.13.0+xpu

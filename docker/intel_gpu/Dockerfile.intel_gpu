@@ -49,10 +49,12 @@ LABEL org.opencontainers.image.vendor="verl"
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
 
-# vLLM pinned to the commit that bumped XPU to torch==2.13.0 + kernels 0.1.12.
-# No stable tag covers this yet (v0.26.0 = torch 2.12.0; v0.27.0 not released).
-# Update to a tag once vLLM cuts a release from main past this commit.
-ARG VLLM_COMMIT=5b29c958c713d367c7caf9313529d4fb2dd6b762
+# vLLM pinned to the v0.27.0 release tag — the first stable release that carries
+# the XPU torch==2.13.0 + vllm_xpu_kernels 0.1.12 pairing. requirements/xpu.txt at
+# v0.27.0 is byte-identical to the previously-pinned commit 5b29c958 (which is
+# v0.27.0rc1~173, i.e. an ancestor of this tag), so the torch/oneCCL/driver stack
+# below is unchanged — this just swaps the commit pin for the stable tag.
+ARG VLLM_VERSION=v0.27.0
 
 # torch version is intentionally not pinned here. vLLM's requirements/xpu.txt
 # owns the tested torch+xpu pairing for each vLLM commit.
@@ -133,22 +135,23 @@ ENV UV_LINK_MODE="copy"
 ENV VLLM_TARGET_DEVICE="xpu"
 
 # --- Layer 1: vLLM + torch Intel GPU ---
-# vLLM is fetched at the pinned commit (${VLLM_COMMIT}), which carries:
+# vLLM is fetched at the pinned release tag (${VLLM_VERSION}), which carries:
 #   - torch==2.13.0 + vllm_xpu_kernels 0.1.12 in requirements/xpu.txt
 #   - XPU sleep-mode (device_allocator/xpumem.py + xpumem kernels wiring)
-# We fetch the commit directly and set SETUPTOOLS_SCM_PRETEND_VERSION so
-# setuptools-scm can resolve a version string without a tag on this commit.
+# We fetch the tag with its history so setuptools-scm resolves the version from
+# the annotated tag directly (SETUPTOOLS_SCM_PRETEND_VERSION derives it from the
+# tag name as a backstop for the shallow --depth 1 fetch).
 RUN set -ex && \
     git init /opt/vllm && \
     cd /opt/vllm && \
     git remote add origin https://github.com/vllm-project/vllm.git && \
-    git fetch --depth 1 origin "${VLLM_COMMIT}" && \
-    git checkout FETCH_HEAD && \
-    SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0.dev0 \
+    git fetch --depth 1 origin tag "${VLLM_VERSION}" && \
+    git checkout "${VLLM_VERSION}" && \
+    SETUPTOOLS_SCM_PRETEND_VERSION="${VLLM_VERSION#v}" \
     uv pip install --upgrade pip setuptools wheel && \
-    SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0.dev0 \
+    SETUPTOOLS_SCM_PRETEND_VERSION="${VLLM_VERSION#v}" \
     uv pip install -r requirements/xpu.txt && \
-    SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0.dev0 \
+    SETUPTOOLS_SCM_PRETEND_VERSION="${VLLM_VERSION#v}" \
     uv pip install --no-build-isolation .
 
 # --- Layer 2: verl Python dependencies ---
