@@ -585,6 +585,11 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             self.ref = self.ref_worker_cls(config=ref_training_config)
             self.ref.reset()
             self.set_dispatch_collect(mesh_name="ref", **self.ref.get_dispatch_collect())
+            # Flush the device allocator cache left by ref FSDP2 init.
+            # FSDP2 temporarily moves the full model to GPU during _move_states_to_device
+            # before sharding; the cache is not returned to the OS automatically, so the
+            # subsequent actor init peaks on top of it and OOMs on memory-constrained devices.
+            aggressive_empty_cache(force_sync=True)
 
         # 2. build actor model
         if "actor" in self.role:
