@@ -98,7 +98,7 @@ class PlatformXPU(PlatformBase):
 
     def communication_backend_name(self) -> str:
         # oneCCL collective backend for Intel GPU.
-        return "xccl"
+        return "cpu:gloo,xpu:xccl"
 
     def visible_devices_envvar(self) -> str:
         # bare IDs work; ONEAPI_DEVICE_SELECTOR needs a level_zero: prefix.

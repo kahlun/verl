@@ -213,7 +213,7 @@ class BucketedWeightSender:
             self.shm = None
         gc.collect()
         _dev = get_torch_device()
-        if is_support_ipc() and hasattr(_dev, "ipc_collect"):
+        if is_support_ipc():
             _dev.ipc_collect()
         _dev.empty_cache()
 
@@ -339,6 +339,6 @@ class BucketedWeightReceiver:
             self.shm = None
         gc.collect()
         _dev = get_torch_device()
-        if is_support_ipc() and hasattr(_dev, "ipc_collect"):
+        if is_support_ipc():
             _dev.ipc_collect()
         _dev.empty_cache()

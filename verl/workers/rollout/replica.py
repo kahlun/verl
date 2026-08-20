@@ -208,7 +208,6 @@ class RolloutReplica(ABC):
         self.resource_pool = resource_pool_manager.resource_pool_dict[resource_pool_name]
 
         # create worker group for this rollout
-        use_gpu = self.rollout_worker_use_gpu()
         if self.is_reward_model:
             name_prefix = f"rollout_reward_standalone_{self.replica_rank}{self.name_suffix}"
         elif self.is_teacher_model:
@@ -220,7 +219,7 @@ class RolloutReplica(ABC):
             ray_cls_with_init=self.get_ray_class_with_init_args(),
             bin_pack=False,
             name_prefix=name_prefix,
-            use_gpu=use_gpu,
+            use_gpu=True,
             device_name=get_device_name(),
         )
         self.workers = worker_group.workers
