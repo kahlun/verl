@@ -91,6 +91,11 @@ class FSDPEngine(BaseEngine):
     Supports model sharding, activation/optimizer offloading, LoRA, and sequence parallelism.
     """
 
+    # Class-level defaults let subclasses/tests that bypass __init__ (e.g. via __new__)
+    # still read these attributes safely. __init__ overrides them from engine_config.
+    pad_to_length: bool = False
+    pad_to_length_bucket: int = 1024
+
     def __init__(
         self,
         model_config: HFModelConfig,
