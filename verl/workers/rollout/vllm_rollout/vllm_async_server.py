@@ -79,7 +79,6 @@ _GATE_BARRIER_TIMEOUT_S = 60.0
 if os.getenv("VERL_USE_GPT_OSS", "0") == "1":
     get_encoding()
 
-
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
@@ -478,6 +477,7 @@ class vLLMHttpServer:
 
     async def run_server(self, args: argparse.Namespace):
         engine_args = AsyncEngineArgs.from_cli_args(args)
+
         usage_context = UsageContext.OPENAI_API_SERVER
         vllm_config = engine_args.create_engine_config(usage_context=usage_context)
         vllm_config.parallel_config.data_parallel_master_port = self._dp_master_port

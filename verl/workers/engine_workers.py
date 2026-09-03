@@ -194,7 +194,11 @@ class TrainingWorker(Worker, DistProfilerExtension):
         loss = torch.sum(torch.tensor(output.pop("loss"), device=self.device_name))
         dp_group = self.engine.get_data_parallel_group()
         if dp_group is not None:
-            torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
+            if loss.device.type == "xpu":
+                torch.distributed.all_reduce(loss, group=dp_group)
+                loss /= torch.distributed.get_world_size(group=dp_group)
+            else:
+                torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG, group=dp_group)
         loss = loss.item()
 
         # For grad_norm, we do not perform all reduce because it is already been done when clipping grad
@@ -586,6 +590,11 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             self.ref = self.ref_worker_cls(config=ref_training_config)
             self.ref.reset()
             self.set_dispatch_collect(mesh_name="ref", **self.ref.get_dispatch_collect())
+            # Flush the device allocator cache left by ref FSDP2 init.
+            # FSDP2 temporarily moves the full model to GPU during _move_states_to_device
+            # before sharding; the cache is not returned to the OS automatically, so the
+            # subsequent actor init peaks on top of it and OOMs on memory-constrained devices.
+            aggressive_empty_cache(force_sync=True)
 
         # 2. build actor model
         if "actor" in self.role:
