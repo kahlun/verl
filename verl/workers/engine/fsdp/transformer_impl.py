@@ -105,6 +105,11 @@ class FSDPEngine(BaseEngine):
     Supports model sharding, activation/optimizer offloading, LoRA, and sequence parallelism.
     """
 
+    # Class-level defaults let subclasses/tests that bypass __init__ (e.g. via __new__)
+    # still read these attributes safely. __init__ overrides them from engine_config.
+    pad_to_length: bool = False
+    pad_to_length_bucket: int = 1024
+
     def __init__(
         self,
         model_config: HFModelConfig,
@@ -258,9 +263,14 @@ class FSDPEngine(BaseEngine):
 
         torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
-        init_context = get_init_weight_context_manager(
-            use_meta_tensor=not self.model_config.hf_config.tie_word_embeddings, mesh=self.device_mesh
-        )
+        # Use meta-tensor init on non-rank-0 even for tied-embedding models. Tied
+        # models (e.g. Qwen2.5-3B) previously forced a full real CPU build on EVERY
+        # rank, so a 4-GPU node materialized 4x the fp32 model just for init
+        # (~12.7 GB/rank for 3B) -> host-RAM OOM before FSDP2 sharding on
+        # memory-constrained nodes. Meta init keeps only rank-0's real copy; the
+        # tie is re-asserted below so the shared embed/lm_head storage exists before
+        # fsdp2_load_full_state_dict's to_empty() (whose _apply memo preserves it).
+        init_context = get_init_weight_context_manager(use_meta_tensor=True, mesh=self.device_mesh)
 
         with init_context(), warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -282,6 +292,15 @@ class FSDPEngine(BaseEngine):
                     if hasattr(module, attr):
                         delattr(module, attr)
                         logger.info(f"Stripped unused sub-module '{attr}' to reduce memory")
+
+                # Now that meta init is used even for tied embeddings, re-assert the
+                # embed_tokens<->lm_head tie so they share one storage on every rank
+                # BEFORE fsdp2_load_full_state_dict's to_empty(): to_empty() preserves
+                # shared parameters via _apply's memo, so re-tying here keeps the alias
+                # intact and the rank-0 broadcast fills both sides. Without this,
+                # meta-init could leave lm_head unfilled on non-rank-0 ranks.
+                if getattr(self.model_config.hf_config, "tie_word_embeddings", False):
+                    module.tie_weights()
             else:
                 from verl.utils.model import load_valuehead_model
 
@@ -1136,7 +1155,7 @@ class EngineTrainModeCtx(BaseEngineCtx):
         super().__exit__(exc_type, exc_value, traceback)
 
 
-@EngineRegistry.register(model_type="language_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="language_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu", "xpu"])
 class FSDPEngineWithLMHead(FSDPEngine):
     def prepare_model_inputs(self, micro_batch: TensorDict):
         if self.pad_to_length and tu.get_non_tensor_data(data=micro_batch, key="distillation_use_topk", default=False):
@@ -1597,7 +1616,7 @@ class FSDPEngineWithLMHead(FSDPEngine):
             return loss, output
 
 
-@EngineRegistry.register(model_type="value_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu"])
+@EngineRegistry.register(model_type="value_model", backend=["fsdp", "fsdp2"], device=["cuda", "npu", "xpu"])
 class FSDPEngineWithValueHead(FSDPEngineWithLMHead):
     """
     The only difference between critic and actor is how the raw model output is processed
