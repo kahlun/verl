@@ -217,10 +217,9 @@ class BucketedWeightSender:
             del self.shm
             self.shm = None
         gc.collect()
-        _dev = get_torch_device()
         if is_support_ipc():
-            _dev.ipc_collect()
-        _dev.empty_cache()
+            get_torch_device().ipc_collect()
+        get_torch_device().empty_cache()
 
     def _direct_send_large_weight(self, name: str, weight: torch.Tensor):
         """Send a weight larger than the bucket size via cuda ipc or share memory."""
@@ -343,7 +342,6 @@ class BucketedWeightReceiver:
             del self.shm
             self.shm = None
         gc.collect()
-        _dev = get_torch_device()
         if is_support_ipc():
-            _dev.ipc_collect()
-        _dev.empty_cache()
+            get_torch_device().ipc_collect()
+        get_torch_device().empty_cache()
