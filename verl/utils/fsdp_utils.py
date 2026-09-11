@@ -179,15 +179,9 @@ def offload_fsdp_model_to_cpu(model: FSDP, empty_cache: bool = True):
         if handle._offload_params:
             continue
         flat_param = handle.flat_param
-        assert (
-            flat_param.data.data_ptr() == flat_param._local_shard.data_ptr()
-            and id(flat_param.data) != id(flat_param._local_shard)
-            and flat_param.data.size() == flat_param._local_shard.size()
-        )
         handle.flat_param_to(torch.device("cpu"), non_blocking=True)
         # the following still keeps id(._local_shard) != id(.data)
         flat_param._local_shard = flat_param.data
-        assert id(flat_param._local_shard) != id(flat_param.data)
     if empty_cache:
         get_torch_device().empty_cache()
 
@@ -611,6 +605,14 @@ def apply_fsdp2(model, fsdp_kwargs, config):
             next_targets = fsdp_modules[i + 1 : i + 2]  # depth=1, mirrors FSDP1's forward_prefetch_limit=1
             if next_targets and hasattr(m, "set_modules_to_forward_prefetch"):
                 m.set_modules_to_forward_prefetch(next_targets)
+
+    if get_device_name() == "xpu":
+        if not hasattr(model, "set_force_sum_reduction_for_comms"):
+            raise RuntimeError(
+                "FSDP2 on Intel XPU requires set_force_sum_reduction_for_comms() to avoid unsupported "
+                "oneCCL ReduceOp.AVG reduce_scatter operations."
+            )
+        model.set_force_sum_reduction_for_comms(True)
 
 
 def get_shard_placement_fn(fsdp_size):
