@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from verl.plugin.platform import get_platform
+
 from ..device import is_npu_available
 from ..import_utils import is_nvtx_available
 from .config import (
@@ -25,11 +27,17 @@ from .config import (
 from .performance import GPUMemoryLogger, log_gpu_memory_usage, simple_timer
 from .profile import DistProfiler, DistProfilerExtension, ProfilerConfig, build_rollout_dist_profiler
 
-# Select marker implementations by availability, but keep DistProfiler as our dispatcher
+# Select marker implementations by availability, but keep DistProfiler as our dispatcher.
+# nvtx (package) and npu (built-in device) are checked first for backward compatibility;
+# any other platform (built-in or plugin-supplied) can opt in via profiler_markers().
+_platform_markers = None if is_nvtx_available() or is_npu_available else get_platform().profiler_markers()
+
 if is_nvtx_available():
     from .nvtx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
 elif is_npu_available:
     from .mstx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
+elif _platform_markers is not None:
+    mark_start_range, mark_end_range, mark_annotate, marked_timer = _platform_markers
 else:
     from .performance import marked_timer
     from .profile import mark_annotate, mark_end_range, mark_start_range

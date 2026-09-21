@@ -485,10 +485,11 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             omega_profiler_config = config.ref.get("profiler", {})
 
         profiler_config = omega_conf_to_dataclass(omega_profiler_config, dataclass_type=ProfilerConfig)
-        if omega_profiler_config.get("tool", None) in ["npu", "nsys", "torch", "torch_memory", "precision_debugger"]:
-            tool_config = omega_conf_to_dataclass(
-                omega_profiler_config.get("tool_config", {}).get(omega_profiler_config.get("tool"))
-            )
+        _profiler_tool = omega_profiler_config.get("tool", None)
+        if _profiler_tool in ["npu", "nsys", "torch", "torch_memory", "precision_debugger"] or (
+            _profiler_tool is not None and get_platform().dist_profiler_cls(_profiler_tool)
+        ):
+            tool_config = omega_conf_to_dataclass(omega_profiler_config.get("tool_config", {}).get(_profiler_tool))
         else:
             tool_config = None
 
