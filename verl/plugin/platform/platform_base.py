@@ -179,6 +179,17 @@ class PlatformBase(abc.ABC):
         """
         return True
 
+    def attention_utils_module(self) -> Optional[str]:
+        """Return a dotted module path providing a flash-attn-equivalent for this platform.
+
+        The module must expose ``index_first_axis``, ``pad_input``,
+        ``rearrange`` and ``unpad_input`` (see ``verl/utils/npu_flash_attn_utils.py``
+        for the expected signatures). Return ``None`` (default) to fall back to
+        the ``flash_attn`` pip package, or to the pure-PyTorch implementation in
+        ``verl/utils/attention_utils.py`` when that isn't installed either.
+        """
+        return None
+
     # ------------------------------------------------------------------
     # Profiling helpers
     # ------------------------------------------------------------------
