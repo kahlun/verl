@@ -27,20 +27,63 @@ from .config import (
 from .performance import GPUMemoryLogger, log_gpu_memory_usage, simple_timer
 from .profile import DistProfiler, DistProfilerExtension, ProfilerConfig, build_rollout_dist_profiler
 
-# Select marker implementations by availability, but keep DistProfiler as our dispatcher.
-# nvtx (package) and npu (built-in device) are checked first for backward compatibility;
-# any other platform (built-in or plugin-supplied) can opt in via profiler_markers().
-_platform_markers = None if is_nvtx_available() or is_npu_available else get_platform().profiler_markers()
+_mark_start_range, _mark_end_range, _mark_annotate, _marked_timer = None, None, None, None
 
-if is_nvtx_available():
-    from .nvtx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
-elif is_npu_available:
-    from .mstx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
-elif _platform_markers is not None:
-    mark_start_range, mark_end_range, mark_annotate, marked_timer = _platform_markers
-else:
-    from .performance import marked_timer
-    from .profile import mark_annotate, mark_end_range, mark_start_range
+
+def _resolve_markers() -> None:
+    """Select marker implementations by availability, but keep DistProfiler as our dispatcher.
+
+    nvtx (package) and npu (built-in device) are checked first for backward compatibility;
+    any other platform (built-in or plugin-supplied) can opt in via profiler_markers().
+
+    Resolved lazily on first use rather than at import time: get_platform() runs hardware
+    auto-detection (smi probes) and caches the result for the process, and this module is
+    imported from far too many places to pay that cost -- and lock in the platform choice --
+    just from being imported.
+    """
+    global _mark_start_range, _mark_end_range, _mark_annotate, _marked_timer
+
+    if is_nvtx_available():
+        from .nvtx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
+    elif is_npu_available:
+        from .mstx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
+    elif (platform_markers := get_platform().profiler_markers()) is not None:
+        mark_start_range, mark_end_range, mark_annotate, marked_timer = platform_markers
+    else:
+        from .performance import marked_timer
+        from .profile import mark_annotate, mark_end_range, mark_start_range
+
+    _mark_start_range, _mark_end_range, _mark_annotate, _marked_timer = (
+        mark_start_range,
+        mark_end_range,
+        mark_annotate,
+        marked_timer,
+    )
+
+
+def mark_start_range(*args, **kwargs):
+    if _mark_start_range is None:
+        _resolve_markers()
+    return _mark_start_range(*args, **kwargs)
+
+
+def mark_end_range(*args, **kwargs):
+    if _mark_end_range is None:
+        _resolve_markers()
+    return _mark_end_range(*args, **kwargs)
+
+
+def mark_annotate(*args, **kwargs):
+    if _mark_annotate is None:
+        _resolve_markers()
+    return _mark_annotate(*args, **kwargs)
+
+
+def marked_timer(*args, **kwargs):
+    if _marked_timer is None:
+        _resolve_markers()
+    return _marked_timer(*args, **kwargs)
+
 
 __all__ = [
     "GPUMemoryLogger",
