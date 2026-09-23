@@ -218,6 +218,36 @@ class PlatformBase(abc.ABC):
         """Return ``RAY_EXPERIMENTAL_NOSET_*`` env var names for this platform."""
         ...
 
+    # ------------------------------------------------------------------
+    # NUMA affinity
+    # ------------------------------------------------------------------
+
+    def set_numa_affinity(self, local_rank: int) -> None:
+        """Pin the calling process to the CPU cores local to device ``local_rank``.
+
+        Default implementation uses ``pynvml`` (NVIDIA's NVML), matching the
+        pre-existing CUDA-only behavior this method replaces. Platforms
+        without an NVML-equivalent should override this. Failure to pin
+        (library missing, no NUMA topology, etc.) is intentionally a warning,
+        not an exception -- this is a performance optimization, not a
+        correctness requirement.
+        """
+        initialized = False
+        try:
+            import pynvml
+
+            pynvml.nvmlInit()
+            initialized = True
+            handle = pynvml.nvmlDeviceGetHandleByIndex(local_rank)
+            pynvml.nvmlDeviceSetCpuAffinity(handle)
+        except ImportError:
+            print("Warning: pynvml not available, skipping NUMA affinity setup")
+        except Exception as e:
+            print(f"Warning: Failed to set NUMA affinity: {e}")
+        finally:
+            if initialized:
+                pynvml.nvmlShutdown()
+
     def ray_resource_options(self, num_gpus: float) -> dict[str, Any]:
         """Return Ray actor resource options for allocating accelerators.
 
