@@ -9,6 +9,7 @@ pick it up.
 """
 
 import abc
+import ctypes
 import os
 import shutil
 import subprocess
@@ -231,7 +232,22 @@ class PlatformBase(abc.ABC):
         (library missing, no NUMA topology, etc.) is intentionally a warning,
         not an exception -- this is a performance optimization, not a
         correctness requirement.
+
+        The ``libnuma.so`` probe below is specific to this NVML-based default
+        (nvmlDeviceSetCpuAffinity's own behavior on non-NUMA/no-libnuma boxes)
+        -- it must not live in the dispatcher this method is called from,
+        since that would gate every platform's override on an NVML-specific
+        library that non-NVML platforms (e.g. XPU's sysfs-based approach)
+        never needed in the first place.
         """
+        try:
+            libnuma = ctypes.CDLL("libnuma.so")
+            if libnuma.numa_available() < 0:
+                return
+        except OSError:
+            print("Warning: libnuma not available, skipping NUMA affinity setup")
+            return
+
         initialized = False
         try:
             import pynvml

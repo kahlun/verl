@@ -208,5 +208,77 @@ class TestPlatformRegistry:
             _create_platform("nonexistent_platform")
 
 
+class TestNumaAffinityDefault:
+    """PlatformBase.set_numa_affinity's default (NVML) implementation.
+
+    Covers the forwarding/success/missing-pynvml/cleanup paths flagged as
+    untested in review. libnuma is mocked here rather than skipped, so this
+    exercises the same logic regardless of whether libnuma.so happens to be
+    installed on the machine running the test.
+    """
+
+    def _platform(self):
+        return _make_mock_platform("mock_numa")()
+
+    def test_no_numa_topology_skips_pynvml_entirely(self):
+        platform = self._platform()
+        fake_libnuma = mock.MagicMock()
+        fake_libnuma.numa_available.return_value = -1
+        with mock.patch("ctypes.CDLL", return_value=fake_libnuma):
+            with mock.patch("builtins.__import__") as mocked_import:
+                platform.set_numa_affinity(0)
+                assert not any(call.args and call.args[0] == "pynvml" for call in mocked_import.call_args_list)
+
+    def test_libnuma_missing_returns_without_raising(self):
+        platform = self._platform()
+        with mock.patch("ctypes.CDLL", side_effect=OSError("libnuma.so not found")):
+            platform.set_numa_affinity(0)  # must not raise
+
+    def test_success_path_calls_nvml_and_cleans_up(self):
+        platform = self._platform()
+        fake_libnuma = mock.MagicMock()
+        fake_libnuma.numa_available.return_value = 0
+        fake_pynvml = mock.MagicMock()
+        fake_pynvml.nvmlDeviceGetHandleByIndex.return_value = "handle-3"
+
+        with mock.patch("ctypes.CDLL", return_value=fake_libnuma):
+            with mock.patch.dict("sys.modules", {"pynvml": fake_pynvml}):
+                platform.set_numa_affinity(3)
+
+        fake_pynvml.nvmlInit.assert_called_once()
+        fake_pynvml.nvmlDeviceGetHandleByIndex.assert_called_once_with(3)
+        fake_pynvml.nvmlDeviceSetCpuAffinity.assert_called_once_with("handle-3")
+        fake_pynvml.nvmlShutdown.assert_called_once()
+
+    def test_pynvml_not_installed_returns_without_raising(self):
+        platform = self._platform()
+        fake_libnuma = mock.MagicMock()
+        fake_libnuma.numa_available.return_value = 0
+
+        real_import = __import__
+
+        def _raise_for_pynvml(name, *args, **kwargs):
+            if name == "pynvml":
+                raise ImportError("no module named pynvml")
+            return real_import(name, *args, **kwargs)
+
+        with mock.patch("ctypes.CDLL", return_value=fake_libnuma):
+            with mock.patch("builtins.__import__", side_effect=_raise_for_pynvml):
+                platform.set_numa_affinity(0)  # must not raise
+
+    def test_nvml_shutdown_called_even_on_failure_after_init(self):
+        platform = self._platform()
+        fake_libnuma = mock.MagicMock()
+        fake_libnuma.numa_available.return_value = 0
+        fake_pynvml = mock.MagicMock()
+        fake_pynvml.nvmlDeviceGetHandleByIndex.side_effect = RuntimeError("boom")
+
+        with mock.patch("ctypes.CDLL", return_value=fake_libnuma):
+            with mock.patch.dict("sys.modules", {"pynvml": fake_pynvml}):
+                platform.set_numa_affinity(0)  # must not raise
+
+        fake_pynvml.nvmlShutdown.assert_called_once()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

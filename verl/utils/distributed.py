@@ -13,7 +13,6 @@
 # limitations under the License.
 """Utilities for distributed training."""
 
-import ctypes
 import os
 import socket
 from datetime import timedelta
@@ -34,10 +33,6 @@ def set_numa_affinity():
         return
 
     try:
-        libnuma = ctypes.CDLL("libnuma.so")
-        if libnuma.numa_available() < 0:
-            return
-
         device_name = get_resource_name()
         # Avoid ray.init in SFT trainer.
         if ray.is_initialized():
