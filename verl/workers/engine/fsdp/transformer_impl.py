@@ -103,6 +103,31 @@ def _scale_logits_by_temperature(logits, temperature, *, is_unit_temperature: bo
     return logits / temperature.clamp(min=1e-8).to(logits.dtype)
 
 
+def _drop_redundant_tied_lm_head(params: dict, hf_config) -> None:
+    """Drop ``lm_head.weight`` in place when it's tied to the input embedding.
+
+    vLLM's ``AutoWeightsLoader`` never loads a tied ``lm_head.weight``'s bytes
+    -- it only uses the name's presence to check that the embedding was
+    loaded in the *same* ``load_weights()`` call, then re-derives ``lm_head``
+    from the embedding itself. The bucketed weight-transfer sender packs
+    tensors into fixed-size buckets and flushes on overflow, and the receiver
+    calls ``load_weights()`` once per bucket. If the byte-identical
+    ``lm_head.weight`` duplicate happens to land in a different bucket than
+    ``model.embed_tokens.weight`` (likely for small, large-vocabulary models,
+    where the embedding is a large fraction of the bucket size), that
+    isolated call fails vLLM's tied-weight completeness check with e.g.:
+
+        ValueError: 'lm_head.weight' was skipped because it is tied to
+        'model.embed_tokens.weight' in Qwen2ForCausalLM, but
+        'model.embed_tokens.weight' was not found in the checkpoint, so the
+        tied weight is uninitialized.
+
+    Sending the duplicate at all is pure redundant risk, so drop it instead.
+    """
+    if getattr(hf_config, "tie_word_embeddings", False):
+        params.pop("lm_head.weight", None)
+
+
 class FSDPEngine(BaseEngine):
     """
     Concrete Engine implementation using PyTorch FullyShardedDataParallel (FSDP).
@@ -1016,6 +1041,7 @@ class FSDPEngine(BaseEngine):
             params = self.module.state_dict()
 
         params = convert_weight_keys(params, getattr(self.module, "_fsdp_wrapped_module", self.module))
+        _drop_redundant_tied_lm_head(params, self.model_config.hf_config)
 
         log_gpu_memory_usage("Before offload_fsdp_model_to_cpu", logger=logger)
         if self._is_offload_param and not _skip_staging:
@@ -1076,6 +1102,7 @@ class FSDPEngine(BaseEngine):
             with merged_lora_context(self.module, backup_adapters=True):
                 params = normalize_peft_param_name(self.module.state_dict())
                 params = convert_weight_keys(params, getattr(self.module, "_fsdp_wrapped_module", self.module))
+                _drop_redundant_tied_lm_head(params, self.model_config.hf_config)
                 for name, param in params.items():
                     yield (
                         name,
