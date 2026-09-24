@@ -216,7 +216,6 @@ class BucketedWeightSender:
             self.shm.unlink()
             del self.shm
             self.shm = None
-        gc.collect()
         _dev = get_torch_device()
         if is_support_ipc():
             _dev.ipc_collect()
