@@ -62,24 +62,28 @@ def _resolve_markers() -> None:
 
 
 def mark_start_range(*args, **kwargs):
+    """Start a profiling range using the resolved platform marker implementation."""
     if _mark_start_range is None:
         _resolve_markers()
     return _mark_start_range(*args, **kwargs)
 
 
 def mark_end_range(*args, **kwargs):
+    """End a profiling range using the resolved platform marker implementation."""
     if _mark_end_range is None:
         _resolve_markers()
     return _mark_end_range(*args, **kwargs)
 
 
 def mark_annotate(*args, **kwargs):
+    """Annotate a function with a profiling range using the resolved platform marker implementation."""
     if _mark_annotate is None:
         _resolve_markers()
     return _mark_annotate(*args, **kwargs)
 
 
 def marked_timer(*args, **kwargs):
+    """Time a code block and mark it as a profiling range using the resolved platform marker implementation."""
     if _marked_timer is None:
         _resolve_markers()
     return _marked_timer(*args, **kwargs)
