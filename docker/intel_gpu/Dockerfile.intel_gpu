@@ -27,8 +27,9 @@
 
 # Base: DLE 2026.1.0 / ubuntu24.04. UBUNTU flavor is load-bearing — the 2026.1
 # ubuntu26.04 variant SIGSEGVs on torch init (glibc/SYCL ABI mismatch on that
-# beta distro). ubuntu24.04 is stable and ships python3.12-dev as an apt package,
-# which the vLLM CMake build requires.
+# beta distro). ubuntu24.04 is stable and ships python3.12-dev as an apt
+# package, needed by other sdist-only Python deps below (vLLM itself is now
+# installed from a prebuilt wheel, not compiled here — see Layer 1).
 #
 # oneCCL: intentionally NOT installed separately. The 2026.1.0 DLE base already
 # ships a torch-2.13-compatible oneCCL (Gold-2022.1.0, linked against the base's
@@ -49,12 +50,13 @@ LABEL org.opencontainers.image.vendor="verl"
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
 
-# vLLM pinned to the v0.27.0 release tag — the first stable release that carries
-# the XPU torch==2.13.0 + vllm_xpu_kernels 0.1.12 pairing. requirements/xpu.txt at
-# v0.27.0 is byte-identical to the previously-pinned commit 5b29c958 (which is
-# v0.27.0rc1~173, i.e. an ancestor of this tag), so the torch/oneCCL/driver stack
-# below is unchanged — this just swaps the commit pin for the stable tag.
-ARG VLLM_VERSION=v0.27.0
+# vLLM pinned to the v0.29.0 release tag — the last version confirmed
+# end-to-end on real B60 hardware (real GRPO training step, throughput
+# 53.4-56.3). requirements/xpu.txt at v0.29.0 carries torch==2.13.0 +
+# vllm_xpu_kernels==0.1.14.1 (up from 0.1.12 at v0.27.0) and, new at this tag,
+# an explicit triton==3.7.2+xpu pin of its own — see the Layer 1 triton note
+# below for why that changes the end of this Dockerfile.
+ARG VLLM_VERSION=v0.29.0
 
 # torch version is intentionally not pinned here. vLLM's requirements/xpu.txt
 # owns the tested torch+xpu pairing for each vLLM commit.
@@ -73,10 +75,12 @@ WORKDIR /workspace
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # --- System dependencies ---
-# python${PYTHON_VERSION}-dev is required: vLLM's XPU extension is compiled from
-# source (uv pip install --no-build-isolation .), and its CMake step needs the
-# CPython development headers (Python_INCLUDE_DIRS / Development.Module). The
-# ubuntu24.04 DLE base ships python3.12 + python3.12-dev as apt packages.
+# build-essential/cmake/g++/gcc/python${PYTHON_VERSION}-dev: vLLM itself is now
+# installed from a prebuilt wheel (see Layer 1), so these are no longer needed
+# for vLLM's own build. Kept as a backstop for any other sdist-only Python
+# dependency in requirements-intel-gpu.txt that needs to compile a C/C++
+# extension. git is kept for the same reason (a VCS-sourced dependency, if any
+# ever needs it) even though vLLM no longer needs to be git-cloned.
 RUN set -eux && \
     apt-get update -y && \
     apt-get install -y --no-install-recommends \
@@ -135,24 +139,30 @@ ENV UV_LINK_MODE="copy"
 ENV VLLM_TARGET_DEVICE="xpu"
 
 # --- Layer 1: vLLM + torch Intel GPU ---
-# vLLM is fetched at the pinned release tag (${VLLM_VERSION}), which carries:
-#   - torch==2.13.0 + vllm_xpu_kernels 0.1.12 in requirements/xpu.txt
-#   - XPU sleep-mode (device_allocator/xpumem.py + xpumem kernels wiring)
-# We fetch the tag with its history so setuptools-scm resolves the version from
-# the annotated tag directly (SETUPTOOLS_SCM_PRETEND_VERSION derives it from the
-# tag name as a backstop for the shallow --depth 1 fetch).
+# Installed from the prebuilt XPU wheel at wheels.vllm.ai/<version>/xpu instead
+# of built from source (the v0.27.0-era approach, which cloned the git tag and
+# ran `uv pip install --no-build-isolation .`) -- that index carries
+# torch==2.13.0 + vllm_xpu_kernels==0.1.14.1 (see ARG VLLM_VERSION above), same
+# as a from-source build, but skips the CMake compile entirely.
+#
+# The unversioned wheels.vllm.ai/xpu "triton shim" index is included alongside
+# the version-scoped one defensively: at v0.29.0 the version-scoped index
+# happens to already carry the exact triton==3.7.2+xpu that requirements/xpu.txt
+# pins, but that's not guaranteed for every release -- a later release's
+# version-scoped index could republish only that commit's *latest* triton-xpu
+# build rather than the older pinned version, and resolution would fail outright
+# without the shim index to fall back on. Keep both.
+#
+# --extra-index-url on this command line REPLACES UV_EXTRA_INDEX_URL (set above
+# to ${PIP_EXTRA_INDEX_URL}) rather than adding to it, so PyPI has to be repeated
+# explicitly here too -- otherwise plain-PyPI transitive deps pulled in via
+# common.txt (e.g. lm-format-enforcer) become unresolvable.
 RUN set -ex && \
-    git init /opt/vllm && \
-    cd /opt/vllm && \
-    git remote add origin https://github.com/vllm-project/vllm.git && \
-    git fetch --depth 1 origin tag "${VLLM_VERSION}" && \
-    git checkout "${VLLM_VERSION}" && \
-    SETUPTOOLS_SCM_PRETEND_VERSION="${VLLM_VERSION#v}" \
-    uv pip install --upgrade pip setuptools wheel && \
-    SETUPTOOLS_SCM_PRETEND_VERSION="${VLLM_VERSION#v}" \
-    uv pip install -r requirements/xpu.txt && \
-    SETUPTOOLS_SCM_PRETEND_VERSION="${VLLM_VERSION#v}" \
-    uv pip install --no-build-isolation .
+    uv pip install "vllm==${VLLM_VERSION#v}+xpu" \
+        --extra-index-url "https://wheels.vllm.ai/${VLLM_VERSION#v}/xpu" \
+        --extra-index-url "https://wheels.vllm.ai/xpu" \
+        --extra-index-url "${PIP_EXTRA_INDEX_URL}" \
+        --index-strategy unsafe-best-match
 
 # --- Layer 2: verl Python dependencies ---
 COPY requirements-intel-gpu.txt /tmp/requirements-intel-gpu.txt
@@ -162,11 +172,5 @@ RUN set -eux && uv pip install -r /tmp/requirements-intel-gpu.txt
 COPY . /workspace/verl
 WORKDIR /workspace/verl
 RUN set -eux && uv pip install --no-deps -e .
-
-# xgrammar (via vLLM's common.txt) pulls in plain triton as a transitive dep.
-# Plain triton is for NVIDIA only — replace with triton-xpu per official vLLM XPU docs.
-# See: https://docs.vllm.ai/en/latest/getting_started/xpu-installation.html
-RUN uv pip uninstall triton triton-xpu -y 2>/dev/null || true && \
-    uv pip install triton-xpu==3.7.1 --extra-index-url https://download.pytorch.org/whl/xpu
 
 CMD ["bash", "-c", "exec bash"]
