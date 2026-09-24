@@ -13,7 +13,6 @@
 # limitations under the License.
 """Utilities for distributed training."""
 
-import ctypes
 import os
 import socket
 from datetime import timedelta
@@ -23,6 +22,7 @@ import ray
 import torch.distributed
 from torch.distributed import TCPStore
 
+from verl.plugin.platform import get_platform
 from verl.utils.device import get_device_name, get_nccl_backend, get_resource_name, get_torch_device, is_npu_available
 from verl.utils.net_utils import is_ipv6
 
@@ -32,31 +32,21 @@ def set_numa_affinity():
         # TODO (FightingZhen) libnuma.so is not available in e2e_ascend CI image, remove this code after image update.
         return
 
-    initialized = False
     try:
-        libnuma = ctypes.CDLL("libnuma.so")
-        if libnuma.numa_available() < 0:
-            return
-
-        import pynvml
-
-        pynvml.nvmlInit()
-        initialized = True
         device_name = get_resource_name()
         # Avoid ray.init in SFT trainer.
         if ray.is_initialized():
             local_rank = int(ray.get_runtime_context().get_accelerator_ids()[device_name][0])
         else:
             local_rank = int(os.environ["LOCAL_RANK"])
-        handle = pynvml.nvmlDeviceGetHandleByIndex(local_rank)
-        pynvml.nvmlDeviceSetCpuAffinity(handle)
-    except ImportError:
-        print("Warning: pynvml not available, skipping NUMA affinity setup")
     except Exception as e:
         print(f"Warning: Failed to set NUMA affinity: {e}")
-    finally:
-        if initialized:
-            pynvml.nvmlShutdown()
+        return
+
+    # Delegate the actual pinning to the active platform. The default
+    # (CUDA/pynvml) implementation lives in PlatformBase.set_numa_affinity;
+    # platforms without an NVML-equivalent (e.g. XPU) override it.
+    get_platform().set_numa_affinity(local_rank)
 
 
 def initialize_global_process_group(timeout_second=36000):
