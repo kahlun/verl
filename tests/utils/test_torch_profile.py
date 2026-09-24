@@ -695,6 +695,30 @@ class TestPluginProfilerActivityHook(unittest.TestCase):
         self.assertEqual(activities, [torch.profiler.ProfilerActivity.CPU])
 
 
+class TestPluginContentNameConfigValidation(unittest.TestCase):
+    """``TorchProfilerToolConfig.__post_init__`` must only whitelist a platform's
+    ``torch_profiler_content_name()`` keyword when ``torch_profiler_activity()`` is also
+    non-``None`` -- otherwise a config naming that keyword passes validation here but
+    ``get_torch_profiler()`` silently drops it (see ``TestPluginProfilerActivityHook``)."""
+
+    def _mock_platform(self, activity, content_name):
+        platform = MagicMock()
+        platform.torch_profiler_activity.return_value = activity
+        platform.torch_profiler_content_name.return_value = content_name
+        return platform
+
+    @patch("verl.utils.profiler.config.get_platform")
+    def test_content_name_allowed_when_activity_present(self, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(torch.profiler.ProfilerActivity.XPU, "xpu")
+        TorchProfilerToolConfig(contents=["xpu"], discrete=False)
+
+    @patch("verl.utils.profiler.config.get_platform")
+    def test_content_name_rejected_when_activity_missing(self, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(None, "xpu")
+        with self.assertRaises(AssertionError):
+            TorchProfilerToolConfig(contents=["xpu"], discrete=False)
+
+
 def _role_profiler_omegaconf(tool="torch", enable=True, discrete=False, contents=("cpu", "cuda")):
     """Mimic a per-role ``profiler`` OmegaConf sub-tree (identical across ref/ref.yaml and
     critic/critic.yaml).

@@ -129,7 +129,8 @@ class TorchProfilerToolConfig(BaseConfig):
         """config validation logics go here"""
         __support_contents = ["cuda", "cpu", "memory", "shapes", "stack"]
         plugin_content = get_platform().torch_profiler_content_name()
-        if plugin_content is not None:
+        plugin_activity = get_platform().torch_profiler_activity()
+        if plugin_content is not None and plugin_activity is not None:
             __support_contents = [*__support_contents, plugin_content]
         for content in self.contents:
             assert content in __support_contents, (
