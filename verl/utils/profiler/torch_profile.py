@@ -204,7 +204,7 @@ def get_torch_profiler(
         activities.append(torch.profiler.ProfilerActivity.CUDA)
     plugin_activity = get_platform().torch_profiler_activity()
     plugin_content = get_platform().torch_profiler_content_name()
-    if plugin_activity is not None and (not contents or plugin_content in contents):
+    if plugin_activity is not None and plugin_content is not None and (not contents or plugin_content in contents):
         activities.append(plugin_activity)
 
     profile_kwargs = dict(
