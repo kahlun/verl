@@ -166,19 +166,6 @@ class PlatformBase(abc.ABC):
         """Return the environment-variable name that controls visible devices."""
         ...
 
-    def is_reduce_avg_supported(self) -> bool:
-        """Return ``True`` if the collective backend implements ``ReduceOp.AVG``.
-
-        Some collective backends only implement ``SUM`` for
-        ``all_reduce``/``reduce_scatter``. Callers that want an averaged
-        reduction should check this first and fall back to a ``SUM``
-        all-reduce followed by a manual divide by world size when ``False``
-        (see :func:`verl.utils.device.all_reduce_avg`). FSDP2's
-        ``set_force_sum_reduction_for_comms`` should also be enabled when this
-        is ``False``, if the platform supports FSDP2.
-        """
-        return True
-
     def attention_utils_module(self) -> Optional[str]:
         """Return a dotted module path providing a flash-attn-equivalent for this platform.
 

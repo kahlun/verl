@@ -129,27 +129,6 @@ def get_nccl_backend() -> str:
     return get_platform().communication_backend_name()
 
 
-def is_reduce_avg_supported() -> bool:
-    """Return ``True`` if the current platform's collective backend implements ``ReduceOp.AVG``."""
-    return get_platform().is_reduce_avg_supported()
-
-
-def all_reduce_avg(tensor: "torch.Tensor", group=None) -> None:
-    """In-place all-reduce ``tensor`` by mean across ``group``.
-
-    Falls back to a SUM all-reduce followed by a manual divide by the group's
-    world size on backends that don't implement ``ReduceOp.AVG`` (see
-    :meth:`~verl.plugin.platform.platform_base.PlatformBase.is_reduce_avg_supported`).
-    """
-    import torch.distributed as dist
-
-    if is_reduce_avg_supported():
-        dist.all_reduce(tensor, op=dist.ReduceOp.AVG, group=group)
-    else:
-        dist.all_reduce(tensor, group=group)
-        tensor /= dist.get_world_size(group=group)
-
-
 # ---------------------------------------------------------------------------
 # Memory / allocator
 # ---------------------------------------------------------------------------

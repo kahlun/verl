@@ -34,7 +34,7 @@ from torch.distributed.fsdp._runtime_utils import _lazy_init
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 from transformers.trainer_pt_utils import get_module_class_from_name
 
-from verl.utils.device import get_device_id, get_device_name, get_torch_device, is_reduce_avg_supported
+from verl.utils.device import get_device_id, get_device_name, get_torch_device
 from verl.utils.model import check_exclude_modules, check_target_modules
 
 logger = logging.getLogger(__name__)
@@ -611,27 +611,6 @@ def apply_fsdp2(model, fsdp_kwargs, config):
             next_targets = fsdp_modules[i + 1 : i + 2]  # depth=1, mirrors FSDP1's forward_prefetch_limit=1
             if next_targets and hasattr(m, "set_modules_to_forward_prefetch"):
                 m.set_modules_to_forward_prefetch(next_targets)
-
-    if not is_reduce_avg_supported():
-        if not hasattr(model, "set_force_sum_reduction_for_comms"):
-            raise RuntimeError(
-                f"FSDP2 on device {get_device_name()!r} requires PyTorch's "
-                f"set_force_sum_reduction_for_comms() (added in torch 2.8) to avoid unsupported "
-                f"ReduceOp.AVG reduce_scatter operations on this platform's collective backend. "
-                f"Detected torch {torch.__version__} — please upgrade to torch>=2.8."
-            )
-        # Each fully_shard() call (once per wrapped layer in the loop above, plus once
-        # for the root model) creates its own independent FSDP state -- torch's
-        # set_force_sum_reduction_for_comms() only sets the flag on the module it's
-        # called on (self._get_fsdp_state()), it does not recurse into children. Calling
-        # it on `model` alone leaves every individually-wrapped transformer layer (where
-        # the actual gradient reduce-scatter happens) still defaulting to False, i.e.
-        # still using the unsupported ReduceOp.AVG. Must set it on every fully_shard()'d
-        # module, root included -- same requirement as the forward_prefetch loop above.
-        for module in modules:
-            if isinstance(module, FSDPModule):
-                module.set_force_sum_reduction_for_comms(True)
-        model.set_force_sum_reduction_for_comms(True)
 
 
 def get_shard_placement_fn(fsdp_size):
