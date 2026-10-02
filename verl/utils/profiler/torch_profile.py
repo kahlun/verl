@@ -200,11 +200,14 @@ def get_torch_profiler(
     # record_function, and those markers -- like operator names -- are CPU-side events, so a
     # device-only trace would be bare kernels that cannot be attributed to any stage.
     activities = [torch.profiler.ProfilerActivity.CPU]
-    if not contents or "cuda" in contents:
-        activities.append(torch.profiler.ProfilerActivity.CUDA)
     plugin_activity = get_platform().torch_profiler_activity()
     plugin_content = get_platform().torch_profiler_content_name()
-    if plugin_activity is not None and plugin_content is not None and (not contents or plugin_content in contents):
+    has_plugin_device = plugin_activity is not None and plugin_content is not None
+    # torch.profiler records a single device type and checks CUDA before every other device,
+    # so CUDA must stay out of `activities` whenever a plugin platform supplies its own.
+    if not has_plugin_device and (not contents or "cuda" in contents):
+        activities.append(torch.profiler.ProfilerActivity.CUDA)
+    if has_plugin_device and (not contents or plugin_content in contents):
         activities.append(plugin_activity)
 
     profile_kwargs = dict(
