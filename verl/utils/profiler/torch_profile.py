@@ -203,11 +203,12 @@ def get_torch_profiler(
     plugin_activity = get_platform().torch_profiler_activity()
     plugin_content = get_platform().torch_profiler_content_name()
     has_plugin_device = plugin_activity is not None and plugin_content is not None
+    plugin_requested = has_plugin_device and (not contents or plugin_content in contents)
     # torch.profiler records a single device type and checks CUDA before every other device,
-    # so CUDA must stay out of `activities` whenever a plugin platform supplies its own.
-    if not has_plugin_device and (not contents or "cuda" in contents):
+    # so CUDA must stay out of `activities` whenever the plugin device was actually requested.
+    if not plugin_requested and (not contents or "cuda" in contents):
         activities.append(torch.profiler.ProfilerActivity.CUDA)
-    if has_plugin_device and (not contents or plugin_content in contents):
+    if plugin_requested:
         activities.append(plugin_activity)
 
     profile_kwargs = dict(
