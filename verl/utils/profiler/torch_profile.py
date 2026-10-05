@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import functools
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from verl.plugin.platform import get_platform
 
 from .config import ProfilerConfig, TorchProfilerToolConfig
 from .profile import DistProfiler
+
+logger = logging.getLogger(__name__)
 
 
 def get_dist_topology() -> dict:
@@ -210,6 +213,17 @@ def get_torch_profiler(
         activities.append(torch.profiler.ProfilerActivity.CUDA)
     if plugin_requested:
         activities.append(plugin_activity)
+        if "cuda" in contents:
+            # Only one device activity is ever recorded, and there is no active CUDA
+            # platform here (CUDA never implements these hooks) -- "cuda" is a dead
+            # keyword in this contents list, not a second activity.
+            logger.warning(
+                "profiler contents=%s requested both 'cuda' and '%s': only '%s' "
+                "(this platform's activity) is recorded, 'cuda' is ignored.",
+                sorted(contents),
+                plugin_content,
+                plugin_content,
+            )
 
     profile_kwargs = dict(
         activities=activities,

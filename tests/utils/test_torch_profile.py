@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -711,6 +713,26 @@ class TestPluginProfilerActivityHook(unittest.TestCase):
         activities = mock_profile.call_args[1]["activities"]
         self.assertIn(torch.profiler.ProfilerActivity.CUDA, activities)
         self.assertNotIn(self._MOCK_ACTIVITY, activities)
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_warns_when_cuda_is_requested_but_superseded(self, mock_profile, mock_get_platform):
+        # contents=["cuda", <plugin device>] is self-contradictory: only one activity is ever
+        # recorded, and there is no active CUDA platform here, so "cuda" is silently dead unless
+        # we say so.
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        with self.assertLogs("verl.utils.profiler.torch_profile", level="WARNING") as log_ctx:
+            get_torch_profiler(contents=["cuda", "mock_device"], save_path="/tmp/test", rank=0)
+        self.assertTrue(any("ignored" in record.getMessage() for record in log_ctx.records))
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_no_warning_without_explicit_cuda(self, mock_profile, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        logger = logging.getLogger("verl.utils.profiler.torch_profile")
+        with mock.patch.object(logger, "warning") as mock_warning:
+            get_torch_profiler(contents=["mock_device"], save_path="/tmp/test", rank=0)
+        mock_warning.assert_not_called()
 
 
 class TestPluginContentNameConfigValidation(unittest.TestCase):
