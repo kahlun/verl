@@ -220,7 +220,7 @@ VERL_USE_EXTERNAL_PLUGINS=pkg1,pkg2  # only load named entry_points
 | **Properties** | `get_device_capability(idx)` | `(major, minor)` or `(None, None)` |
 | **Communication** | `communication_backend_name()` | `'nccl'`, `'hccl'`, `'xccl'`, … |
 | | `visible_devices_envvar()` | Env var controlling device visibility |
-| | `get_collective_module()` | Collective comm module (e.g. `cupy.cuda.nccl`) |
+| | `get_collective_module()` | Collective comm module (e.g. `cupy.cuda.nccl`). Returning `None` is valid and the default -- `verl.utils.rendezvous.ray_backend.create_collective_communicator_in_ray()` falls back to a plain `torch.distributed` process group when this is `None`, so no platform is required to provide a cupy/NCCL-shaped module. |
 | **Ray** | `ray_resource_name()` | Ray resource name (`'GPU'`, `'NPU'`, …) |
 | | `ray_noset_envvars()` | `RAY_EXPERIMENTAL_NOSET_*` env var names |
 | | `ray_resource_options(num_gpus)` | Ray actor resource dict |
