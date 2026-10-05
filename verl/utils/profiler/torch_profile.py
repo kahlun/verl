@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import functools
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -20,8 +21,12 @@ from typing import Callable, Optional
 
 import torch
 
+from verl.plugin.platform import get_platform
+
 from .config import ProfilerConfig, TorchProfilerToolConfig
 from .profile import DistProfiler
+
+logger = logging.getLogger(__name__)
 
 
 def get_dist_topology() -> dict:
@@ -125,7 +130,9 @@ def get_torch_profiler(
         contents: Selects the other ``torch.profiler.profile`` arguments -- ``cuda`` maps to
             ``activities``, ``shapes`` to ``record_shapes``, ``memory`` to ``profile_memory`` and
             ``stack`` to ``with_stack``. CPU activity is always on, since verl's per-stage
-            ``record_function`` markers are CPU-side events.
+            ``record_function`` markers are CPU-side events. A plugin platform may also accept
+            its own content name here (see ``PlatformBase.torch_profiler_content_name``), mapped
+            to that platform's own ``torch.profiler.ProfilerActivity``.
         save_path: Directory to write chrome traces to.
         role: Optional logical scope name (e.g. ``train`` for a worker's whole-step window, or
             a stage name in discrete mode), embedded in the filename.
@@ -196,8 +203,27 @@ def get_torch_profiler(
     # record_function, and those markers -- like operator names -- are CPU-side events, so a
     # device-only trace would be bare kernels that cannot be attributed to any stage.
     activities = [torch.profiler.ProfilerActivity.CPU]
-    if not contents or "cuda" in contents:
+    plugin_activity = get_platform().torch_profiler_activity()
+    plugin_content = get_platform().torch_profiler_content_name()
+    has_plugin_device = plugin_activity is not None and plugin_content is not None
+    plugin_requested = has_plugin_device and (not contents or plugin_content in contents)
+    # torch.profiler records a single device type and checks CUDA before every other device,
+    # so CUDA must stay out of `activities` whenever the plugin device was actually requested.
+    if not plugin_requested and (not contents or "cuda" in contents):
         activities.append(torch.profiler.ProfilerActivity.CUDA)
+    if plugin_requested:
+        activities.append(plugin_activity)
+        if "cuda" in contents:
+            # Only one device activity is ever recorded, and there is no active CUDA
+            # platform here (CUDA never implements these hooks) -- "cuda" is a dead
+            # keyword in this contents list, not a second activity.
+            logger.warning(
+                "profiler contents=%s requested both 'cuda' and '%s': only '%s' "
+                "(this platform's activity) is recorded, 'cuda' is ignored.",
+                sorted(contents),
+                plugin_content,
+                plugin_content,
+            )
 
     profile_kwargs = dict(
         activities=activities,

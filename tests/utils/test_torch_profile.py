@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -644,6 +646,119 @@ class TestCpuActivityAlwaysCollected(unittest.TestCase):
         get_torch_profiler(contents=tool_config.contents, save_path="/tmp/test", rank=0)
         self.assertEqual(tool_config.contents, ["cuda"])
         self.assertEqual(contents, ["cuda"])
+
+
+class TestPluginProfilerActivityHook(unittest.TestCase):
+    """A platform-supplied ``torch.profiler`` activity is added only when both
+    ``torch_profiler_activity()`` and ``torch_profiler_content_name()`` return non-``None``, and
+    (if ``contents`` is non-empty) the content name is one of the requested keywords. CUDA must
+    stay enabled when the user explicitly asks for it, even on a platform that also exposes its
+    own activity hook (regression guard for the plugin-device-availability vs.
+    plugin-device-requested mixup)."""
+
+    # A vendor-neutral stand-in: the code under test never interprets this value, it only
+    # stores/compares it, so any sentinel distinct from the real ProfilerActivity members works.
+    _MOCK_ACTIVITY = object()
+
+    def _mock_platform(self, activity, content_name):
+        platform = MagicMock()
+        platform.torch_profiler_activity.return_value = activity
+        platform.torch_profiler_content_name.return_value = content_name
+        return platform
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_added_for_empty_or_matching_contents(self, mock_profile, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        for contents in ([], ["mock_device"]):
+            with self.subTest(contents=contents):
+                mock_profile.reset_mock()
+                get_torch_profiler(contents=list(contents), save_path="/tmp/test", rank=0)
+                activities = mock_profile.call_args[1]["activities"]
+                self.assertIn(self._MOCK_ACTIVITY, activities)
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_excluded_for_non_matching_contents(self, mock_profile, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        get_torch_profiler(contents=["stack"], save_path="/tmp/test", rank=0)
+        activities = mock_profile.call_args[1]["activities"]
+        self.assertNotIn(self._MOCK_ACTIVITY, activities)
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_excluded_when_content_name_missing(self, mock_profile, mock_get_platform):
+        # Regression guard: an activity hook without a paired content name must never be added,
+        # even for empty `contents`.
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, None)
+        get_torch_profiler(contents=[], save_path="/tmp/test", rank=0)
+        activities = mock_profile.call_args[1]["activities"]
+        self.assertNotIn(self._MOCK_ACTIVITY, activities)
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_excluded_when_activity_missing(self, mock_profile, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(None, "mock_device")
+        get_torch_profiler(contents=["mock_device"], save_path="/tmp/test", rank=0)
+        activities = mock_profile.call_args[1]["activities"]
+        self.assertEqual(activities, [torch.profiler.ProfilerActivity.CPU])
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_explicit_cuda_wins_over_available_plugin_device(self, mock_profile, mock_get_platform):
+        # A plugin platform merely exposing an activity must not steal `contents=["cuda"]` away
+        # from CUDA: the plugin device has to be *requested*, not just *available*.
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        get_torch_profiler(contents=["cuda"], save_path="/tmp/test", rank=0)
+        activities = mock_profile.call_args[1]["activities"]
+        self.assertIn(torch.profiler.ProfilerActivity.CUDA, activities)
+        self.assertNotIn(self._MOCK_ACTIVITY, activities)
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_warns_when_cuda_is_requested_but_superseded(self, mock_profile, mock_get_platform):
+        # contents=["cuda", <plugin device>] is self-contradictory: only one activity is ever
+        # recorded, and there is no active CUDA platform here, so "cuda" is silently dead unless
+        # we say so.
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        with self.assertLogs("verl.utils.profiler.torch_profile", level="WARNING") as log_ctx:
+            get_torch_profiler(contents=["cuda", "mock_device"], save_path="/tmp/test", rank=0)
+        self.assertTrue(any("ignored" in record.getMessage() for record in log_ctx.records))
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
+    def test_no_warning_without_explicit_cuda(self, mock_profile, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        logger = logging.getLogger("verl.utils.profiler.torch_profile")
+        with mock.patch.object(logger, "warning") as mock_warning:
+            get_torch_profiler(contents=["mock_device"], save_path="/tmp/test", rank=0)
+        mock_warning.assert_not_called()
+
+
+class TestPluginContentNameConfigValidation(unittest.TestCase):
+    """``TorchProfilerToolConfig.__post_init__`` must only whitelist a platform's
+    ``torch_profiler_content_name()`` keyword when ``torch_profiler_activity()`` is also
+    non-``None`` -- otherwise a config naming that keyword passes validation here but
+    ``get_torch_profiler()`` silently drops it (see ``TestPluginProfilerActivityHook``)."""
+
+    _MOCK_ACTIVITY = object()
+
+    def _mock_platform(self, activity, content_name):
+        platform = MagicMock()
+        platform.torch_profiler_activity.return_value = activity
+        platform.torch_profiler_content_name.return_value = content_name
+        return platform
+
+    @patch("verl.utils.profiler.config.get_platform")
+    def test_content_name_allowed_when_activity_present(self, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(self._MOCK_ACTIVITY, "mock_device")
+        TorchProfilerToolConfig(contents=["mock_device"], discrete=False)
+
+    @patch("verl.utils.profiler.config.get_platform")
+    def test_content_name_rejected_when_activity_missing(self, mock_get_platform):
+        mock_get_platform.return_value = self._mock_platform(None, "mock_device")
+        with self.assertRaises(AssertionError):
+            TorchProfilerToolConfig(contents=["mock_device"], discrete=False)
 
 
 def _role_profiler_omegaconf(tool="torch", enable=True, discrete=False, contents=("cpu", "cuda")):
