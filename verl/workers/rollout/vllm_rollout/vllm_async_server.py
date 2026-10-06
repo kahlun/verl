@@ -56,6 +56,7 @@ from verl.utils.vllm.vllm_quant_utils import apply_vllm_quant_patches
 from verl.workers.config import HFModelConfig, RolloutConfig
 from verl.workers.rollout.replica import RolloutMode, RolloutReplica, TokenOutput
 from verl.workers.rollout.utils import (
+    extract_response_topk_logprobs,
     get_max_position_embeddings,
     get_vision_placeholder_token_ids,
     qwen2_5_vl_dedup_image_tokens,
@@ -184,10 +185,12 @@ class vLLMHttpServer:
         profiler_config = self.config.profiler
         tool_config = None
         if profiler_config is not None:
-            if profiler_config.tool in ["torch", "npu"]:
+            if profiler_config.tool in ["torch", "npu"] or (
+                profiler_config.tool is not None and get_platform().dist_profiler_cls(profiler_config.tool)
+            ):
                 tool_config = omega_conf_to_dataclass((profiler_config.tool_config or {}).get(profiler_config.tool))
             else:
-                logger.warning(f"agent loop only support torch and npu profiler, got {profiler_config.tool}")
+                logger.warning(f"agent loop only support torch, npu, or a plugin profiler, got {profiler_config.tool}")
                 profiler_config = None
         # `ranks` in the rollout profiler config are global GPU ranks (as in the training roles);
         # map them to the replica that owns them so e.g. ranks=[0, 8] with tp=8 profiles the replicas
@@ -620,7 +623,11 @@ class vLLMHttpServer:
         assert 1 <= max_tokens <= max_possible_tokens, (
             f"max_tokens {max_tokens} not in valid range [1, {max_possible_tokens}]"
         )
-        sampling_params["logprobs"] = 0 if sampling_params.pop("logprobs", False) else None
+        topk_log_probs = sampling_params.pop("topk_log_probs", 0)
+        sampling_params["logprobs"] = (topk_log_probs or 0) if sampling_params.pop("logprobs", False) else None
+        if sampling_params["logprobs"]:
+            # the top-k head is read from flat lists, see extract_response_topk_logprobs
+            sampling_params["flat_logprobs"] = True
         sampling_params.setdefault("repetition_penalty", self.config.get("repetition_penalty", 1.0))
         sampling_params.setdefault("ignore_eos", self.config.get("ignore_eos", False))
         # Inject per-request seed for deterministic sampling when full_determinism is enabled.
@@ -722,7 +729,12 @@ class vLLMHttpServer:
         )
         token_ids = final_res.outputs[0].token_ids
         log_probs = None
-        if sampling_params.logprobs is not None:
+        if sampling_params.logprobs:
+            # indexing FlatLogprobs per position would rebuild a k+1 dict per token
+            log_probs, extra_fields["response_topk_ids"], extra_fields["response_topk_log_probs"] = (
+                extract_response_topk_logprobs(final_res.outputs[0].logprobs, sampling_params.logprobs)
+            )
+        elif sampling_params.logprobs is not None:
             log_probs = [logprobs[token_ids[i]].logprob for i, logprobs in enumerate(final_res.outputs[0].logprobs)]
 
         routed_experts = None
