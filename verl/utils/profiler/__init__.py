@@ -33,22 +33,26 @@ _mark_start_range, _mark_end_range, _mark_annotate, _marked_timer = None, None, 
 def _resolve_markers() -> None:
     """Select marker implementations by availability, but keep DistProfiler as our dispatcher.
 
-    nvtx (package) and npu (built-in device) are checked first for backward compatibility;
-    any other platform (built-in or plugin-supplied) can opt in via profiler_markers().
+    The current platform is asked first so that a platform with its own tracing
+    markers is not shadowed by an unrelated package being importable: ``nvtx`` is
+    a dependency of the ``verl-core`` extra and ``is_nvtx_available()`` only
+    checks whether it imports, not whether the device can use it. CUDA and NPU
+    are unaffected -- ``profiler_markers()`` returns ``None`` there, so they fall
+    through to the nvtx / mstx checks as before.
 
-    Resolved lazily on first use rather than at import time: get_platform() runs hardware
-    auto-detection (smi probes) and caches the result for the process, and this module is
-    imported from far too many places to pay that cost -- and lock in the platform choice --
-    just from being imported.
+    Resolved lazily on first use rather than at import time: get_platform() runs
+    hardware auto-detection (smi probes) and caches the result for the process,
+    and this module is imported from far too many places to pay that cost -- and
+    lock in the platform choice -- just from being imported.
     """
     global _mark_start_range, _mark_end_range, _mark_annotate, _marked_timer
 
-    if is_nvtx_available():
+    if (platform_markers := get_platform().profiler_markers()) is not None:
+        mark_start_range, mark_end_range, mark_annotate, marked_timer = platform_markers
+    elif is_nvtx_available():
         from .nvtx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
     elif is_npu_available:
         from .mstx_profile import mark_annotate, mark_end_range, mark_start_range, marked_timer
-    elif (platform_markers := get_platform().profiler_markers()) is not None:
-        mark_start_range, mark_end_range, mark_annotate, marked_timer = platform_markers
     else:
         from .performance import marked_timer
         from .profile import mark_annotate, mark_end_range, mark_start_range
@@ -62,28 +66,28 @@ def _resolve_markers() -> None:
 
 
 def mark_start_range(*args, **kwargs):
-    """Start a profiling range using the resolved platform marker implementation."""
+    """Start a profiling range using the resolved marker implementation."""
     if _mark_start_range is None:
         _resolve_markers()
     return _mark_start_range(*args, **kwargs)
 
 
 def mark_end_range(*args, **kwargs):
-    """End a profiling range using the resolved platform marker implementation."""
+    """End a profiling range using the resolved marker implementation."""
     if _mark_end_range is None:
         _resolve_markers()
     return _mark_end_range(*args, **kwargs)
 
 
 def mark_annotate(*args, **kwargs):
-    """Annotate a function with a profiling range using the resolved platform marker implementation."""
+    """Annotate a function with a profiling range using the resolved marker implementation."""
     if _mark_annotate is None:
         _resolve_markers()
     return _mark_annotate(*args, **kwargs)
 
 
 def marked_timer(*args, **kwargs):
-    """Time a code block and mark it as a profiling range using the resolved platform marker implementation."""
+    """Time a code block and mark it as a profiling range using the resolved marker implementation."""
     if _marked_timer is None:
         _resolve_markers()
     return _marked_timer(*args, **kwargs)
