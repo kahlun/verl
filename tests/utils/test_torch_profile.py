@@ -24,6 +24,8 @@ from omegaconf import OmegaConf
 
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.profiler.config import (
+    DEVICE_ACTIVITIES,
+    DEVICE_CONTENTS,
     ProfilerConfig,
     TorchProfilerScheduleConfig,
     TorchProfilerToolConfig,
@@ -739,6 +741,18 @@ class TestDeviceActivityFromPlatform(unittest.TestCase):
 
     @patch("verl.utils.profiler.torch_profile.get_platform")
     @patch("torch.profiler.profile")
+    def test_every_device_keyword_resolves_its_activity(self, mock_profile, mock_get_platform):
+        # Every device type torch can profile resolves to its own activity, whatever this torch
+        # build happens to expose and however it capitalizes the member name.
+        for device, activity in DEVICE_ACTIVITIES.items():
+            with self.subTest(device=device):
+                mock_profile.reset_mock()
+                mock_get_platform.return_value = self._platform(device)
+                get_torch_profiler(contents=[], save_path="/tmp/test", rank=0)
+                self.assertIn(activity, self._activities(mock_profile))
+
+    @patch("verl.utils.profiler.torch_profile.get_platform")
+    @patch("torch.profiler.profile")
     def test_cpu_device_not_added_twice(self, mock_profile, mock_get_platform):
         mock_get_platform.return_value = self._platform("cpu")
         get_torch_profiler(contents=[], save_path="/tmp/test", rank=0)
@@ -754,9 +768,9 @@ class TestDeviceContentsConfigValidation(unittest.TestCase):
     """
 
     def test_every_torch_device_keyword_accepted(self):
-        for name in torch.profiler.ProfilerActivity.__members__:
-            with self.subTest(device=name):
-                TorchProfilerToolConfig(contents=[name.lower()], discrete=False)
+        for device in DEVICE_CONTENTS:
+            with self.subTest(device=device):
+                TorchProfilerToolConfig(contents=[device], discrete=False)
 
     def test_profiler_options_still_accepted(self):
         TorchProfilerToolConfig(contents=["cpu", "cuda", "memory", "shapes", "stack"], discrete=False)
@@ -764,6 +778,14 @@ class TestDeviceContentsConfigValidation(unittest.TestCase):
     def test_unknown_keyword_rejected(self):
         with self.assertRaises(AssertionError):
             TorchProfilerToolConfig(contents=["not_a_device"], discrete=False)
+
+    def test_private_use1_keyword_rejected(self):
+        # `PrivateUse1` is torch's slot for an out-of-tree backend, not a device type any platform
+        # reports as its `device_name`, so no run could ever select it. Accepting the keyword would
+        # validate a value that is then silently never recorded.
+        self.assertNotIn("privateuse1", DEVICE_CONTENTS)
+        with self.assertRaises(AssertionError):
+            TorchProfilerToolConfig(contents=["privateuse1"], discrete=False)
 
 
 def _role_profiler_omegaconf(tool="torch", enable=True, discrete=False, contents=("cpu", "cuda")):

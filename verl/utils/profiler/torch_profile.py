@@ -23,7 +23,7 @@ import torch
 
 from verl.plugin.platform import get_platform
 
-from .config import DEVICE_CONTENTS, ProfilerConfig, TorchProfilerToolConfig
+from .config import DEVICE_ACTIVITIES, DEVICE_CONTENTS, ProfilerConfig, TorchProfilerToolConfig
 from .profile import DistProfiler
 
 logger = logging.getLogger(__name__)
@@ -208,8 +208,9 @@ def get_torch_profiler(
     # branch is needed, and NVIDIA/ROCm keep the previous behaviour -- `PlatformCUDA.device_name`
     # is "cuda" and `PlatformROCm` inherits it, since torch exposes HIP as `torch.cuda`.
     device = get_platform().device_name
-    # "cpu" is not a second activity here: CPU is already in the list above.
-    device_activity = getattr(torch.profiler.ProfilerActivity, device.upper(), None) if device != "cpu" else None
+    # DEVICE_ACTIVITIES holds device types only, so a CPU-only platform resolves to no activity:
+    # CPU is already in the list above and is never added twice.
+    device_activity = DEVICE_ACTIVITIES.get(device)
     device_requested = not contents or device in contents
     if device_requested and device_activity is not None:
         activities.append(device_activity)

@@ -26,13 +26,26 @@ from omegaconf import MISSING
 
 from verl.base_config import BaseConfig
 
-# `contents` keywords that select a device activity rather than a profiler option. torch exposes
-# one `ProfilerActivity` member per backend it can profile, named as the uppercased device type
-# ("cuda", "xpu", "hpu", "mtia", ...), and a single profiler session records exactly one of them.
-# Taking the keywords from torch keeps this list from being a verl-maintained copy that silently
-# omits every backend but CUDA; `get_torch_profiler` resolves the active platform's `device_name`
-# against the same set to pick which one is actually recorded.
-DEVICE_CONTENTS = frozenset(name.lower() for name in torch.profiler.ProfilerActivity.__members__)
+# Device type -> the `ProfilerActivity` that records its kernels. torch exposes one member per
+# backend it can profile, named after the device type ("cuda", "xpu", "hpu", "mtia", ...), and a
+# single profiler session records exactly one of them. Keying by the lowercased name keeps the
+# lookup independent of how torch capitalizes a member, and taking the set from torch keeps it from
+# being a verl-maintained copy that silently omits every backend but CUDA; `get_torch_profiler`
+# resolves the active platform's `device_name` here to pick the activity it records.
+#
+# Two members are not device types and so are never resolved from a platform: `CPU`, which is
+# collected in every trace regardless of `contents`, and `PrivateUse1`, which is torch's slot for an
+# out-of-tree backend rather than a device any platform reports as its `device_name`.
+DEVICE_ACTIVITIES = {
+    name.lower(): member
+    for name, member in torch.profiler.ProfilerActivity.__members__.items()
+    if name not in ("CPU", "PrivateUse1")
+}
+
+# `contents` keywords that select a device activity rather than a profiler option. "cpu" is accepted
+# for backwards compatibility and because it reads naturally, even though CPU activity is collected
+# either way.
+DEVICE_CONTENTS = frozenset(DEVICE_ACTIVITIES) | {"cpu"}
 
 
 @dataclass
