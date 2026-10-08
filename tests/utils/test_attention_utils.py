@@ -11,86 +11,105 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Unit tests for the platform-plugin attention dispatch in verl.utils.attention_utils."""
+"""Unit tests for the backend dispatch in verl.utils.attention_utils."""
 
 import sys
 import types
 from unittest import mock
 
 import pytest
+import torch
 
-import verl.plugin.platform.platform_manager as pm
-from verl.plugin.platform import set_platform
-from verl.utils import attention_utils
-
-FAKE_MODULE_NAME = "tests.utils._fake_plugin_attention_utils"
-
-
-def _install_fake_attention_module():
-    """Register a fake dotted module exposing the four flash-attn-equivalent functions."""
-    mod = types.ModuleType(FAKE_MODULE_NAME)
-    mod.index_first_axis = mock.Mock(name="index_first_axis", return_value="plugin_index_first_axis")
-    mod.pad_input = mock.Mock(name="pad_input", return_value="plugin_pad_input")
-    mod.rearrange = mock.Mock(name="rearrange", return_value="plugin_rearrange")
-    mod.unpad_input = mock.Mock(name="unpad_input", return_value="plugin_unpad_input")
-    sys.modules[FAKE_MODULE_NAME] = mod
-    return mod
+from verl.utils import attention_padding_utils, attention_utils
 
 
 @pytest.fixture
-def reset_platform():
-    pm._current_platform = None
+def reset_dispatch_cache():
+    """_get_attention_functions() memoizes into module globals; clear them per test."""
+    attention_utils._index_first_axis = None
+    attention_utils._pad_input = None
+    attention_utils._rearrange = None
+    attention_utils._unpad_input = None
     yield
-    pm._current_platform = None
-    sys.modules.pop(FAKE_MODULE_NAME, None)
+    attention_utils._index_first_axis = None
+    attention_utils._pad_input = None
+    attention_utils._rearrange = None
+    attention_utils._unpad_input = None
 
 
-def test_plugin_module_dispatch(reset_platform):
-    """A platform that returns a module path should have all four functions dispatched through it."""
-    fake_mod = _install_fake_attention_module()
-
-    platform = mock.Mock()
-    platform.attention_utils_module.return_value = FAKE_MODULE_NAME
-    set_platform(platform)
-
-    with mock.patch("verl.utils.device.is_torch_npu_available", return_value=False):
-        assert attention_utils.index_first_axis() == "plugin_index_first_axis"
-        assert attention_utils.pad_input() == "plugin_pad_input"
-        assert attention_utils.rearrange() == "plugin_rearrange"
-        assert attention_utils.unpad_input() == "plugin_unpad_input"
-
-    fake_mod.index_first_axis.assert_called_once()
-    fake_mod.pad_input.assert_called_once()
-    fake_mod.rearrange.assert_called_once()
-    fake_mod.unpad_input.assert_called_once()
+def _fake_flash_attn():
+    """A stand-in for the flash_attn package, which has no wheel on non-CUDA devices."""
+    pkg = types.ModuleType("flash_attn")
+    bert_padding = types.ModuleType("flash_attn.bert_padding")
+    for name in ("index_first_axis", "pad_input", "rearrange", "unpad_input"):
+        setattr(bert_padding, name, mock.Mock(name=name, return_value=f"flash_{name}"))
+    pkg.bert_padding = bert_padding
+    return {"flash_attn": pkg, "flash_attn.bert_padding": bert_padding}
 
 
-def test_npu_takes_precedence_over_plugin_module(reset_platform):
-    """The NPU path must win even when the current platform also offers a plugin module."""
-    _install_fake_attention_module()
-
-    platform = mock.Mock()
-    platform.attention_utils_module.return_value = FAKE_MODULE_NAME
-    set_platform(platform)
-
-    with mock.patch("verl.utils.device.is_torch_npu_available", return_value=True):
-        func, *_ = attention_utils._get_attention_functions()
-
-    from verl.utils.npu_flash_attn_utils import index_first_axis as npu_index_first_axis
-
-    assert func is npu_index_first_axis
+def test_prefers_flash_attn_when_installed(reset_dispatch_cache):
+    """With flash-attn importable, all four entry points dispatch to it."""
+    with (
+        mock.patch.dict(sys.modules, _fake_flash_attn()),
+        mock.patch("verl.utils.device.is_torch_npu_available", return_value=False),
+    ):
+        assert attention_utils.index_first_axis() == "flash_index_first_axis"
+        assert attention_utils.pad_input() == "flash_pad_input"
+        assert attention_utils.rearrange() == "flash_rearrange"
+        assert attention_utils.unpad_input() == "flash_unpad_input"
 
 
-def test_no_plugin_module_falls_back(reset_platform):
-    """A platform that returns None must not be treated as providing a plugin module."""
-    platform = mock.Mock()
-    platform.attention_utils_module.return_value = None
-    set_platform(platform)
-
-    with mock.patch("verl.utils.device.is_torch_npu_available", return_value=False):
+def test_falls_back_to_padding_utils_without_flash_attn(reset_dispatch_cache):
+    """Without flash-attn, dispatch goes to the pure-torch port rather than a local duplicate."""
+    # A None entry in sys.modules makes `import flash_attn...` raise ImportError.
+    with (
+        mock.patch.dict(sys.modules, {"flash_attn": None, "flash_attn.bert_padding": None}),
+        mock.patch("verl.utils.device.is_torch_npu_available", return_value=False),
+    ):
         index_first_axis, pad_input, rearrange, unpad_input = attention_utils._get_attention_functions()
 
-    assert index_first_axis is not None
-    assert pad_input is not None
-    assert rearrange is not None
-    assert unpad_input is not None
+    assert index_first_axis is attention_padding_utils.index_first_axis
+    assert pad_input is attention_padding_utils.pad_input
+    assert rearrange is attention_padding_utils.rearrange
+    assert unpad_input is attention_padding_utils.unpad_input
+
+
+def test_npu_uses_padding_utils_over_flash_attn(reset_dispatch_cache):
+    """NPU keeps its existing behaviour: the port wins even if flash-attn is importable."""
+    with (
+        mock.patch.dict(sys.modules, _fake_flash_attn()),
+        mock.patch("verl.utils.device.is_torch_npu_available", return_value=True),
+    ):
+        index_first_axis, *_ = attention_utils._get_attention_functions()
+
+    assert index_first_axis is attention_padding_utils.index_first_axis
+
+
+def test_padding_utils_unpad_pad_round_trip():
+    """pad_input(unpad_input(x)) must restore the padded tensor and report correct metadata."""
+    hidden_states = torch.arange(2 * 3 * 4, dtype=torch.float32).reshape(2, 3, 4)
+    attention_mask = torch.tensor([[1, 1, 0], [1, 0, 0]])
+
+    unpadded, indices, cu_seqlens, max_seqlen, seqused = attention_padding_utils.unpad_input(
+        hidden_states, attention_mask
+    )
+
+    assert unpadded.shape == (3, 4)
+    assert max_seqlen == 2
+    torch.testing.assert_close(cu_seqlens, torch.tensor([0, 2, 3], dtype=torch.int32))
+    torch.testing.assert_close(seqused, torch.tensor([2, 1], dtype=torch.int32))
+
+    repadded = attention_padding_utils.pad_input(unpadded, indices, batch=2, seqlen=3)
+    torch.testing.assert_close(repadded, hidden_states * attention_mask.unsqueeze(-1))
+
+
+def test_padding_utils_index_first_axis_is_differentiable():
+    """index_first_axis is an autograd.Function; gradients must flow back to the unselected rows."""
+    tensor = torch.randn(4, 3, requires_grad=True)
+    indices = torch.tensor([0, 2])
+
+    attention_padding_utils.index_first_axis(tensor, indices).sum().backward()
+
+    expected = torch.zeros(4, 3)
+    expected[indices] = 1.0
+    torch.testing.assert_close(tensor.grad, expected)
