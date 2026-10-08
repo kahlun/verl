@@ -21,9 +21,18 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import torch
 from omegaconf import MISSING
 
 from verl.base_config import BaseConfig
+
+# `contents` keywords that select a device activity rather than a profiler option. torch exposes
+# one `ProfilerActivity` member per backend it can profile, named as the uppercased device type
+# ("cuda", "xpu", "hpu", "mtia", ...), and a single profiler session records exactly one of them.
+# Taking the keywords from torch keeps this list from being a verl-maintained copy that silently
+# omits every backend but CUDA; `get_torch_profiler` resolves the active platform's `device_name`
+# against the same set to pick which one is actually recorded.
+DEVICE_CONTENTS = frozenset(name.lower() for name in torch.profiler.ProfilerActivity.__members__)
 
 
 @dataclass
@@ -108,7 +117,8 @@ class TorchProfilerToolConfig(BaseConfig):
     (see :class:`TorchProfilerScheduleConfig`).
     """
 
-    # options: cuda, cpu, memory, shapes, stack. Empty means collect everything.
+    # options: the active platform's device type (cuda, xpu, ...), cpu, memory, shapes, stack.
+    # Empty means collect everything.
     # CPU activity is collected either way (the per-stage record_function markers are CPU-side
     # events), so listing "cpu" here is redundant; the other options are honored as written.
     contents: list[str] = field(default_factory=list)
@@ -126,7 +136,7 @@ class TorchProfilerToolConfig(BaseConfig):
 
     def __post_init__(self) -> None:
         """config validation logics go here"""
-        __support_contents = ["cuda", "cpu", "memory", "shapes", "stack"]
+        __support_contents = sorted(DEVICE_CONTENTS | {"memory", "shapes", "stack"})
         for content in self.contents:
             assert content in __support_contents, (
                 f"Profiler contents only supports {__support_contents}, but gets {content}"

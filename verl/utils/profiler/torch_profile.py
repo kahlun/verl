@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import functools
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -20,8 +21,12 @@ from typing import Callable, Optional
 
 import torch
 
-from .config import ProfilerConfig, TorchProfilerToolConfig
+from verl.plugin.platform import get_platform
+
+from .config import DEVICE_CONTENTS, ProfilerConfig, TorchProfilerToolConfig
 from .profile import DistProfiler
+
+logger = logging.getLogger(__name__)
 
 
 def get_dist_topology() -> dict:
@@ -122,10 +127,11 @@ def get_torch_profiler(
     """Build a ``torch.profiler.profile`` instance.
 
     Args:
-        contents: Selects the other ``torch.profiler.profile`` arguments -- ``cuda`` maps to
-            ``activities``, ``shapes`` to ``record_shapes``, ``memory`` to ``profile_memory`` and
-            ``stack`` to ``with_stack``. CPU activity is always on, since verl's per-stage
-            ``record_function`` markers are CPU-side events.
+        contents: Selects the other ``torch.profiler.profile`` arguments -- the active platform's
+            device type (``cuda`` on NVIDIA and ROCm, ``xpu``, ... ) maps to ``activities``,
+            ``shapes`` to ``record_shapes``, ``memory`` to ``profile_memory`` and ``stack`` to
+            ``with_stack``. CPU activity is always on, since verl's per-stage ``record_function``
+            markers are CPU-side events.
         save_path: Directory to write chrome traces to.
         role: Optional logical scope name (e.g. ``train`` for a worker's whole-step window, or
             a stage name in discrete mode), embedded in the filename.
@@ -196,8 +202,34 @@ def get_torch_profiler(
     # record_function, and those markers -- like operator names -- are CPU-side events, so a
     # device-only trace would be bare kernels that cannot be attributed to any stage.
     activities = [torch.profiler.ProfilerActivity.CPU]
-    if not contents or "cuda" in contents:
-        activities.append(torch.profiler.ProfilerActivity.CUDA)
+    # The device activity to record is the active platform's own device type: torch names each
+    # `ProfilerActivity` member after the device type it profiles, so the platform's `device_name`
+    # is both the activity to collect and the `contents` keyword that asks for it. No per-backend
+    # branch is needed, and NVIDIA/ROCm keep the previous behaviour -- `PlatformCUDA.device_name`
+    # is "cuda" and `PlatformROCm` inherits it, since torch exposes HIP as `torch.cuda`.
+    device = get_platform().device_name
+    # "cpu" is not a second activity here: CPU is already in the list above.
+    device_activity = getattr(torch.profiler.ProfilerActivity, device.upper(), None) if device != "cpu" else None
+    device_requested = not contents or device in contents
+    if device_requested and device_activity is not None:
+        activities.append(device_activity)
+    elif device_requested and device != "cpu":
+        logger.warning(
+            "torch.profiler has no activity for device '%s', so the trace holds CPU events only. "
+            "If this platform has its own profiler, select it with global_profiler.tool instead.",
+            device,
+        )
+    elif ignored := sorted((contents & DEVICE_CONTENTS) - {device, "cpu"}):
+        # A device keyword that is valid for *a* backend but not for this one (e.g. a config
+        # written for CUDA, run on another accelerator). Only one device activity is ever
+        # recorded, so the trace would hold CPU events alone with nothing explaining why.
+        logger.warning(
+            "profiler contents selects device activity %s, but this platform's device is '%s': "
+            "no device activity is recorded. Use '%s', or leave contents empty.",
+            ignored,
+            device,
+            device,
+        )
 
     profile_kwargs = dict(
         activities=activities,
