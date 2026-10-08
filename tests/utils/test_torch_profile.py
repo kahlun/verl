@@ -39,16 +39,22 @@ from verl.utils.profiler.torch_profile import (
 
 
 def _cuda_platform():
-    """A platform whose device is CUDA, for tests that assert the CUDA activity.
+    """A CUDA platform, for tests asserting the CUDA activity.
 
-    ``get_torch_profiler`` derives the device activity from the active platform, so a test that
-    names ``cuda`` in ``contents`` and expects ``ProfilerActivity.CUDA`` is asserting about a
-    CUDA platform specifically. Patching it in keeps those tests passing when the suite is run
-    on non-CUDA hardware, where ``get_platform()`` is that vendor's platform.
+    The device activity now comes from the active platform, so these tests are about a CUDA
+    platform specifically; patching it in keeps them passing on non-CUDA hardware.
     """
     platform = MagicMock()
     type(platform).device_name = PropertyMock(return_value="cuda")
     return platform
+
+
+# Some device torch can profile that is not CUDA, taken from whatever this build exposes so that no
+# single accelerator is baked into the tests.
+_OTHER_DEVICE = next(iter(sorted(device for device in DEVICE_ACTIVITIES if device != "cuda")), None)
+_requires_other_device = unittest.skipIf(
+    _OTHER_DEVICE is None, "this torch build exposes no device activity other than CUDA"
+)
 
 
 class TestTorchProfile(unittest.TestCase):
@@ -666,12 +672,7 @@ class TestCpuActivityAlwaysCollected(unittest.TestCase):
 
 
 class TestDeviceActivityFromPlatform(unittest.TestCase):
-    """The device activity is resolved from the active platform's ``device_name``.
-
-    torch names each ``ProfilerActivity`` member after the device type it profiles, so a backend
-    that has a member needs no verl change to be traced, and the NVIDIA/ROCm behaviour falls out
-    of the same rule (``PlatformCUDA.device_name`` is ``"cuda"``, and ``PlatformROCm`` inherits it).
-    """
+    """The device activity is resolved from the active platform's ``device_name``."""
 
     def _platform(self, device_name):
         platform = MagicMock()
@@ -681,18 +682,19 @@ class TestDeviceActivityFromPlatform(unittest.TestCase):
     def _activities(self, mock_profile):
         return mock_profile.call_args[1]["activities"]
 
+    @_requires_other_device
     @patch("verl.utils.profiler.torch_profile.get_platform")
     @patch("torch.profiler.profile")
     def test_non_cuda_device_recorded(self, mock_profile, mock_get_platform):
-        mock_get_platform.return_value = self._platform("xpu")
-        for contents in ([], ["xpu"], ["xpu", "memory"]):
+        mock_get_platform.return_value = self._platform(_OTHER_DEVICE)
+        for contents in ([], [_OTHER_DEVICE], [_OTHER_DEVICE, "memory"]):
             with self.subTest(contents=contents):
                 mock_profile.reset_mock()
                 get_torch_profiler(contents=list(contents), save_path="/tmp/test", rank=0)
                 activities = self._activities(mock_profile)
-                self.assertIn(torch.profiler.ProfilerActivity.XPU, activities)
-                # Only one device activity is ever recorded, and CUDA is checked before every
-                # other device: leaving it in would disable device profiling altogether here.
+                self.assertIn(DEVICE_ACTIVITIES[_OTHER_DEVICE], activities)
+                # torch checks CUDA before every other device: leaving it in a list it does not
+                # belong to disables device profiling altogether.
                 self.assertNotIn(torch.profiler.ProfilerActivity.CUDA, activities)
 
     @patch("verl.utils.profiler.torch_profile.get_platform")
@@ -706,33 +708,33 @@ class TestDeviceActivityFromPlatform(unittest.TestCase):
                 get_torch_profiler(contents=list(contents), save_path="/tmp/test", rank=0)
                 self.assertIn(torch.profiler.ProfilerActivity.CUDA, self._activities(mock_profile))
 
+    @_requires_other_device
     @patch("verl.utils.profiler.torch_profile.get_platform")
     @patch("torch.profiler.profile")
     def test_other_platforms_device_keyword_warns(self, mock_profile, mock_get_platform):
-        # A config written for CUDA, run on another accelerator: "cuda" is a valid keyword for
-        # *a* backend but not for this one, so no device activity is recorded. Say so.
-        mock_get_platform.return_value = self._platform("xpu")
+        # A CUDA config run on another accelerator records no device activity, so say so.
+        mock_get_platform.return_value = self._platform(_OTHER_DEVICE)
         with self.assertLogs("verl.utils.profiler.torch_profile", level="WARNING") as log_ctx:
             get_torch_profiler(contents=["cuda"], save_path="/tmp/test", rank=0)
         self.assertEqual(self._activities(mock_profile), [torch.profiler.ProfilerActivity.CPU])
-        self.assertTrue(any("'xpu'" in record.getMessage() for record in log_ctx.records))
+        self.assertTrue(any(f"'{_OTHER_DEVICE}'" in record.getMessage() for record in log_ctx.records))
 
     @patch("verl.utils.profiler.torch_profile.get_platform")
     @patch("torch.profiler.profile")
     def test_device_without_profiler_activity_warns(self, mock_profile, mock_get_platform):
-        # torch has no ProfilerActivity.NPU, so there is nothing to request. Previously verl
-        # asked for CUDA here and torch logged "CUDA is not available, disabling CUDA
-        # profiling"; the trace content is the same, the warning is now ours.
+        # torch has no ProfilerActivity.NPU: same CPU-only trace as before, but the warning
+        # explaining it is now verl's instead of torch's misleading CUDA one.
         mock_get_platform.return_value = self._platform("npu")
         with self.assertLogs("verl.utils.profiler.torch_profile", level="WARNING"):
             get_torch_profiler(contents=[], save_path="/tmp/test", rank=0)
         self.assertEqual(self._activities(mock_profile), [torch.profiler.ProfilerActivity.CPU])
 
+    @_requires_other_device
     @patch("verl.utils.profiler.torch_profile.get_platform")
     @patch("torch.profiler.profile")
     def test_non_device_contents_select_no_device(self, mock_profile, mock_get_platform):
         # `contents` naming only profiler options is an explicit CPU-only request, not a mistake.
-        mock_get_platform.return_value = self._platform("xpu")
+        mock_get_platform.return_value = self._platform(_OTHER_DEVICE)
         logger = logging.getLogger("verl.utils.profiler.torch_profile")
         with mock.patch.object(logger, "warning") as mock_warning:
             get_torch_profiler(contents=["stack"], save_path="/tmp/test", rank=0)
@@ -742,8 +744,7 @@ class TestDeviceActivityFromPlatform(unittest.TestCase):
     @patch("verl.utils.profiler.torch_profile.get_platform")
     @patch("torch.profiler.profile")
     def test_every_device_keyword_resolves_its_activity(self, mock_profile, mock_get_platform):
-        # Every device type torch can profile resolves to its own activity, whatever this torch
-        # build happens to expose and however it capitalizes the member name.
+        # Holds for whatever members a torch build exposes, however they are capitalized.
         for device, activity in DEVICE_ACTIVITIES.items():
             with self.subTest(device=device):
                 mock_profile.reset_mock()
@@ -762,9 +763,8 @@ class TestDeviceActivityFromPlatform(unittest.TestCase):
 class TestDeviceContentsConfigValidation(unittest.TestCase):
     """``contents`` accepts a device keyword for any backend torch can profile.
 
-    The keywords come from ``torch.profiler.ProfilerActivity`` rather than a hardcoded list, so
-    validation does not have to know which platform the run will land on -- which keeps
-    ``TorchProfilerToolConfig`` free of platform detection on the (often CPU-only) driver.
+    The keywords come from torch rather than a hardcoded list, so validation needs no platform
+    detection on the (often CPU-only) driver.
     """
 
     def test_every_torch_device_keyword_accepted(self):
@@ -780,8 +780,7 @@ class TestDeviceContentsConfigValidation(unittest.TestCase):
             TorchProfilerToolConfig(contents=["not_a_device"], discrete=False)
 
     def test_private_use1_keyword_rejected(self):
-        # `PrivateUse1` is torch's slot for an out-of-tree backend, not a device type any platform
-        # reports as its `device_name`, so no run could ever select it. Accepting the keyword would
+        # No platform reports "privateuse1" as its device_name, so accepting the keyword would
         # validate a value that is then silently never recorded.
         self.assertNotIn("privateuse1", DEVICE_CONTENTS)
         with self.assertRaises(AssertionError):

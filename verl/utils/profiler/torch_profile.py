@@ -128,10 +128,10 @@ def get_torch_profiler(
 
     Args:
         contents: Selects the other ``torch.profiler.profile`` arguments -- the active platform's
-            device type (``cuda`` on NVIDIA and ROCm, ``xpu``, ... ) maps to ``activities``,
-            ``shapes`` to ``record_shapes``, ``memory`` to ``profile_memory`` and ``stack`` to
-            ``with_stack``. CPU activity is always on, since verl's per-stage ``record_function``
-            markers are CPU-side events.
+            device type (``cuda`` on NVIDIA and ROCm) maps to ``activities``, ``shapes`` to
+            ``record_shapes``, ``memory`` to ``profile_memory`` and ``stack`` to ``with_stack``.
+            CPU activity is always on, since verl's per-stage ``record_function`` markers are
+            CPU-side events.
         save_path: Directory to write chrome traces to.
         role: Optional logical scope name (e.g. ``train`` for a worker's whole-step window, or
             a stage name in discrete mode), embedded in the filename.
@@ -202,14 +202,10 @@ def get_torch_profiler(
     # record_function, and those markers -- like operator names -- are CPU-side events, so a
     # device-only trace would be bare kernels that cannot be attributed to any stage.
     activities = [torch.profiler.ProfilerActivity.CPU]
-    # The device activity to record is the active platform's own device type: torch names each
-    # `ProfilerActivity` member after the device type it profiles, so the platform's `device_name`
-    # is both the activity to collect and the `contents` keyword that asks for it. No per-backend
-    # branch is needed, and NVIDIA/ROCm keep the previous behaviour -- `PlatformCUDA.device_name`
-    # is "cuda" and `PlatformROCm` inherits it, since torch exposes HIP as `torch.cuda`.
+    # The platform's own device type is both the activity to record and the `contents` keyword that
+    # asks for it, so no per-backend branch is needed: NVIDIA/ROCm resolve "cuda" exactly as before,
+    # and a device torch cannot profile resolves to nothing.
     device = get_platform().device_name
-    # DEVICE_ACTIVITIES holds device types only, so a CPU-only platform resolves to no activity:
-    # CPU is already in the list above and is never added twice.
     device_activity = DEVICE_ACTIVITIES.get(device)
     device_requested = not contents or device in contents
     if device_requested and device_activity is not None:
@@ -221,9 +217,7 @@ def get_torch_profiler(
             device,
         )
     elif ignored := sorted((contents & DEVICE_CONTENTS) - {device, "cpu"}):
-        # A device keyword that is valid for *a* backend but not for this one (e.g. a config
-        # written for CUDA, run on another accelerator). Only one device activity is ever
-        # recorded, so the trace would hold CPU events alone with nothing explaining why.
+        # A keyword valid for *a* backend but not this one, e.g. a CUDA config run elsewhere.
         logger.warning(
             "profiler contents selects device activity %s, but this platform's device is '%s': "
             "no device activity is recorded. Use '%s', or leave contents empty.",

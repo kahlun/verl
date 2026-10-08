@@ -26,25 +26,17 @@ from omegaconf import MISSING
 
 from verl.base_config import BaseConfig
 
-# Device type -> the `ProfilerActivity` that records its kernels. torch exposes one member per
-# backend it can profile, named after the device type ("cuda", "xpu", "hpu", "mtia", ...), and a
-# single profiler session records exactly one of them. Keying by the lowercased name keeps the
-# lookup independent of how torch capitalizes a member, and taking the set from torch keeps it from
-# being a verl-maintained copy that silently omits every backend but CUDA; `get_torch_profiler`
-# resolves the active platform's `device_name` here to pick the activity it records.
-#
-# Two members are not device types and so are never resolved from a platform: `CPU`, which is
-# collected in every trace regardless of `contents`, and `PrivateUse1`, which is torch's slot for an
-# out-of-tree backend rather than a device any platform reports as its `device_name`.
+# Device type -> the `ProfilerActivity` recording it. torch names one member per backend it can
+# profile after that device type, so `get_torch_profiler` resolves the active platform's
+# `device_name` here. `CPU` is excluded (always collected, never resolved from a platform) and so is
+# `PrivateUse1` (torch's out-of-tree slot, not a device type any platform reports).
 DEVICE_ACTIVITIES = {
     name.lower(): member
     for name, member in torch.profiler.ProfilerActivity.__members__.items()
     if name not in ("CPU", "PrivateUse1")
 }
 
-# `contents` keywords that select a device activity rather than a profiler option. "cpu" is accepted
-# for backwards compatibility and because it reads naturally, even though CPU activity is collected
-# either way.
+# `contents` keywords selecting a device activity rather than a profiler option.
 DEVICE_CONTENTS = frozenset(DEVICE_ACTIVITIES) | {"cpu"}
 
 
@@ -130,7 +122,7 @@ class TorchProfilerToolConfig(BaseConfig):
     (see :class:`TorchProfilerScheduleConfig`).
     """
 
-    # options: the active platform's device type (cuda, xpu, ...), cpu, memory, shapes, stack.
+    # options: the active platform's device type, cpu, memory, shapes, stack.
     # Empty means collect everything.
     # CPU activity is collected either way (the per-stage record_function markers are CPU-side
     # events), so listing "cpu" here is redundant; the other options are honored as written.
