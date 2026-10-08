@@ -166,17 +166,6 @@ class PlatformBase(abc.ABC):
         """Return the environment-variable name that controls visible devices."""
         ...
 
-    def attention_utils_module(self) -> Optional[str]:
-        """Return a dotted module path providing a flash-attn-equivalent for this platform.
-
-        The module must expose ``index_first_axis``, ``pad_input``,
-        ``rearrange`` and ``unpad_input`` (see ``verl/utils/npu_flash_attn_utils.py``
-        for the expected signatures). Return ``None`` (default) to fall back to
-        the ``flash_attn`` pip package, or to the pure-PyTorch implementation in
-        ``verl/utils/attention_utils.py`` when that isn't installed either.
-        """
-        return None
-
     # ------------------------------------------------------------------
     # Profiling helpers
     # ------------------------------------------------------------------
@@ -205,19 +194,10 @@ class PlatformBase(abc.ABC):
 
         Lets a platform supply its own tracing-marker implementation (see
         ``verl/utils/profiler/nvtx_profile.py`` / ``mstx_profile.py`` for the
-        expected signatures), selected by ``verl/utils/profiler/__init__.py``
-        when no ``nvtx`` package and no built-in device-specific module apply.
-        Return ``None`` (default) to use the generic pure-Python fallback.
-        """
-        return None
-
-    def dist_profiler_cls(self, tool: str) -> Optional[type]:
-        """Return a ``DistProfiler`` subclass for a plugin-supplied ``profiler.tool`` name.
-
-        Called by ``DistProfiler.__init__`` (``verl/utils/profiler/profile.py``)
-        after checking verl's built-in tool names (``nsys``, ``npu``, ``torch``,
-        ``torch_memory``, ``precision_debugger``). Return ``None`` (default) if
-        this platform doesn't provide an implementation for ``tool``.
+        expected signatures), asked for first by
+        ``verl/utils/profiler/__init__.py``. Return ``None`` (default) to use
+        ``nvtx``, the built-in device-specific module, or the generic
+        pure-Python fallback, in that order.
         """
         return None
 
