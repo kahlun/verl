@@ -62,12 +62,34 @@ if is_npu_available:
     _flash_use_top_left_mask = flash_attn_supports_top_left_mask()
     _flash_attn_backend_available = True
 
-# Neither branch above fired - e.g. XPU, where the CUDA-only flash_attn wheel
-# doesn't install and there's no NPU build either (FA2 still works there via the
-# HF Hub `kernels` package, but that's a separate dispatch path this file never
-# used). flash_attn_func/flash_attn_varlen_func stay unbound; fail clearly at the
-# call site below instead of a bare NameError deep inside tensor ops.
 if not _flash_attn_backend_available:
+    # Neither branch above fired - e.g. XPU, where the CUDA-only flash_attn
+    # wheel doesn't install and there's no NPU build either. FA2 still works
+    # there, but through a separate dispatch path this file never used: HF
+    # Hub `kernels`, the same mechanism transformers' own attn_implementation
+    # resolution uses (confirmed in production - see
+    # docker/intel_gpu/requirements-intel-gpu.txt). Reuse transformers' own
+    # version-resolution helper rather than hardcoding a hub major version, so
+    # this tracks any future bump to transformers' mapping automatically.
+    try:
+        from kernels import get_kernel
+        from transformers.integrations.hub_kernels import FLASH_ATTN_KERNEL_FALLBACK, get_attn_kernel_version
+
+        _fa2_repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
+        _fa2_kernel = get_kernel(_fa2_repo_id, version=get_attn_kernel_version(_fa2_repo_id))
+        flash_attn_func = _fa2_kernel.flash_attn_func
+        flash_attn_varlen_func = _fa2_kernel.flash_attn_varlen_func
+
+        _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
+        _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
+        _flash_use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        _flash_attn_backend_available = True
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Could not load a flash-attn backend via HF Hub kernels either: {e}")
+
+if not _flash_attn_backend_available:
+    # Still nothing - fail clearly at the call site below instead of a bare
+    # NameError deep inside tensor ops.
     _flash_supports_window_size = False
     _flash_supports_deterministic = False
     _flash_use_top_left_mask = False
