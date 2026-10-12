@@ -43,12 +43,15 @@ logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
 
+_flash_attn_backend_available = False
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
 
     _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
     _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
     _flash_use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+    _flash_attn_backend_available = True
 
 if is_npu_available:
     from transformers.integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
@@ -58,6 +61,17 @@ if is_npu_available:
     _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
     _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
     _flash_use_top_left_mask = flash_attn_supports_top_left_mask()
+    _flash_attn_backend_available = True
+
+# Neither branch above fired - e.g. XPU, where the CUDA-only flash_attn wheel
+# doesn't install and there's no NPU build either (FA2 still works there via the
+# HF Hub `kernels` package, but that's a separate dispatch path this file never
+# used). flash_attn_func/flash_attn_varlen_func stay unbound; fail clearly at the
+# call site below instead of a bare NameError deep inside tensor ops.
+if not _flash_attn_backend_available:
+    _flash_supports_window_size = False
+    _flash_supports_deterministic = False
+    _flash_use_top_left_mask = False
 
 _flash_deterministic_enabled = os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
 
@@ -215,6 +229,13 @@ def _custom_flash_attention_forward(
     """
     Patches flash attention forward to handle 3D position ids in mrope. (3, batch_size, seq_length)
     """
+    if not _flash_attn_backend_available:
+        raise RuntimeError(
+            "GLM-4V attention was monkeypatched to the flash-attn forward (triggered by "
+            "use_remove_padding=True or ulysses_sp_size>1) but no flash-attn backend is available "
+            "on this device (checked: CUDA flash_attn, NPU flash_attn). Set use_remove_padding=False "
+            "and ulysses_sp_size=1 to use the model's native attention implementation instead."
+        )
     # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).
     flash_kwargs = {}
 
