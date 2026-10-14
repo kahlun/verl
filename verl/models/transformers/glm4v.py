@@ -68,7 +68,8 @@ if not _flash_attn_backend_available:
     # will utilize huggingface kernel to handle the non cpu/gpu attention_util problem
     try:
         from kernels import get_kernel
-        from transformers.integrations.hub_kernels import FLASH_ATTN_KERNEL_FALLBACK, get_attn_kernel_version
+        from transformers.integrations.hub_kernels import get_attn_kernel_version
+        from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
         _fa2_repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
         _fa2_kernel = get_kernel(_fa2_repo_id, version=get_attn_kernel_version(_fa2_repo_id))
