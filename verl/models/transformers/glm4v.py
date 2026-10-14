@@ -64,14 +64,8 @@ if is_npu_available:
     _flash_attn_backend_available = True
 
 if not _flash_attn_backend_available:
-    # Neither branch above fired - e.g. XPU, where the CUDA-only flash_attn
-    # wheel doesn't install and there's no NPU build either. FA2 still works
-    # there, but through a separate dispatch path this file never used: HF
-    # Hub `kernels`, the same mechanism transformers' own attn_implementation
-    # resolution uses (confirmed in production - see
-    # docker/intel_gpu/requirements-intel-gpu.txt). Reuse transformers' own
-    # version-resolution helper rather than hardcoding a hub major version, so
-    # this tracks any future bump to transformers' mapping automatically.
+    # a fallback for did not install flash_attn and npu
+    # will utilize huggingface kernel to handle the non cpu/gpu attention_util problem
     try:
         from kernels import get_kernel
         from transformers.integrations.hub_kernels import FLASH_ATTN_KERNEL_FALLBACK, get_attn_kernel_version
