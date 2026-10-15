@@ -1,0 +1,18 @@
+# Intel XPU overlay on verl's own requirements.txt: list ONLY what XPU must add or force.
+# Everything else (tensordict, numpy, ray, ...) comes from requirements.txt.
+# Install with uv (pip has no --override; pyzes needs one to beat torch's pyzes==0.1.1):
+#   grep -v '^transformers' requirements.txt > /tmp/requirements-core.txt
+#   echo 'pyzes>=0.1.2' > /tmp/override-pyzes.txt
+#   uv --no-config pip install -r /tmp/requirements-core.txt -r requirements-xpu.txt --override /tmp/override-pyzes.txt
+# --no-config matters: run inside a verl checkout, uv reads its pyproject [tool.uv].override-dependencies
+# (transformers==5.12.1, kernels<0.15 for the CUDA stack), which would silently beat the pins below.
+torch==2.13.0+xpu
+# 5.17.0 requests the kernels-community/flash-attn2 hub build that has a torch213 XPU wheel;
+# it deliberately exceeds requirements.txt's transformers<5.13. 5.17.0 rejects kernels>=0.17.
+transformers==5.17.0
+kernels>=0.16.0,<0.17.0
+dpctl
+# the device-memory query needs >= 0.1.2; torch 2.13.0+xpu itself pins pyzes==0.1.1
+pyzes>=0.1.2
+# version follows torch's own pin
+triton-xpu
