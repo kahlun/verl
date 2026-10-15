@@ -47,6 +47,14 @@ except ImportError:
     NPU_CROSS_ENTROPY_LOSS_AVAILABLE = False
 
 
+try:
+    from liger_kernel.transformers.functional import liger_cross_entropy
+
+    LIGER_CROSS_ENTROPY_LOSS_AVAILABLE = True
+except ImportError:
+    LIGER_CROSS_ENTROPY_LOSS_AVAILABLE = False
+
+
 def gather_from_labels(data: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
     """Gather values from data tensor at positions specified by label indices.
 
@@ -75,14 +83,17 @@ def logprobs_from_logits(logits, labels, inplace_backward=True):
     Compute per-token log-probabilities for the given labels.
 
     Uses a Flash-Attention–based cross-entropy (if available) for efficient backward,
-    otherwise falls back to a standard log-softmax+gather approach.
+    then torch_npu's native op, then Liger Kernel's fused Triton op, otherwise falls
+    back to a standard log-softmax+gather approach.
 
     See: https://github.com/pytorch/pytorch/issues/563#issuecomment-330103591
 
     Args:
         logits (Tensor): Model outputs of shape (..., vocab_size).
         labels (LongTensor): True class indices of shape matching logits[..., :-1].
-        inplace_backward (bool): If True and Flash-Attn is available, perform backward in-place.
+        inplace_backward (bool): If True, the kernel may overwrite `logits` with their gradient
+            (Flash-Attn in backward, Liger in forward). Pass False when anything else still
+            reads `logits` after this call, e.g. entropy computed from the same tensor.
 
     Returns:
         Tensor: Log-probabilities of the target labels, shape logits.shape[:-1].
@@ -102,6 +113,17 @@ def logprobs_from_logits(logits, labels, inplace_backward=True):
         output = output.view(*batch_dim)
     elif NPU_CROSS_ENTROPY_LOSS_AVAILABLE:
         output = logprobs_from_logits_torch_npu(logits, labels)
+    elif (
+        LIGER_CROSS_ENTROPY_LOSS_AVAILABLE
+        and os.environ.get("VERL_DISABLE_LIGER_CE", "0") != "1"
+        and logits.device.type in ("cuda", "xpu")
+    ):
+        # Liger writes the gradient into its input during the forward pass whenever
+        # that input requires grad. If the caller still reads `logits` afterwards
+        # (e.g. entropy), hand Liger a copy so the caller's tensor stays intact.
+        if logits.requires_grad and not inplace_backward:
+            logits = logits.clone()
+        output = logprobs_from_logits_liger(logits, labels)
     else:
         output = logprobs_from_logits_v2(logits, labels)
     return output
@@ -149,6 +171,30 @@ def logprobs_from_logits_torch_npu(logits: torch.Tensor, labels: torch.Tensor) -
     batch_dim = logits.shape[:-1]
     logits = logits.reshape(-1, logits.shape[-1])
     loss, _, _, _ = torch_npu.npu_cross_entropy_loss(logits, labels.reshape(-1), reduction="none")
+    return -loss.view(*batch_dim)
+
+
+def logprobs_from_logits_liger(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """Compute log-probabilities using Liger Kernel's fused Triton cross-entropy.
+
+    Liger Kernel's cross-entropy op is a Triton kernel for CUDA/ROCm and Intel XPU,
+    making it a fused-kernel fallback where flash-attn's is unavailable or disabled,
+    e.g. Intel XPU. Each row is reduced by a single program in a fixed order, so the
+    result is bitwise deterministic. Set VERL_DISABLE_LIGER_CE=1 to skip it.
+
+    Note: when `logits.requires_grad`, Liger overwrites `logits` with their gradient
+    during this call; see `logprobs_from_logits(..., inplace_backward=False)`.
+
+    Args:
+        logits: Model output logits of shape (..., vocab_size).
+        labels: Target token indices of shape (...,).
+
+    Returns:
+        torch.Tensor: Log-probabilities for target labels, same shape as labels.
+    """
+    batch_dim = logits.shape[:-1]
+    logits = logits.reshape(-1, logits.shape[-1])
+    loss = liger_cross_entropy(logits, labels.reshape(-1), reduction="none")
     return -loss.view(*batch_dim)
 
 
