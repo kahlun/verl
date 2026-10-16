@@ -42,12 +42,15 @@ logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
 
+_flash_attn_backend_available = False
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
 
     _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
     _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
     _flash_use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+    _flash_attn_backend_available = True
 
 if is_npu_available:
     from transformers.integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
@@ -57,6 +60,34 @@ if is_npu_available:
     _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
     _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
     _flash_use_top_left_mask = flash_attn_supports_top_left_mask()
+    _flash_attn_backend_available = True
+
+if not _flash_attn_backend_available:
+    # a fallback for did not install flash_attn and npu
+    # will utilize huggingface kernel to handle the non cpu/gpu attention_util problem
+    try:
+        from kernels import get_kernel
+        from transformers.integrations.hub_kernels import get_attn_kernel_version
+        from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
+
+        _fa2_repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
+        _fa2_kernel = get_kernel(_fa2_repo_id, version=get_attn_kernel_version(_fa2_repo_id))
+        flash_attn_func = _fa2_kernel.flash_attn_func
+        flash_attn_varlen_func = _fa2_kernel.flash_attn_varlen_func
+
+        _flash_supports_window_size = "window_size" in inspect.signature(flash_attn_func).parameters
+        _flash_supports_deterministic = "deterministic" in inspect.signature(flash_attn_func).parameters
+        _flash_use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        _flash_attn_backend_available = True
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Could not load a flash-attn backend via HF Hub kernels either: {e}")
+
+if not _flash_attn_backend_available:
+    # Still nothing - fail clearly at the call site below instead of a bare
+    # NameError deep inside tensor ops.
+    _flash_supports_window_size = False
+    _flash_supports_deterministic = False
+    _flash_use_top_left_mask = False
 
 _flash_deterministic_enabled = os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
 
@@ -195,6 +226,13 @@ def _custom_flash_attention_forward(
     """
     Patches flash attention forward to handle 3D position ids in mrope. (3, batch_size, seq_length)
     """
+    if not _flash_attn_backend_available:
+        raise RuntimeError(
+            "Qwen2-VL attention was monkeypatched to the flash-attn forward (triggered by "
+            "use_remove_padding=True or ulysses_sp_size>1) but no flash-attn backend is available "
+            "on this device (checked: CUDA flash_attn, NPU flash_attn). Set use_remove_padding=False "
+            "and ulysses_sp_size=1 to use the model's native attention implementation instead."
+        )
     # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).
     use_sliding_windows = (
         _flash_supports_window_size and sliding_window is not None and key_states.shape[1] > sliding_window
