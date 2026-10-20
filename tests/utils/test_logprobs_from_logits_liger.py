@@ -14,8 +14,9 @@
 """Liger branch of logprobs_from_logits, checked against the pure-PyTorch reference.
 
 Liger writes the gradient into its input during the forward pass, so the cases
-that matter are the ones where the caller still reads `logits` afterwards
-(entropy computed from the same tensor), mirroring the FSDP engine's order.
+that matter are the ones where the caller still reads `logits` afterwards:
+entropy computed from the same tensor, either before the log-prob call (FSDP
+engine order) or after it (prefix_grouper_utils.pg_forward order).
 """
 
 import pytest
@@ -40,14 +41,16 @@ def liger_calls(monkeypatch):
     # flash-attn's CE comes first in the dispatch; disable it so CUDA reaches Liger too
     monkeypatch.setenv("VERL_DISABLE_FLASH_ATTN_CE", "1")
     monkeypatch.delenv("VERL_DISABLE_LIGER_CE", raising=False)
+    # records whether the tensor handed to the Liger kernel requires grad,
+    # i.e. whether Liger is allowed to write its gradient into it
     calls = []
-    original = verl_F.logprobs_from_logits_liger
+    original = verl_F.liger_cross_entropy
 
-    def recording(logits, labels):
+    def recording(logits, *args, **kwargs):
         calls.append(logits.requires_grad)
-        return original(logits, labels)
+        return original(logits, *args, **kwargs)
 
-    monkeypatch.setattr(verl_F, "logprobs_from_logits_liger", recording)
+    monkeypatch.setattr(verl_F, "liger_cross_entropy", recording)
     return calls
 
 
@@ -60,11 +63,13 @@ def _inputs(dtype=torch.float32):
     return base, labels, w_logprob, w_entropy
 
 
-def _forward_backward(base, labels, w_logprob, w_entropy, with_entropy, logprob_fn):
+def _forward_backward(base, labels, w_logprob, w_entropy, with_entropy, logprob_fn, entropy_after=False):
     leaf = base.clone().requires_grad_(True)
     logits = leaf * 1.0  # non-leaf, like an lm_head output
-    entropy = verl_F.entropy_from_logits(logits) if with_entropy else None
+    entropy = verl_F.entropy_from_logits(logits) if with_entropy and not entropy_after else None
     log_probs = logprob_fn(logits)
+    if with_entropy and entropy_after:
+        entropy = verl_F.entropy_from_logits(logits)
     loss = -(log_probs * w_logprob).sum()
     if with_entropy:
         loss = loss - ENTROPY_COEFF * (entropy * w_entropy).sum()
@@ -72,11 +77,17 @@ def _forward_backward(base, labels, w_logprob, w_entropy, with_entropy, logprob_
     return log_probs.detach(), leaf.grad
 
 
-@pytest.mark.parametrize("with_entropy", [False, True])
-def test_liger_matches_reference(liger_calls, with_entropy):
+@pytest.mark.parametrize("with_entropy,entropy_after", [(False, False), (True, False), (True, True)])
+def test_liger_matches_reference(liger_calls, with_entropy, entropy_after):
     base, labels, w_logprob, w_entropy = _inputs()
     ref_lp, ref_grad = _forward_backward(
-        base, labels, w_logprob, w_entropy, with_entropy, lambda x: verl_F.logprobs_from_logits_naive(x, labels)
+        base,
+        labels,
+        w_logprob,
+        w_entropy,
+        with_entropy,
+        lambda x: verl_F.logprobs_from_logits_naive(x, labels),
+        entropy_after,
     )
     lp, grad = _forward_backward(
         base,
@@ -85,10 +96,31 @@ def test_liger_matches_reference(liger_calls, with_entropy):
         w_entropy,
         with_entropy,
         lambda x: verl_F.logprobs_from_logits(x, labels, inplace_backward=not with_entropy),
+        entropy_after,
     )
-    assert liger_calls == [True]
+    # in-place Liger only when nothing else reads the logits
+    assert liger_calls == [not with_entropy]
     torch.testing.assert_close(lp, ref_lp, atol=1e-4, rtol=1e-5)
     torch.testing.assert_close(grad, ref_grad, atol=1e-5, rtol=1e-4)
+
+
+def test_liger_keep_logits_leaves_logits_untouched(liger_calls):
+    base, labels, _, _ = _inputs()
+    logits = base.clone().requires_grad_(True) * 1.0
+    before = logits.detach().clone()
+    verl_F.logprobs_from_logits(logits, labels, inplace_backward=False)
+    assert liger_calls == [False]
+    assert torch.equal(logits.detach(), before)
+
+
+def test_liger_inplace_overwrites_logits(liger_calls):
+    # pins why callers must pass inplace_backward=False when they read logits afterwards
+    base, labels, _, _ = _inputs()
+    logits = base.clone().requires_grad_(True) * 1.0
+    before = logits.detach().clone()
+    verl_F.logprobs_from_logits(logits, labels, inplace_backward=True)
+    assert liger_calls == [True]
+    assert not torch.equal(logits.detach(), before)
 
 
 def test_liger_no_grad_leaves_logits_untouched(liger_calls):

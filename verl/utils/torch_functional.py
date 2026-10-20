@@ -94,6 +94,8 @@ def logprobs_from_logits(logits, labels, inplace_backward=True):
         inplace_backward (bool): If True, the kernel may overwrite `logits` with their gradient
             (Flash-Attn in backward, Liger in forward). Pass False when anything else still
             reads `logits` after this call, e.g. entropy computed from the same tensor.
+            With Liger, leaving it True in that case gives silently wrong values: Liger
+            overwrites `logits` during the forward pass and autograd does not detect it.
 
     Returns:
         Tensor: Log-probabilities of the target labels, shape logits.shape[:-1].
@@ -120,10 +122,12 @@ def logprobs_from_logits(logits, labels, inplace_backward=True):
     ):
         # Liger writes the gradient into its input during the forward pass whenever
         # that input requires grad. If the caller still reads `logits` afterwards
-        # (e.g. entropy), hand Liger a copy so the caller's tensor stays intact.
+        # (e.g. entropy), run Liger on detached logits and compute the backward here,
+        # so the caller's tensor stays intact without a logits-sized copy.
         if logits.requires_grad and not inplace_backward:
-            logits = logits.clone()
-        output = logprobs_from_logits_liger(logits, labels)
+            output = logprobs_from_logits_liger_keep_logits(logits, labels)
+        else:
+            output = logprobs_from_logits_liger(logits, labels)
     else:
         output = logprobs_from_logits_v2(logits, labels)
     return output
@@ -183,7 +187,8 @@ def logprobs_from_logits_liger(logits: torch.Tensor, labels: torch.Tensor) -> to
     result is bitwise deterministic. Set VERL_DISABLE_LIGER_CE=1 to skip it.
 
     Note: when `logits.requires_grad`, Liger overwrites `logits` with their gradient
-    during this call; see `logprobs_from_logits(..., inplace_backward=False)`.
+    during this call, silently: autograd does not detect it. Use
+    `logprobs_from_logits_liger_keep_logits` when anything reads `logits` afterwards.
 
     Args:
         logits: Model output logits of shape (..., vocab_size).
@@ -196,6 +201,45 @@ def logprobs_from_logits_liger(logits: torch.Tensor, labels: torch.Tensor) -> to
     logits = logits.reshape(-1, logits.shape[-1])
     loss = liger_cross_entropy(logits, labels.reshape(-1), reduction="none")
     return -loss.view(*batch_dim)
+
+
+class _LigerLogprobsKeepLogits(torch.autograd.Function):
+    """Liger forward on detached logits, so Liger writes nothing into them, plus a softmax backward."""
+
+    @staticmethod
+    def forward(ctx, logits, labels):
+        log_probs = -liger_cross_entropy(logits.detach(), labels, reduction="none")
+        ctx.save_for_backward(logits, labels)
+        return log_probs
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        logits, labels = ctx.saved_tensors
+        grad_output = grad_output.float().unsqueeze(-1)
+        logits_fp32 = logits.float()
+        # d log_softmax(z)_y / dz = onehot(y) - softmax(z)
+        grad_logits = (logits_fp32 - torch.logsumexp(logits_fp32, dim=-1, keepdim=True)).exp_().mul_(-grad_output)
+        grad_logits.scatter_add_(-1, labels.unsqueeze(-1), grad_output)
+        return grad_logits.to(logits.dtype), None
+
+
+def logprobs_from_logits_liger_keep_logits(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """Same result as `logprobs_from_logits_liger`, but never modifies `logits`.
+
+    Liger only computes its in-forward gradient for inputs that require grad, so it runs
+    on `logits.detach()` and the gradient is computed in backward instead. This avoids
+    the extra logits-sized buffer that cloning `logits` for Liger would cost.
+
+    Args:
+        logits: Model output logits of shape (..., vocab_size).
+        labels: Target token indices of shape (...,).
+
+    Returns:
+        torch.Tensor: Log-probabilities for target labels, same shape as labels.
+    """
+    batch_dim = logits.shape[:-1]
+    log_probs = _LigerLogprobsKeepLogits.apply(logits.reshape(-1, logits.shape[-1]), labels.reshape(-1))
+    return log_probs.view(*batch_dim)
 
 
 def logprobs_from_logits_naive(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
