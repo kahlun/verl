@@ -4,6 +4,9 @@
 #   grep -v '^transformers' requirements.txt > /tmp/requirements-core.txt
 #   echo 'pyzes>=0.1.2' > /tmp/override-pyzes.txt
 #   uv --no-config pip install -r /tmp/requirements-core.txt -r requirements-xpu.txt --override /tmp/override-pyzes.txt
+#   uv --no-config pip install --no-deps -e .
+#   TRITON_XPU="$(uv pip freeze | grep -i '^triton-xpu==')"; uv pip uninstall triton; uv pip install --reinstall --no-deps "${TRITON_XPU}"
+# (the last line: liger-kernel's `triton` and `triton-xpu` ship the same triton/ files; keep one owner.)
 # --no-config matters: run inside a verl checkout, uv reads its pyproject [tool.uv].override-dependencies
 # (transformers==5.12.1, kernels<0.15 for the CUDA stack), which would silently beat the pins below.
 torch==2.13.0+xpu

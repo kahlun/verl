@@ -88,7 +88,12 @@ echo 'pyzes>=0.1.2' > /tmp/override-pyzes.txt
 uv --no-config pip install -r /tmp/requirements-core.txt -r requirements-xpu.txt --override /tmp/override-pyzes.txt
 uv --no-config pip install --no-deps -e .
 
-# 3. the plugin
+# 3. triton: keep triton-xpu as the only owner of triton/, at the version the resolver chose
+TRITON_XPU="$(uv pip freeze | grep -i '^triton-xpu==')"
+uv pip uninstall triton
+uv pip install --reinstall --no-deps "${TRITON_XPU}"
+
+# 4. the plugin
 uv pip install --no-deps -e /path/to/verl-hardware-plugin
 ```
 
@@ -100,6 +105,10 @@ Why these exact flags:
 - `grep -v '^transformers'`: uv cannot override a direct requirement, and `requirements.txt` caps
   `transformers<5.13` while XPU uses 5.17.0 (the flash-attn2 hub kernel build).
 - `--no-deps`: otherwise the install may replace the XPU torch with a CUDA or newer build.
+- The `triton` step: `liger-kernel` (in verl's `requirements.txt`) depends on `triton`, and the `triton` and
+  `triton-xpu` distributions ship the same `triton/` files. Left alone, a second owner of those files can
+  overwrite the XPU backend. Uninstalling `triton` and reinstalling `triton-xpu` at the resolved version leaves one
+  owner. The Dockerfile does the same.
 
 `uv pip check` then reports a few expected mismatches (verl's `transformers<5.13`, torch's `pyzes==0.1.1`,
 and the `triton` / `triton-xpu` package names). They are intentional.
