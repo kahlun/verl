@@ -203,6 +203,9 @@ def logprobs_from_logits_liger(logits: torch.Tensor, labels: torch.Tensor) -> to
     return -loss.view(*batch_dim)
 
 
+_LIGER_KEEP_LOGITS_BWD_CHUNK_SIZE = 1024
+
+
 class _LigerLogprobsKeepLogits(torch.autograd.Function):
     """Liger forward on detached logits, so Liger writes nothing into them, plus a softmax backward."""
 
@@ -215,12 +218,17 @@ class _LigerLogprobsKeepLogits(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         logits, labels = ctx.saved_tensors
-        grad_output = grad_output.float().unsqueeze(-1)
-        logits_fp32 = logits.float()
-        # d log_softmax(z)_y / dz = onehot(y) - softmax(z)
-        grad_logits = (logits_fp32 - torch.logsumexp(logits_fp32, dim=-1, keepdim=True)).exp_().mul_(-grad_output)
-        grad_logits.scatter_add_(-1, labels.unsqueeze(-1), grad_output)
-        return grad_logits.to(logits.dtype), None
+        grad_logits = torch.empty_like(logits)
+        # token chunks bound the fp32 workspace, like the row-wise v2 fallback
+        for start in range(0, logits.shape[0], _LIGER_KEEP_LOGITS_BWD_CHUNK_SIZE):
+            end = start + _LIGER_KEEP_LOGITS_BWD_CHUNK_SIZE
+            chunk = logits[start:end].float()
+            grad_chunk = grad_output[start:end].float().unsqueeze(-1)
+            # d log_softmax(z)_y / dz = onehot(y) - softmax(z)
+            grad = (chunk - torch.logsumexp(chunk, dim=-1, keepdim=True)).exp_().mul_(-grad_chunk)
+            grad.scatter_add_(-1, labels[start:end].unsqueeze(-1), grad_chunk)
+            grad_logits[start:end] = grad
+        return grad_logits, None
 
 
 def logprobs_from_logits_liger_keep_logits(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:

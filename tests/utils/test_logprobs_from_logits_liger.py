@@ -156,3 +156,27 @@ def test_disable_liger_env_falls_back_to_v2(liger_calls, monkeypatch):
     lp = verl_F.logprobs_from_logits(base, labels)
     assert liger_calls == []
     assert torch.equal(lp, verl_F.logprobs_from_logits_v2(base, labels))
+
+
+def test_liger_keep_logits_with_topk_distillation(liger_calls, monkeypatch):
+    # FSDP engine order: top-k distillation reads the same fp32 logits first and keeps
+    # them for its logsumexp backward. A small backward chunk also covers the chunk loop.
+    from verl.trainer.distillation.fsdp.losses import _chunked_topk_log_probs
+
+    monkeypatch.setattr(verl_F, "_LIGER_KEEP_LOGITS_BWD_CHUNK_SIZE", 100)
+    base, labels, w_logprob, w_distill = _inputs()
+    topk_ids = torch.randint(0, V, (1, N, 8), generator=torch.Generator().manual_seed(1)).to(get_device_name())
+
+    def forward_backward(logprob_fn):
+        leaf = base.clone().requires_grad_(True)
+        logits = leaf * 1.0  # non-leaf, like an lm_head output
+        distill = _chunked_topk_log_probs(logits.unsqueeze(0), topk_ids).squeeze(0).sum(-1)
+        log_probs = logprob_fn(logits)
+        (-(log_probs * w_logprob).sum() - (distill * w_distill).sum()).backward()
+        return log_probs.detach(), leaf.grad
+
+    ref_lp, ref_grad = forward_backward(lambda x: verl_F.logprobs_from_logits_naive(x, labels))
+    lp, grad = forward_backward(lambda x: verl_F.logprobs_from_logits(x, labels, inplace_backward=False))
+    assert liger_calls == [False]
+    torch.testing.assert_close(lp, ref_lp, atol=1e-4, rtol=1e-5)
+    torch.testing.assert_close(grad, ref_grad, atol=1e-5, rtol=1e-4)
