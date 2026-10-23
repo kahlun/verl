@@ -172,6 +172,7 @@ class FSDPEngine(BaseEngine):
         # QAT (Quantization-Aware Training)
         self._qat_config = getattr(self.engine_config, "qat", None)
         self._qat_enabled = self._qat_config is not None and getattr(self._qat_config, "enable", False)
+        self._rollout_weight_quantizer = None
         if self._qat_enabled:
             logger.info(f"QAT enabled: mode={self._qat_config.mode}, group_size={self._qat_config.group_size}")
 
@@ -1061,8 +1062,15 @@ class FSDPEngine(BaseEngine):
                 target_device=torch.device("cpu"),
             )
 
+        if self._rollout_weight_quantizer is not None and peft_config is None:
+            # Low-precision rollout: ship the weights in the layout the rollout engine was started with.
+            per_tensor_param = self._rollout_weight_quantizer(per_tensor_param)
+
         peft_config_dict = peft_config.to_dict() if peft_config is not None else None
         return per_tensor_param, peft_config_dict
+
+    def set_rollout_weight_quantizer(self, quantizer) -> None:
+        self._rollout_weight_quantizer = quantizer
 
     def _merged_lora_per_tensor_param(self):
         """Stream merged (base + LoRA) weights for rollout weight sync.
