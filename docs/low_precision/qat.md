@@ -63,7 +63,7 @@ express different schemes for linear and routed MoE layers.
 
 ## Support matrix
 
-The trainer must be Megatron (FSDP is not yet supported for this feature). The rollout engine can be vLLM or SGLang; TRT-LLM raises an error if `rollout.quantization` is set. The engine columns list the compressed-tensors scheme each engine implements.
+The trainer is Megatron, or FSDP for dense, non-LoRA weights (the merged-LoRA and adapter-only syncs are sent unquantized). The rollout engine can be vLLM or SGLang; TRT-LLM raises an error if `rollout.quantization` is set. The engine columns list the compressed-tensors scheme each engine implements.
 
 verl defaults supported FP8, MXFP8 and MXFP4 Linear/MoE kernels to DeepGEMM.
 The training path is moving to the same backend, so this default avoids
