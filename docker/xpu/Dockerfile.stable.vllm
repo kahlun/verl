@@ -4,6 +4,8 @@
 #
 # Build (from the verl repo root):
 #   docker build -f docker/xpu/Dockerfile.stable.vllm -t verl:xpu-vllm029 .
+# Release builds: add --no-cache so ca-certificates, pip, certifi and uv are fetched fresh, not served from a stale layer
+# (Python security notice on the eMudhra emSign CA incident, Oct 2026).
 # Pin what goes in (recommended for a release):
 #   --build-arg VERL_REF=<commit> --build-arg PLUGIN_REF=<commit>
 # See docker/xpu/README.md for run instructions.
@@ -47,6 +49,7 @@ RUN set -eu; \
 # No system oneAPI: torch and vLLM wheels bring their own SYCL runtime and oneCCL. Two things that look build-only are
 # not, and removing them breaks the image at runtime:
 #  - gcc + g++ + the Python headers: triton compiles its launcher stubs (C++) when a kernel first runs.
+#  - ffmpeg: torchcodec, qwen-vl-utils' first-choice video decoder, needs FFmpeg's shared libraries at run time.
 #  - libnuma-dev (not just libnuma1): an MPI library bundled in the venv dlopen()s the unversioned libnuma.so.
 #  - libze-dev: it provides the unversioned libze_loader.so, which oneCCL dlopen()s by that exact name; without it
 #    xccl fails with "ze_data was not initialized" even though torch sees the GPU.
@@ -60,7 +63,7 @@ RUN if [ -n "${APT_MIRROR}" ]; then \
 RUN --mount=type=bind,from=drivers,source=/debs,target=/debs \
     apt-get update -y && \
     apt-get install -y --no-install-recommends \
-        ca-certificates g++ gcc libc6-dev libnuma-dev numactl \
+        ca-certificates ffmpeg g++ gcc libc6-dev libnuma-dev numactl \
         python${PYTHON_VERSION} python${PYTHON_VERSION}-dev \
         /debs/*.deb && \
     rm -rf /var/lib/apt/lists/*
@@ -80,6 +83,8 @@ RUN apt-get update -y && \
 FROM runtime-base AS builder
 ARG PYTHON_VERSION=3.12
 ARG VLLM_VERSION=0.29.0
+# uv >= 0.13.4 carries the fixed CA bundle (emSign incident); the installer is fetched for this exact version.
+ARG UV_VERSION=0.13.4
 ARG PIP_INDEX_URL=https://download.pytorch.org/whl/xpu
 ARG PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 ARG VERL_GIT_REPO=https://github.com/verl-project/verl.git
@@ -99,7 +104,7 @@ ENV PATH="/root/.local/bin:/opt/venv/bin:${PATH}" \
     UV_INDEX_STRATEGY=unsafe-best-match \
     UV_LINK_MODE=copy \
     VLLM_TARGET_DEVICE=xpu
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh && uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
 
 # Cloned to /opt, not /workspace, so a volume mounted at /workspace does not hide the editable installs.
 RUN git clone "${VERL_GIT_REPO}" /opt/verl && git -C /opt/verl checkout "${VERL_REF}"
@@ -113,6 +118,9 @@ RUN git clone "${VERL_GIT_REPO}" /opt/verl && git -C /opt/verl checkout "${VERL_
 # - XPU pins (inline): torch 2.13.0+xpu; transformers 5.17.0 requests the kernels-community/flash-attn2 hub build that
 #   has a torch213 XPU wheel (it deliberately exceeds requirements.txt's transformers<5.13, and rejects kernels>=0.17);
 #   pyzes>=0.1.2 because the device-memory query needs it; triton-xpu follows torch's own pin; dpctl for device probing.
+#   pip>=26.2.2 and certifi>=2026.10.19 are the first releases with the corrected CA bundle (pip loads its vendored certifi
+#   in addition to the system store, so only upgrading pip fixes it). qwen_vl_utils and mathruler are declared in verl's
+#   verl-core extra but not in requirements.txt; multimodal datasets and Geo3K scoring import them.
 # - liger-kernel pulls the CUDA triton, which shares triton/ with triton-xpu: remove it, reinstall triton-xpu.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install "vllm==${VLLM_VERSION}+xpu" \
@@ -125,6 +133,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         "torch==2.13.0+xpu" \
         "transformers==5.17.0" "kernels>=0.16.0,<0.17.0" \
         dpctl "pyzes>=0.1.2" triton-xpu \
+        "pip>=26.2.2" "certifi>=2026.10.19" \
+        qwen_vl_utils mathruler \
         --override /tmp/override-pyzes.txt && \
     uv --no-config pip install --no-deps -e /opt/verl && \
     TRITON_XPU="$(uv pip freeze | grep -i '^triton-xpu==')" && \
@@ -158,6 +168,19 @@ for size, paths in by.items():
                 os.link(g[0], p)
                 saved += size
 print(f"hardlinked duplicate libraries, saved {saved / 2**20:.0f} MiB")
+PY
+
+# Fail the build if a stale layer or index left a vulnerable TLS stack behind (see the header note on --no-cache).
+RUN python3 - <<'PY'
+import importlib.metadata as m, re, subprocess, sys
+def v(x): return tuple(int(p) for p in re.findall(r"\d+", x)[:3])
+floors = {"pip": "26.2.2", "certifi": "2026.10.19"}
+bad = [f"{n} {m.version(n)} < {f}" for n, f in floors.items() if v(m.version(n)) < v(f)]
+uv = subprocess.run(["uv", "--version"], capture_output=True, text=True).stdout.split()[1]
+if v(uv) < v("0.13.4"):
+    bad.append(f"uv {uv} < 0.13.4")
+print("TLS stack: pip", m.version("pip"), "certifi", m.version("certifi"), "uv", uv)
+sys.exit("vulnerable TLS stack: " + ", ".join(bad)) if bad else None
 PY
 
 # ---------------------------------------------------------------------------------------------------------------------
