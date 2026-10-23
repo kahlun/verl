@@ -28,7 +28,7 @@ import torch.distributed
 from torch.distributed import init_device_mesh
 from transformers import AutoModelForCausalLM, Qwen2Config
 
-from verl.utils.device import get_device_name, get_torch_device
+from verl.utils.device import get_device_name, get_torch_device, is_device_available
 from verl.utils.distributed import initialize_global_process_group
 from verl.utils.fsdp_utils import (
     MixedPrecisionPolicy,
@@ -36,10 +36,6 @@ from verl.utils.fsdp_utils import (
     load_fsdp2_model_to_gpu,
     offload_fsdp2_model_to_cpu,
 )
-
-
-# Accelerators this test has been run on; others keep the previous early exit.
-_SUPPORTED_DEVICES = ("cuda", "xpu")
 
 
 def _local_tensor(tensor):
@@ -72,10 +68,10 @@ def _build_full_parameter_fsdp2_model(device_mesh):
 
 
 def main():
-    device = get_device_name()
-    if device not in _SUPPORTED_DEVICES:
-        print(f"test_fsdp2_pinned_model_transfer skipped: not run on {device!r}")
+    if not is_device_available():
+        print("test_fsdp2_pinned_model_transfer skipped: no accelerator available")
         return
+    device = get_device_name()
     assert get_torch_device().device_count() >= 2, "need at least 2 GPUs for test"
     _, rank, world_size = initialize_global_process_group()
     device_mesh = init_device_mesh(device, mesh_shape=(world_size,), mesh_dim_names=("dp",))
