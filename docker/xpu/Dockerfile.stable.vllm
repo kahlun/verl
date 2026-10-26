@@ -89,9 +89,10 @@ ARG PIP_INDEX_URL=https://download.pytorch.org/whl/xpu
 ARG PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 ARG VERL_GIT_REPO=https://github.com/verl-project/verl.git
 ARG VERL_REF=main
-# Intel XPU platform support lives in verl-hardware-plugin; pin a commit, its v0.1.0 tag predates XPU.
+# Intel XPU platform support lives in verl-hardware-plugin. Track main alongside VERL_REF=main: its v0.1.0 tag predates
+# XPU, and an older plugin commit paired with a newer verl misses XPU platform hooks that verl main already calls.
 ARG PLUGIN_GIT_REPO=https://github.com/verl-project/verl-hardware-plugin.git
-ARG PLUGIN_REF=e5ab532ae41a582bd2e9183c5deaf2bd8876045f
+ARG PLUGIN_REF=main
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update -y && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
@@ -187,7 +188,7 @@ PY
 # runtime: the image to ship.
 FROM runtime-base AS runtime
 ARG VERL_REF=main
-ARG PLUGIN_REF=e5ab532ae41a582bd2e9183c5deaf2bd8876045f
+ARG PLUGIN_REF=main
 LABEL org.opencontainers.image.title="verl-xpu" \
       org.opencontainers.image.description="verl on Intel GPU (XPU): vLLM rollout, FSDP/FSDP2 training, verl-hardware-plugin" \
       org.opencontainers.image.source="https://github.com/verl-project/verl" \
