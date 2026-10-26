@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Intel GPU (XPU) image for verl: vLLM rollout + FSDP/FSDP2 training.
-# vllm 0.29.0+xpu, torch 2.13.0+xpu. XPU platform support comes from verl-hardware-plugin.
+# vllm 0.32.0+xpu, torch 2.14.0+xpu. XPU platform support comes from verl-hardware-plugin.
 #
 # Build (from the verl repo root):
 #   docker build -f docker/xpu/Dockerfile.stable.vllm -t verl:xpu-vllm029 .
@@ -18,8 +18,8 @@ ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5
 
 # ---------------------------------------------------------------------------------------------------------------------
 # drivers: fetch the Intel GPU user-mode driver packages. Kept in its own stage so curl and the .debs are not in the image.
-# Versions match vLLM v0.29.0's docker/Dockerfile.xpu. compute-runtime >= 26.18 is required: 26.09 reports free=0 from
-# getMemoryInfo, which breaks vLLM's memory check.
+# Versions match vLLM v0.32.0's docker/Dockerfile.xpu (unchanged since v0.29.0). compute-runtime >= 26.18 is required:
+# 26.09 reports free=0 from getMemoryInfo, which breaks vLLM's memory check.
 FROM ${UBUNTU_IMAGE} AS drivers
 ARG IGC_VERSION=2.38.2
 ARG IGC_BUILD=22051
@@ -82,7 +82,7 @@ RUN apt-get update -y && \
 # builder: git, uv and the whole install. Nothing from here ships except what `runtime` copies out.
 FROM runtime-base AS builder
 ARG PYTHON_VERSION=3.12
-ARG VLLM_VERSION=0.29.0
+ARG VLLM_VERSION=0.32.0
 # uv >= 0.13.4 carries the fixed CA bundle (emSign incident); the installer is fetched for this exact version.
 ARG UV_VERSION=0.13.4
 ARG PIP_INDEX_URL=https://download.pytorch.org/whl/xpu
@@ -116,8 +116,8 @@ RUN git clone "${VERL_GIT_REPO}" /opt/verl && git -C /opt/verl checkout "${VERL_
 #   [tool.uv].override-dependencies (transformers 5.12.1, kernels<0.15 for the CUDA stack) and beat the XPU pins.
 #   verl's transformers<5.13 line is dropped (uv cannot override a direct requirement). The override is limited to
 #   pyzes (torch pins pyzes==0.1.1); an unpinned entry would also erase torch's own triton-xpu pin.
-# - XPU pins (inline): torch 2.13.0+xpu; transformers 5.17.0 requests the kernels-community/flash-attn2 hub build that
-#   has a torch213 XPU wheel (it deliberately exceeds requirements.txt's transformers<5.13, and rejects kernels>=0.17);
+# - XPU pins (inline): torch 2.14.0+xpu is the version vLLM 0.32.0's XPU wheel requires; transformers 5.16.1 is verl's own
+#   pin and inside vLLM's supported range (it exceeds the old requirements.txt cap, which is dropped above);
 #   pyzes>=0.1.2 because the device-memory query needs it; triton-xpu follows torch's own pin; dpctl for device probing.
 #   pip>=26.2.2 and certifi>=2026.10.19 are the first releases with the corrected CA bundle (pip loads its vendored certifi
 #   in addition to the system store, so only upgrading pip fixes it). qwen_vl_utils and mathruler are declared in verl's
@@ -131,8 +131,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     grep -v '^transformers' /opt/verl/requirements.txt > /tmp/requirements-core.txt && \
     echo 'pyzes>=0.1.2' > /tmp/override-pyzes.txt && \
     uv --no-config pip install -r /tmp/requirements-core.txt \
-        "torch==2.13.0+xpu" \
-        "transformers==5.17.0" "kernels>=0.16.0,<0.17.0" \
+        "torch==2.14.0+xpu" \
+        "transformers==5.16.1" "kernels>=0.16.0,<0.17.0" \
         dpctl "pyzes>=0.1.2" triton-xpu \
         "pip>=26.2.2" "certifi>=2026.10.19" \
         qwen_vl_utils mathruler \
