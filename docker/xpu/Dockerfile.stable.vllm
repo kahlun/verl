@@ -2,12 +2,11 @@
 # Intel GPU (XPU) image for verl: vLLM rollout + FSDP/FSDP2 training.
 #
 # Build (from the verl repo root):
-#   docker build -f docker/xpu/Dockerfile.stable.vllm -t verl:xpu-vllm029 .
+#   docker build -f docker/xpu/Dockerfile.stable.vllm -t verl:xpu-vllm032 .
 # Release builds: add --no-cache so ca-certificates, pip, certifi and uv are fetched fresh, not served from a stale layer
 # (Python security notice on the eMudhra emSign CA incident, Oct 2026).
 # Pin what goes in (recommended for a release):
 #   --build-arg VERL_REF=<commit> --build-arg PLUGIN_REF=<commit>
-# See docker/xpu/README.md for run instructions.
 #
 # Stages: drivers -> runtime-base -> builder -> runtime (default, last).
 # Only the finished /opt/venv and the two checkouts are copied into `runtime`, so git, curl, uv, the driver .deb files
