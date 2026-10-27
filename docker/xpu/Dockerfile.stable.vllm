@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1
 # Intel GPU (XPU) image for verl: vLLM rollout + FSDP/FSDP2 training.
-# vllm 0.32.0+xpu, torch 2.14.0+xpu. XPU platform support comes from verl-hardware-plugin.
 #
 # Build (from the verl repo root):
 #   docker build -f docker/xpu/Dockerfile.stable.vllm -t verl:xpu-vllm029 .
@@ -18,7 +17,7 @@ ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5
 
 # ---------------------------------------------------------------------------------------------------------------------
 # drivers: fetch the Intel GPU user-mode driver packages. Kept in its own stage so curl and the .debs are not in the image.
-# Versions match vLLM v0.32.0's docker/Dockerfile.xpu (unchanged since v0.29.0). compute-runtime >= 26.18 is required:
+# Versions match vLLM v0.32.0's docker/Dockerfile.xpu. compute-runtime >= 26.18 is required:
 # 26.09 reports free=0 from getMemoryInfo, which breaks vLLM's memory check.
 FROM ${UBUNTU_IMAGE} AS drivers
 ARG IGC_VERSION=2.38.2
@@ -89,8 +88,6 @@ ARG PIP_INDEX_URL=https://download.pytorch.org/whl/xpu
 ARG PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 ARG VERL_GIT_REPO=https://github.com/verl-project/verl.git
 ARG VERL_REF=main
-# Intel XPU platform support lives in verl-hardware-plugin. Track main alongside VERL_REF=main: its v0.1.0 tag predates
-# XPU, and an older plugin commit paired with a newer verl misses XPU platform hooks that verl main already calls.
 ARG PLUGIN_GIT_REPO=https://github.com/verl-project/verl-hardware-plugin.git
 ARG PLUGIN_REF=main
 
