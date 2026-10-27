@@ -112,12 +112,15 @@ RUN git clone "${VERL_GIT_REPO}" /opt/verl && git -C /opt/verl checkout "${VERL_
 
 # - vLLM XPU wheel (the PyPI vllm wheel has no XPU kernels). --extra-index-url on the command line REPLACES
 #   UV_EXTRA_INDEX_URL, so PyPI is repeated; otherwise vllm's plain-PyPI deps do not resolve.
-# - verl's requirements + the XPU overlay. --no-config: from /opt/verl, uv would read verl's pyproject
-#   [tool.uv].override-dependencies (transformers 5.12.1, kernels<0.15 for the CUDA stack) and beat the XPU pins.
-#   verl's transformers<5.13 line is dropped (uv cannot override a direct requirement). The override is limited to
-#   pyzes (torch pins pyzes==0.1.1); an unpinned entry would also erase torch's own triton-xpu pin.
-# - XPU pins (inline): torch 2.14.0+xpu is the version vLLM 0.32.0's XPU wheel requires; transformers 5.16.1 is verl's own
-#   pin and inside vLLM's supported range (it exceeds the old requirements.txt cap, which is dropped above);
+# - verl's requirements.txt + the XPU overlay. --no-config: from /opt/verl, uv would read verl's pyproject
+#   [tool.uv].override-dependencies (transformers==5.16.1, kernels<0.15 for the CUDA stack) and beat the XPU pins.
+#   transformers is NOT pinned here: it comes from verl's own requirements.txt window and vLLM's (>=5.16.1), and the
+#   transformers[kernels] extra brings the matching kernels release. If the two windows stop overlapping, the build
+#   can fail. This needs a verl checkout whose requirements.txt allows transformers >= 5.16.1 (verl main since PR #8390);
+#   an older VERL_REF would downgrade transformers below vLLM's floor, which the check at the end of this stage
+#   rejects. The override is limited to pyzes (torch pins pyzes==0.1.1); an unpinned entry would also erase torch's
+#   own triton-xpu pin.
+# - XPU pins (inline): torch 2.14.0+xpu is the version vLLM 0.32.0's XPU wheel requires;
 #   pyzes>=0.1.2 because the device-memory query needs it; triton-xpu follows torch's own pin; dpctl for device probing.
 #   pip>=26.2.2 and certifi>=2026.10.19 are the first releases with the corrected CA bundle (pip loads its vendored certifi
 #   in addition to the system store, so only upgrading pip fixes it). qwen_vl_utils and mathruler are declared in verl's
@@ -128,11 +131,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --extra-index-url "https://wheels.vllm.ai/${VLLM_VERSION}/xpu" \
         --extra-index-url https://wheels.vllm.ai/xpu \
         --extra-index-url "${PIP_EXTRA_INDEX_URL}" && \
-    grep -v '^transformers' /opt/verl/requirements.txt > /tmp/requirements-core.txt && \
     echo 'pyzes>=0.1.2' > /tmp/override-pyzes.txt && \
-    uv --no-config pip install -r /tmp/requirements-core.txt \
+    uv --no-config pip install -r /opt/verl/requirements.txt \
         "torch==2.14.0+xpu" \
-        "transformers==5.16.1" "kernels>=0.16.0,<0.17.0" \
+        "transformers[kernels]" \
         dpctl "pyzes>=0.1.2" triton-xpu \
         "pip>=26.2.2" "certifi>=2026.10.19" \
         qwen_vl_utils mathruler \
@@ -171,17 +173,26 @@ for size, paths in by.items():
 print(f"hardlinked duplicate libraries, saved {saved / 2**20:.0f} MiB")
 PY
 
-# Fail the build if a stale layer or index left a vulnerable TLS stack behind (see the header note on --no-cache).
+# Fail the build if a stale layer or index left a vulnerable TLS stack behind (see the header note on --no-cache), or if
+# the later installs moved a package out of the range vLLM's own wheel declares (uv does not re-check installed
+# packages: a stale verl checkout with an old requirements.txt would otherwise downgrade transformers silently).
 RUN python3 - <<'PY'
 import importlib.metadata as m, re, subprocess, sys
+from packaging.requirements import Requirement
 def v(x): return tuple(int(p) for p in re.findall(r"\d+", x)[:3])
 floors = {"pip": "26.2.2", "certifi": "2026.10.19"}
 bad = [f"{n} {m.version(n)} < {f}" for n, f in floors.items() if v(m.version(n)) < v(f)]
 uv = subprocess.run(["uv", "--version"], capture_output=True, text=True).stdout.split()[1]
 if v(uv) < v("0.13.4"):
     bad.append(f"uv {uv} < 0.13.4")
+for line in m.requires("vllm") or []:
+    r = Requirement(line)
+    if r.name in ("transformers", "tokenizers", "torch") and (r.marker is None or r.marker.evaluate({"extra": ""})):
+        if not r.specifier.contains(m.version(r.name), prereleases=True):
+            bad.append(f"{r.name} {m.version(r.name)} outside vllm's requirement {r.specifier}")
 print("TLS stack: pip", m.version("pip"), "certifi", m.version("certifi"), "uv", uv)
-sys.exit("vulnerable TLS stack: " + ", ".join(bad)) if bad else None
+print("transformers", m.version("transformers"), "tokenizers", m.version("tokenizers"))
+sys.exit("incompatible stack: " + ", ".join(bad)) if bad else None
 PY
 
 # ---------------------------------------------------------------------------------------------------------------------
