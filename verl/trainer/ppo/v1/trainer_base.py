@@ -915,7 +915,11 @@ class PPOTrainer(ABC):
             resource_pool_spec["teacher_pool"] = teacher_pool
             self.mapping[Role.TeacherModel] = "teacher_pool"
 
-        self.resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=self.mapping)
+        self.resource_pool_manager = ResourcePoolManager(
+            resource_pool_spec=resource_pool_spec,
+            mapping=self.mapping,
+            pool_accelerator_resource_key={global_pool_id: config.trainer.get("accelerator_resource_key", None)},
+        )
 
     def _load_checkpoint(self):
         self.global_steps = 0

@@ -170,6 +170,10 @@ trainer:
   # Number of GPUs per node
   n_gpus_per_node: 8
 
+  # Ray custom-resource key the trainer pool must be placed on, e.g. "accelerator_type:H200". Null keeps the
+  # default placement.
+  accelerator_resource_key: null
+
   # Save frequency (by iteration) for model checkpoints
   save_freq: -1
 

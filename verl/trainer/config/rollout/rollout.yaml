@@ -13,6 +13,10 @@ nnodes: 0
 # Number of GPUs per node for rollout server.
 n_gpus_per_node: ${oc.select:trainer.n_gpus_per_node,8}
 
+# Ray custom-resource key that standalone rollout servers must be placed on, e.g. "accelerator_type:Intel-GPU-B60".
+# Null keeps the default placement. Use it to put rollout on different hardware than the trainer.
+accelerator_resource_key: null
+
 # Sampling temperature for rollout.
 temperature: 1.0
 

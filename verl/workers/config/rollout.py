@@ -315,6 +315,10 @@ class RolloutConfig(BaseConfig):
 
     disaggregation: DisaggregationConfig = field(default_factory=DisaggregationConfig)
 
+    # Ray custom-resource key that standalone rollout servers must be placed on, e.g. "accelerator_type:Intel-GPU-B60".
+    # None keeps the default placement (any node with the platform's accelerator resource).
+    accelerator_resource_key: Optional[str] = None
+
     router_config_path: Optional[str] = None
 
     def __post_init__(self):

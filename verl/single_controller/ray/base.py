@@ -194,8 +194,17 @@ class ResourcePoolManager:
     mapping: dict[int, str]
     max_colocate_count: int = 3
     resource_pool_dict: dict[str, RayResourcePool] = field(default_factory=dict)
+    # Optional Ray custom-resource key per pool (e.g. "accelerator_type:Intel-GPU-B60"), so a pool lands only on
+    # nodes that declare it. This lets trainer and rollout pools sit on different hardware in one Ray cluster.
+    pool_accelerator_resource_key: dict[str, Optional[str]] = field(default_factory=dict)
 
     def __post_init__(self):
+        unknown_pools = self.pool_accelerator_resource_key.keys() - self.resource_pool_spec.keys()
+        if unknown_pools:
+            raise ValueError(f"accelerator resource keys set for unknown resource pools: {sorted(unknown_pools)}")
+        for pool_name, key in self.pool_accelerator_resource_key.items():
+            if key is not None and (not isinstance(key, str) or not key.strip()):
+                raise ValueError(f"invalid accelerator resource key for pool '{pool_name}': {key!r}")
         # Mirror the cap in RayResourcePool so the bundle CPU count matches what it creates.
         if not get_platform().supports_colocated_worker_groups():
             self.max_colocate_count = 1
@@ -218,6 +227,7 @@ class ResourcePoolManager:
                 use_gpu=True,
                 max_colocate_count=self.max_colocate_count,
                 name_prefix=resource_pool_name,
+                accelerator_type=self.pool_accelerator_resource_key.get(resource_pool_name),
             )
             self.resource_pool_dict[resource_pool_name] = resource_pool
 

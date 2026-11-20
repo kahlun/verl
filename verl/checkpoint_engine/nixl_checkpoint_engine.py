@@ -21,9 +21,6 @@ from dataclasses import dataclass
 from typing import AsyncGenerator, Generator
 from unittest.mock import patch
 
-with patch("importlib.metadata.distributions", return_value=[]):
-    import cupy as cp
-
 import nixl._api as nixl_api
 import nixl._bindings as nixl_bindings
 import ray
@@ -38,6 +35,7 @@ from verl.checkpoint_engine.base import (
     merge_weight_chunks,
     split_weight_chunks,
 )
+from verl.utils.device import get_torch_device
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 
 logger = logging.getLogger(__name__)
@@ -245,7 +243,8 @@ class NIXLCheckpointEngine(CheckpointEngine):
     Args:
         bucket_size (int): Bucket size in bytes to transfer multiple weights at one time. Note that we use
             two buffer to send and recv weights at same time, so the device memory overhead is 2 * bucket_size.
-        device (str): The device to use for the checkpoint engine, "cpu" or "cuda".
+        device (str): The device holding the transfer buckets. "cpu" stages weights through pinned host memory and
+            works across accelerator vendors; "cuda" registers device memory directly (NVIDIA only).
         rollout_dtype (torch.dtype): The dtype of the weights received from rollout workers. Defaults to torch.bfloat16.
     """
 
@@ -271,13 +270,18 @@ class NIXLCheckpointEngine(CheckpointEngine):
         # For master process, use cupy instead of torch to avoid memory register error
         # when `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
         if self.device == "cuda":
+            with patch("importlib.metadata.distributions", return_value=[]):
+                import cupy as cp
+
             send_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
             recv_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
             self.send_buf = torch.as_tensor(send_buf, dtype=torch.uint8)
             self.recv_buf = torch.as_tensor(recv_buf, dtype=torch.uint8)
         else:
-            self.send_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device=self.device, pin_memory=True)
-            self.recv_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device=self.device, pin_memory=True)
+            # Only host buffers can be pinned; pinning needs a device runtime on this node.
+            pin_memory = self.device == "cpu" and get_torch_device().is_available()
+            self.send_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device=self.device, pin_memory=pin_memory)
+            self.recv_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device=self.device, pin_memory=pin_memory)
         self.send_reg_descs = self.agent.register_memory(self.send_buf)
         self.recv_reg_descs = self.agent.register_memory(self.recv_buf)
         self.send_descs = self.agent.get_xfer_descs(self.send_buf)
@@ -287,20 +291,23 @@ class NIXLCheckpointEngine(CheckpointEngine):
 
     @classmethod
     def build_topology(cls, actor_wg_world_size: int, rollout_world_size: int, metadata: list[dict]):
+        # Slice the rollout agents off first: negative-offset slices such as `metadata[-n + 1 :]` turn into
+        # `metadata[0:]` (the whole list) when there is a single rollout worker.
+        rollout_metadata = metadata[len(metadata) - rollout_world_size :]
         actor_wg_kwargs = {
             "method": ["init_process_group"] * actor_wg_world_size,
             "rank": [0] + [-1] * (actor_wg_world_size - 1),
             "world_size": [rollout_world_size + 1] * actor_wg_world_size,
             "prev_agent_metadata": [None] * actor_wg_world_size,
-            "next_agent_metadata": [metadata[-rollout_world_size]] + [None] * (actor_wg_world_size - 1),
+            "next_agent_metadata": [rollout_metadata[0]] + [None] * (actor_wg_world_size - 1),
         }
 
         rollout_kwargs = {
             "method": ["init_process_group"] * rollout_world_size,
             "rank": list(range(1, rollout_world_size + 1)),
             "world_size": [rollout_world_size + 1] * rollout_world_size,
-            "prev_agent_metadata": [metadata[0]] + metadata[-rollout_world_size:-1],
-            "next_agent_metadata": metadata[-rollout_world_size + 1 :] + [None],
+            "prev_agent_metadata": [metadata[0]] + rollout_metadata[:-1],
+            "next_agent_metadata": rollout_metadata[1:] + [None],
         }
         return actor_wg_kwargs, rollout_kwargs
 
@@ -397,7 +404,7 @@ class NIXLCheckpointEngine(CheckpointEngine):
         async for tensor_meta, chunk in split_weight_chunks(weights, self.bucket_size):
             # fill the tensor bucket
             if offset + tensor_meta.chunk_size > self.bucket_size:
-                torch.cuda.synchronize()
+                get_torch_device().synchronize()
 
                 # wait previous bucket to be received
                 if readable_op is not None:
@@ -426,7 +433,7 @@ class NIXLCheckpointEngine(CheckpointEngine):
             offset += tensor_meta.chunk_size
 
         # send last bucket meta to next agent
-        torch.cuda.synchronize()
+        get_torch_device().synchronize()
         if readable_op is not None:
             await readable_op.wait_for_complete()
 
@@ -501,7 +508,7 @@ class NIXLCheckpointEngine(CheckpointEngine):
             total_params += len(next_metadata["bucket_meta"])
 
             # 5. swap send and recv buf
-            torch.cuda.synchronize()  # sync non-blocking copy
+            get_torch_device().synchronize()  # sync non-blocking copy
             metadata = next_metadata
             send_buf, recv_buf = recv_buf, send_buf
             send_descs, recv_descs = recv_descs, send_descs
